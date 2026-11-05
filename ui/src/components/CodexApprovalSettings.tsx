@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { CodexApprovalMode } from "@/lib/api";
+import type { CodexApprovalMode } from "@/types";
 import { useApi } from "@/components/apiContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Segmented } from "@/components/ui/segmented";

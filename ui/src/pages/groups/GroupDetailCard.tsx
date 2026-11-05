@@ -1,4 +1,5 @@
-import type { ApiClient, GroupView } from "@/lib/api";
+import type { ApiClient } from "@/lib/api";
+import type { GroupView } from "@/types";
 import { guard } from "@/lib/toast-guard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

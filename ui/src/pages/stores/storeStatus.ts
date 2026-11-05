@@ -1,9 +1,4 @@
-import {
-  type StoreView,
-  type StoreImageView,
-  type StoreWorkflowView,
-  type WorkflowImageListing,
-} from "@/lib/api";
+import type { StoreView, StoreImageView, StoreWorkflowView, WorkflowImageListing } from "@/types";
 
 /** A catalog row of a Store: one status sentence, its raw detail, and the
  *  one button the row offers (none for an entry that cannot build). */

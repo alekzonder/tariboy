@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ChevronDown } from "lucide-react";
-import type { ApiClient, ImageSummary } from "@/lib/api";
+import type { ApiClient } from "@/lib/api";
+import type { ImageSummary } from "@/types";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";

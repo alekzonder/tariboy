@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Queue } from "@/lib/api";
+import type { Queue } from "@/types";
 import { Input } from "@/components/ui/input";
 
 export default function TaskForm({

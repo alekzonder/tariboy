@@ -9,7 +9,7 @@ import type {
   ImageManifest,
   ImageSummary,
   OnboardingStatus,
-} from "@/lib/api";
+} from "@/types";
 import type { Daemon } from "@/lib/daemons";
 import { manifest, setupCreateAgentDialog } from "@/test/terminals/createAgentDialog";
 import { imageSummary } from "@/test/fixtures/apiFixtures";

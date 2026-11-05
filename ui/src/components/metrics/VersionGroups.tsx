@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import type { MetricsSlice } from "@/lib/api";
+import type { MetricsSlice } from "@/types";
 import { VERSION_HINT, byVersionDesc, versionLabel, workflowLabel } from "@/lib/metricsFormat";
 import { defaultPair, olderVersion } from "@/lib/metricsQuery";
 import { cn } from "@/lib/utils";

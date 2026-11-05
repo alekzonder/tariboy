@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MaintenanceSettingsCard } from "./MaintenanceSettings";
 import { render } from "@/test/queryRender";
 import { fakeApi } from "@/test/api";
-import type { ApiClient, DaemonApi, MaintenanceSettings } from "@/lib/api";
+import type { ApiClient, DaemonApi } from "@/lib/api";
+import type { MaintenanceSettings } from "@/types";
 import type { Daemon } from "@/lib/daemons";
 
 const getMaintenance = vi.fn<DaemonApi["getMaintenance"]>();

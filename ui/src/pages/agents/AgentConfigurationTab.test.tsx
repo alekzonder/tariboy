@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@/test/queryRen
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
 import type { Daemon } from "@/lib/daemons";
-import type { AgentImageStatus, AgentStatus, AgentView } from "@/lib/api";
+import type { AgentImageStatus, AgentStatus, AgentView } from "@/types";
 import { clearHarnessCatalogCache } from "@/hooks/useHarnessCatalog";
 import { RUNTIME_PRESETS_STORAGE_KEY } from "@/lib/runtimePresets";
 import { notifyImagesChanged } from "@/lib/imageEvents";

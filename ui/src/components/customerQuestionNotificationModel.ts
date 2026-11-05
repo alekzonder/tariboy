@@ -1,4 +1,4 @@
-import type { Letter, MailUnread } from "@/lib/api";
+import type { Letter, MailUnread } from "@/types";
 import { letterTaskKey } from "@/lib/letters";
 import { principalName, questionCountsBySender } from "@/pages/mailbox/mailboxModel";
 

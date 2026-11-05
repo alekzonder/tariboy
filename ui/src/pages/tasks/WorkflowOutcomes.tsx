@@ -1,7 +1,7 @@
 import { ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import type { OutcomeView, WorkflowView } from "@/lib/api";
+import type { OutcomeView, WorkflowView } from "@/types";
 import { cn } from "@/lib/utils";
 import { DANGER_FILL, EMPTY, LABEL, MONO } from "./panelStyles";
 import { useWorkflowAdvance } from "./useWorkflowAdvance";

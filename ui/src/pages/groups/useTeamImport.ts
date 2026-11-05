@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import type { ApiClient, TeamImportOperation, TeamImportPlan } from "@/lib/api";
+import type { ApiClient } from "@/lib/api";
+import type { TeamImportOperation, TeamImportPlan } from "@/types";
 import { readKey, removeKey, storageKeys, writeKey } from "@/lib/storage";
 import { toast } from "sonner";
 import { changedImageRefs, previewFromImport, type ImportPreview } from "./teamImportModel";

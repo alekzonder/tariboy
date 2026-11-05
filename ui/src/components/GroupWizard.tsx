@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useState } from "react";
-import type { ImageSummary } from "@/lib/api";
+import type { ImageSummary } from "@/types";
 import { useApi } from "@/components/apiContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

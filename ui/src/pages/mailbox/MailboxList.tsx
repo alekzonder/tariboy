@@ -1,4 +1,4 @@
-import type { Letter, MailBox } from "@/lib/api";
+import type { Letter, MailBox } from "@/types";
 import { cn } from "@/lib/utils";
 import { formatTaskTime } from "@/pages/tasks/taskTime";
 import { principalName } from "./mailboxModel";

@@ -1,5 +1,5 @@
 import { useTheme, type Theme } from "@/components/themeContext";
-import type { AgentFileContent } from "@/lib/api";
+import type { AgentFileContent } from "@/types";
 import { isMarkdown } from "./paths";
 import { FileViewerToolbar } from "./FileViewerToolbar";
 import { FileViewerStatus } from "./FileViewerStatus";

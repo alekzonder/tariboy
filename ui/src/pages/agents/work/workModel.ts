@@ -1,4 +1,4 @@
-import type { CreateTaskInput, Queue, Task, TaskPriority } from "@/lib/api";
+import type { CreateTaskInput, Queue, Task, TaskPriority } from "@/types";
 import { flexibleStatusLabel } from "@/lib/statusTone";
 import { isWorkflowTask, taskStatusLabel } from "@/lib/tasks";
 

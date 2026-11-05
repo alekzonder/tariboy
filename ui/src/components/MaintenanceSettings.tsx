@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { RetentionPolicy, MaintenanceRun, MaintenanceSettings } from "@/lib/api";
+import type { RetentionPolicy, MaintenanceRun, MaintenanceSettings } from "@/types";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";

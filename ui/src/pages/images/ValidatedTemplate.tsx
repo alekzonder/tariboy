@@ -1,4 +1,4 @@
-import type { ImageValidateResult } from "@/lib/api";
+import type { ImageValidateResult } from "@/types";
 
 type ImageTemplate = NonNullable<ImageValidateResult["template"]>;
 

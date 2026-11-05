@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { MetricsSlice } from "@/lib/api";
+import type { MetricsSlice } from "@/types";
 import {
   UNKNOWN_REASON,
   avgTokens,

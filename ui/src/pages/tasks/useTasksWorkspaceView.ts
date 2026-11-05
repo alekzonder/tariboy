@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { TaskStatusView } from "@/lib/api";
+import type { TaskStatusView } from "@/types";
 import { persistTaskQueueFilter, readTaskQueueFilter } from "./taskFilterStorage";
 import type { TaskAssigneeFilter } from "./taskListScope";
 

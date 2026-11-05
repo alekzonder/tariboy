@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { Queue } from "@/lib/api";
+import type { Queue } from "@/types";
 import { errorText } from "@/lib/errors";
 import { parentQueueOf } from "@/lib/taskTree";
 import { taskReadErrorText } from "./taskReadError";

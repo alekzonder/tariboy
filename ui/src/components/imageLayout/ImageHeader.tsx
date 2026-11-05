@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import type { ImageManifest, ImageProvenance } from "@/lib/api";
+import type { ImageManifest, ImageProvenance } from "@/types";
 import { openHostPathInVSCode } from "@/lib/desktop";
 import { canOpenAgentCwdInVSCode } from "@/pages/agents/agentCwdVSCode";
 import { useOptionalDaemons } from "@/components/daemonContext";

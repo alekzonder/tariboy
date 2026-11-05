@@ -1,4 +1,4 @@
-import type { StatusView, WorkflowView, StatusVisit } from "@/lib/api";
+import type { StatusView, WorkflowView, StatusVisit } from "@/types";
 
 /**
  * Pure readings of a workflow view: where the task is in its status graph,

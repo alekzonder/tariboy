@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@/test/queryRen
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { DaemonProvider } from "@/components/DaemonProvider";
-import type { AgentRow, Task } from "@/lib/api";
+import type { AgentRow, Task } from "@/types";
 import type { HostNeeds } from "@/lib/needsYou";
 import { NeedsYouContext } from "@/pages/terminals/needsYouContext";
 import { addDaemon } from "@/lib/daemons";

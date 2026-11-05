@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useApi } from "@/components/apiContext";
-import type { WorkflowView } from "@/lib/api";
+import type { WorkflowView } from "@/types";
 import { useFollowRequest, type Notice } from "./workflowShared";
 
 /**

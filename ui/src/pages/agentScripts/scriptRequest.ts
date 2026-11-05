@@ -1,4 +1,4 @@
-import type { RunOnceScriptSpec, ScheduleScriptSpec, ScriptMode } from "@/lib/api";
+import type { RunOnceScriptSpec, ScheduleScriptSpec, ScriptMode } from "@/types";
 
 type ScriptFormState = {
   script_name: string;

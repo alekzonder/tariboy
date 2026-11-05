@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { fmtTokens } from "@/lib/audit";
-import type { AgentUsage } from "@/lib/api";
+import type { AgentUsage } from "@/types";
 import { fmtCost } from "@/lib/usage";
 import { cn } from "@/lib/utils";
 import UsageSummaryCard from "@/components/usage/UsageSummaryCard";

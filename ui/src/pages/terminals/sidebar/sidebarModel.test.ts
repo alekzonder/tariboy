@@ -10,7 +10,7 @@ import {
   hostsLine,
   sidebarLayout,
 } from "./sidebarModel";
-import type { AgentRow } from "@/lib/api";
+import type { AgentRow } from "@/types";
 import { agentRow } from "@/test/fixtures/apiFixtures";
 
 const agent = (name: string, group = ""): AgentRow =>

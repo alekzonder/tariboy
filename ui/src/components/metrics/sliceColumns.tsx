@@ -1,4 +1,4 @@
-import type { MetricsQuality, MetricsSlice } from "@/lib/api";
+import type { MetricsQuality, MetricsSlice } from "@/types";
 import { QUALITY_AXES, UNKNOWN_REASON, fmtAvg, fmtDuration, fmtMoney } from "@/lib/metricsFormat";
 import type { Column } from "./sliceSort";
 import { Known } from "./Unknown";

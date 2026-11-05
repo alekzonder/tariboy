@@ -1,5 +1,5 @@
 import { useApi } from "@/components/apiContext";
-import type { ScriptRun } from "@/lib/api";
+import type { ScriptRun } from "@/types";
 import { cn } from "@/lib/utils";
 import { COUNT, EMPTY, LABEL, MONO } from "./panelStyles";
 import RunRow from "./RunRow";

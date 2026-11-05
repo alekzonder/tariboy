@@ -1,4 +1,4 @@
-import type { IterationRow } from "@/lib/api";
+import type { IterationRow } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { fmtDateTime } from "@/lib/time";

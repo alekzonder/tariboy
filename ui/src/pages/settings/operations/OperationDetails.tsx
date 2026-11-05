@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { Operation } from "@/lib/api";
+import type { Operation } from "@/types";
 import { formatDuration, formatTime, kindLabel } from "./operationFormat";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {

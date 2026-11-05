@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ImageManifest } from "@/lib/api";
+import type { ImageManifest } from "@/types";
 import { visibleImageSections } from "./imageOverviewSections";
 
 const lean: ImageManifest = {

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import type { ApiClient, Operation } from "@/lib/api";
+import type { ApiClient } from "@/lib/api";
+import type { Operation } from "@/types";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status";

@@ -1,4 +1,4 @@
-import type { ImageManifest, ImageSummary } from "@/lib/api";
+import type { ImageManifest, ImageSummary } from "@/types";
 import { roleText } from "@/components/role/roleText";
 import type { AgentCreateDraft } from "../agentCreateDraft";
 

@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SearchInput } from "@/components/ui/search-input";
-import type { AgentRow } from "@/lib/api";
+import type { AgentRow } from "@/types";
 import type { AgentNeeds } from "@/lib/agentState";
 import { errorText } from "@/lib/errors";
 import TaskDrawer from "@/pages/tasks/TaskDrawer";

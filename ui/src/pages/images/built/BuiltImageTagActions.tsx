@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import type { ImageSummary } from "@/lib/api";
+import type { ImageSummary } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,

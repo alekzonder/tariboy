@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { act, fireEvent, render as renderWith, screen, within } from "@/test/queryRender";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { ScriptRun, TransitionRequest, WorkflowView } from "@/lib/api";
+import type { ScriptRun, TransitionRequest, WorkflowView } from "@/types";
 import WorkflowProblem from "./WorkflowProblem";
 import { customerView, poolView, remoteTarget } from "@/test/fixtures/workflowFixtures";
 import { fakeApi } from "@/test/api";

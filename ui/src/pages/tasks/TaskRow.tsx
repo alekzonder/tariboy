@@ -1,7 +1,7 @@
 import { useDndContext, useDraggable, useDroppable } from "@dnd-kit/core";
 import { GripVertical, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Queue, TaskPriority } from "@/lib/api";
+import type { Queue, TaskPriority } from "@/types";
 import type { VisibleTaskRow } from "@/lib/taskTree";
 import { useTaskColumns } from "./taskColumnLayout";
 import { TASK_COLUMNS, type TaskRowMode } from "./taskColumns";

@@ -1,4 +1,4 @@
-import type { Queue, Task } from "@/lib/api";
+import type { Queue, Task } from "@/types";
 import { taskStatusLabel } from "@/lib/tasks";
 import { queueMarkerLabel } from "@/lib/taskTree";
 import { cn } from "@/lib/utils";

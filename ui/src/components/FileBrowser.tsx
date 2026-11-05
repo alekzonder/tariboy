@@ -1,5 +1,5 @@
 import { lazy, useState } from "react";
-import type { AgentFileContent, AgentFileList } from "@/lib/api";
+import type { AgentFileContent, AgentFileList } from "@/types";
 import { useFileTree } from "./file-browser/useFileTree";
 import { useFileActions } from "./file-browser/useFileActions";
 import { FileTree } from "./file-browser/FileTree";

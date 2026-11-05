@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { GroupRow, GroupView } from "@/lib/api";
+import type { GroupRow, GroupView } from "@/types";
 import { useApi } from "@/components/apiContext";
 import { GroupWizard } from "@/components/GroupWizard";
 import { Button } from "@/components/ui/button";

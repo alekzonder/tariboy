@@ -1,5 +1,5 @@
 import type { AgentNeeds, AgentState } from "@/lib/agentState";
-import type { AgentBudget, AgentView } from "@/lib/api";
+import type { AgentBudget, AgentView } from "@/types";
 import { elapsed } from "@/pages/home/homeModel";
 
 export const AGENT_TABS = [

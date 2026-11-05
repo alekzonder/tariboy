@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { HostAgents } from "@/lib/aggregate";
-import type { AgentRow } from "@/lib/api";
+import type { AgentRow } from "@/types";
 import { dragId, reorderFromDrag, rowCollision, sidebarAnnouncements } from "./sidebarDnd";
 import { agentRow } from "@/test/fixtures/apiFixtures";
 

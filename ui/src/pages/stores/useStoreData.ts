@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { StoreView, StoreDetail, WorkflowImageListing } from "@/lib/api";
+import type { StoreView, StoreDetail, WorkflowImageListing } from "@/types";
 import { useApi } from "@/components/apiContext";
 import { errorText } from "@/lib/errors";
 

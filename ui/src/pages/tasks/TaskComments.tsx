@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { COUNT, LABEL, SelectShell } from "./panelStyles";
 import { TaskCommentForm } from "./TaskCommentForm";
 import { TaskCommentList } from "./TaskCommentList";
-import type { TaskComment, PrincipalInfo, WaitingFor } from "@/lib/api";
+import type { TaskComment, PrincipalInfo, WaitingFor } from "@/types";
 import { idempotencyKey } from "@/lib/ids";
 
 export default function TaskComments({

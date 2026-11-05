@@ -2,7 +2,7 @@ import { TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
-import type { ScriptRun, WorkflowView } from "@/lib/api";
+import type { ScriptRun, WorkflowView } from "@/types";
 import { TONE_TEXT } from "@/lib/statusTone";
 import { cn } from "@/lib/utils";
 import { DANGER_FILL, MONO, PRIMARY_FILL } from "./panelStyles";

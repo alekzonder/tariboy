@@ -4,7 +4,7 @@ import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useApiQuery } from "@/hooks/useApiQuery";
-import type { PrincipalInfo, TaskDetail, WorkflowView } from "@/lib/api";
+import type { PrincipalInfo, TaskDetail, WorkflowView } from "@/types";
 import { errorText } from "@/lib/errors";
 import { idempotencyKey } from "@/lib/ids";
 import { isWorkflowTask } from "@/lib/tasks";

@@ -1,4 +1,4 @@
-import type { Letter, MailBox, MailUnread } from "@/lib/api";
+import type { Letter, MailBox, MailUnread } from "@/types";
 import { letterTaskKey } from "@/lib/letters";
 
 export const BOXES: ReadonlyArray<{ value: MailBox; label: string }> = [

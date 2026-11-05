@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { ApiClient, AgentScript, AgentScriptRun } from "@/lib/api";
+import type { ApiClient } from "@/lib/api";
+import type { AgentScript, AgentScriptRun } from "@/types";
 import { errorText } from "@/lib/errors";
 import { logNeedsRefresh, nextGeneration, toggledSet } from "./scriptsModel";
 

@@ -5,7 +5,7 @@ import { render, screen, waitFor, within } from "@/test/queryRender";
 import { fakeApi } from "@/test/api";
 import { letter } from "@/test/fixtures/mailFixtures";
 import { AgentStatusContext } from "@/lib/agent";
-import type { AgentStatus, MailListQuery } from "@/lib/api";
+import type { AgentStatus, MailListQuery } from "@/types";
 import AgentMailboxTab from "./AgentMailboxTab";
 
 vi.mock("@/hooks/useMailSocket", () => ({ useMailSocket: () => "open" }));

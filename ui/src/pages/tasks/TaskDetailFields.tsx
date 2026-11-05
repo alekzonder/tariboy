@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { PrincipalInfo, Task, TaskStatus, TaskPriority } from "@/lib/api";
+import type { PrincipalInfo, Task, TaskStatus, TaskPriority } from "@/types";
 import { isWorkflowTask } from "@/lib/tasks";
 import { Input } from "@/components/ui/input";
 import { SendFilesButton } from "@/components/SendFilesButton";

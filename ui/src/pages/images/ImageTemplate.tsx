@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ImagePromptTemplate } from "@/lib/api";
+import type { ImagePromptTemplate } from "@/types";
 import { useImageContext } from "@/components/imageContext";
 import { useApi } from "@/components/apiContext";
 

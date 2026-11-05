@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { fireEvent, render, screen, waitFor, within } from "@/test/queryRender";
 import { fakeApi } from "@/test/api";
 import { letter } from "@/test/fixtures/mailFixtures";
-import type { Letter, MailBox, Task, TaskDetail } from "@/lib/api";
+import type { Letter, MailBox, Task, TaskDetail } from "@/types";
 import { MailboxLetter } from "./MailboxLetter";
 
 const handlers = {

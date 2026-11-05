@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useParams, useSearchParams } from "react-router-dom";
-import type { PluginContribution } from "@/lib/api";
+import type { PluginContribution } from "@/types";
 import { useApi } from "@/components/apiContext";
 import { metricsPathFrom } from "@/lib/navRoutes";
 import { cn } from "@/lib/utils";

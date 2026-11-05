@@ -1,4 +1,5 @@
-import type { Task, TaskFilters, TasksApi } from "@/lib/api";
+import type { TasksApi } from "@/lib/api";
+import type { Task, TaskFilters } from "@/types";
 
 // listAllTasks follows the cursor to the end and reports the newest event
 // sequence seen, which is where a live socket for the same list resumes.

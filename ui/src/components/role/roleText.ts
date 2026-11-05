@@ -1,4 +1,4 @@
-import type { ManifestRole } from "@/lib/api";
+import type { ManifestRole } from "@/types";
 
 /** The ROLE.md text of an image or workflow image manifest. A missing file and a
  *  file of whitespace only are both no ROLE.md. */

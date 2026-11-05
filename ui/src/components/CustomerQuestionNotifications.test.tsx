@@ -2,7 +2,7 @@ import { act, render, screen, waitFor } from "@/test/queryRender";
 import { useLayoutEffect, useRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation, useSearchParams } from "react-router-dom";
-import type { Letter, Task, TaskDetail } from "@/lib/api";
+import type { Letter, Task, TaskDetail } from "@/types";
 import { letter } from "@/test/fixtures/mailFixtures";
 
 const model = vi.hoisted(() => ({

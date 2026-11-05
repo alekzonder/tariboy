@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AgentView } from "@/lib/api";
+import type { AgentView } from "@/types";
 import { cloneAgentDraft, newAgentDraft } from "./agentCreateDraft";
 import { agentBudget } from "@/test/fixtures/apiFixtures";
 

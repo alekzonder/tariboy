@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import type { OperationList } from "@/lib/api";
+import type { OperationList } from "@/types";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status";

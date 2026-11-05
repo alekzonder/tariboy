@@ -8,7 +8,7 @@ import type {
   HarnessModelCatalog,
   ImageManifest,
   ImageSummary,
-} from "@/lib/api";
+} from "@/types";
 import type { Daemon } from "@/lib/daemons";
 import { targetFor } from "@/lib/terminalsHost";
 import { useApi } from "@/components/apiContext";

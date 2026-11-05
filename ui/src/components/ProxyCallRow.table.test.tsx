@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { render } from "@/test/queryRender";
 import { ProxyCallRow } from "@/components/ProxyCallRow";
-import type { Call } from "@/lib/api";
+import type { Call } from "@/types";
 
 const callWithTool = (toolName: string | undefined, input: unknown): Call => ({
   seq: 1,

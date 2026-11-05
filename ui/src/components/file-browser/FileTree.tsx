@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Loader2 } from "lucide-react";
-import type { AgentFileEntry } from "@/lib/api";
+import type { AgentFileEntry } from "@/types";
 import type { FileTreeApi } from "./useFileTree";
 import { TreeRow } from "./TreeRow";
 

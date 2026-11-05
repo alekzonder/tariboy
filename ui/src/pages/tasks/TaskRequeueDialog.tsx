@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { Queue } from "@/lib/api";
+import type { Queue } from "@/types";
 import { cn } from "@/lib/utils";
 import { LABEL, MONO, SelectShell } from "./panelStyles";
 

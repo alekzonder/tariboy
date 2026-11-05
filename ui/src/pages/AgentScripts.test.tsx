@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@/test/queryRender";
 import { AgentNameContext } from "@/lib/agent";
-import type { AgentScript, AgentScriptRun } from "@/lib/api";
+import type { AgentScript, AgentScriptRun } from "@/types";
 import AgentScripts from "./AgentScripts";
 
 afterEach(() => vi.restoreAllMocks());

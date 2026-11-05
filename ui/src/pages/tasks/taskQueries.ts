@@ -1,5 +1,6 @@
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
-import type { ApiClient, Task, TaskDetail, TaskEvent, TaskFilters } from "@/lib/api";
+import type { ApiClient } from "@/lib/api";
+import type { Task, TaskDetail, TaskEvent, TaskFilters } from "@/types";
 import type { Daemon } from "@/lib/daemons";
 import { apiServerKey } from "@/lib/queryClient";
 import { listAllTasks } from "./listAllTasks";

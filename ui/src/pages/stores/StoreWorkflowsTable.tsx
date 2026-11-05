@@ -1,4 +1,4 @@
-import type { StoreWorkflowView, WorkflowImageListing } from "@/lib/api";
+import type { StoreWorkflowView, WorkflowImageListing } from "@/types";
 import { Button } from "@/components/ui/button";
 import { latestWorkflowVersion, workflowStatus } from "./storeStatus";
 

@@ -7,7 +7,7 @@ import type {
   QueueWorkflow,
   WorkflowImageDefinition,
   WorkflowImageListing,
-} from "@/lib/api";
+} from "@/types";
 import { EMPTY, LABEL, MONO, SelectShell } from "./panelStyles";
 import { useWorkflowConfirm } from "./WorkflowConfirm";
 import WorkflowStatusMap from "./WorkflowStatusMap";

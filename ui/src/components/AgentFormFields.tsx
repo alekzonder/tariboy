@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
-import type { ImageSummary } from "@/lib/api";
+import type { ImageSummary } from "@/types";
 
 // Shared building blocks for the agent-create surfaces (single-agent form V3 and
 // the group wizard V4). Kept here so both reuse one image picker and one env

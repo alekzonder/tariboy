@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import type { Queue, Task, TaskParent } from "@/lib/api";
+import type { Queue, Task, TaskParent } from "@/types";
 import { TaskDetailHeader } from "./TaskDetailHeader";
 import { TaskParentField } from "./TaskDetailParent";
 

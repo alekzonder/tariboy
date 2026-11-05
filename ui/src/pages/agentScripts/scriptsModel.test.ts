@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AgentScript, AgentScriptRun } from "@/lib/api";
+import type { AgentScript, AgentScriptRun } from "@/types";
 import {
   canRerun,
   isRunActive,

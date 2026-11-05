@@ -2,7 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { useApiQuery } from "@/hooks/useApiQuery";
-import type { Letter, MailBox } from "@/lib/api";
+import type { Letter, MailBox } from "@/types";
 import { letterTaskKey } from "@/lib/letters";
 import { MarkdownContent } from "@/pages/tasks/TaskMarkdown";
 import { taskQueries } from "@/pages/tasks/taskQueries";

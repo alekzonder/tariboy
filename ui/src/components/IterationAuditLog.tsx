@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Call } from "@/lib/api";
+import type { Call } from "@/types";
 import { useApi } from "@/components/apiContext";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AuditRow } from "@/components/AuditRow";

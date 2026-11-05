@@ -8,7 +8,7 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
-import type { AgentFileEntry } from "@/lib/api";
+import type { AgentFileEntry } from "@/types";
 import { cn } from "@/lib/utils";
 import type { FileTreeApi } from "./useFileTree";
 import { joinPath } from "./paths";

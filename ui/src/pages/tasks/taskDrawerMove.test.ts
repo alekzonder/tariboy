@@ -1,6 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import { beforeEach, expect, it, vi } from "vitest";
-import type { ApiClient, Task } from "@/lib/api";
+import type { ApiClient } from "@/lib/api";
+import type { Task } from "@/types";
 import { moveTaskToHost } from "./taskDrawerMove";
 
 const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Task, TasksApi } from "@/lib/api";
+import type { TasksApi } from "@/lib/api";
+import type { Task } from "@/types";
 import { listAllTasks } from "./listAllTasks";
 
 const task = (key: string) => ({ key }) as Task;

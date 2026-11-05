@@ -1,4 +1,4 @@
-import type { CreateAgentSpec, ImageSummary } from "@/lib/api";
+import type { CreateAgentSpec, ImageSummary } from "@/types";
 import { serializeEnv, type EnvRow } from "@/components/agentFormValues";
 
 // One draft agent row in the wizard. `id` is a stable key so per-row result

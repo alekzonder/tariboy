@@ -1,6 +1,6 @@
 // The rows of a version comparison: each metric of version A and B, the change
 // B − A, and whether that change is better or worse.
-import type { MetricsSlice } from "@/lib/api";
+import type { MetricsSlice } from "@/types";
 import {
   QUALITY_AXES,
   SMALL_SAMPLE_TASKS,

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import type { ImageSummary } from "@/lib/api";
+import type { ImageSummary } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { builtDate, sourceLabel } from "./builtImages";
 import { BuiltImageTagActions, type TagActionHandlers } from "./BuiltImageTagActions";

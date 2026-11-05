@@ -2,7 +2,7 @@ import { MemoryRouter } from "react-router-dom";
 import type { ReactElement } from "react";
 import { act, fireEvent, render as renderWith, screen, waitFor, within } from "@/test/queryRender";
 import { beforeEach, expect, it, vi } from "vitest";
-import type { Task, TaskFilters } from "@/lib/api";
+import type { Task, TaskFilters } from "@/types";
 import { fakeApi } from "@/test/api";
 import { agentRow, taskItem } from "@/test/fixtures/apiFixtures";
 import AgentWorkTab from "./AgentWorkTab";

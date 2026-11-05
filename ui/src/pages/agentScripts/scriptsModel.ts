@@ -1,4 +1,4 @@
-import type { AgentScript, AgentScriptRun } from "@/lib/api";
+import type { AgentScript, AgentScriptRun } from "@/types";
 import { fmtDateTime } from "@/lib/time";
 
 const activeRunStatuses = new Set(["pending", "running"]);

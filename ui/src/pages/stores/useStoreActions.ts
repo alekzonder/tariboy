@@ -1,6 +1,7 @@
 import { type MutableRefObject, useEffect, useRef, useState } from "react";
 import { type NavigateFunction, useNavigate } from "react-router-dom";
-import type { ApiClient, OperationStarted } from "@/lib/api";
+import type { ApiClient } from "@/lib/api";
+import type { OperationStarted } from "@/types";
 import { notifyImagesChanged } from "@/lib/imageEvents";
 import { useApi } from "@/components/apiContext";
 import { useOperationHref, useOperationStartedToast } from "@/hooks/useOperationStartedToast";

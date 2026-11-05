@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { type ApiClient, type ImageSummary } from "@/lib/api";
+import type { ApiClient } from "@/lib/api";
+import type { ImageSummary } from "@/types";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { subscribeImagesChanged } from "@/lib/imageEvents";

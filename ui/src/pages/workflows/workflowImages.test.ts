@@ -1,6 +1,6 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import type { WorkflowImageDefinition, WorkflowImageListing } from "@/lib/api";
+import type { WorkflowImageDefinition, WorkflowImageListing } from "@/types";
 import type { Daemon } from "@/lib/daemons";
 import { apiWrapper, fakeApi } from "@/test/api";
 import {

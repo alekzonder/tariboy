@@ -7,7 +7,7 @@ import type { DaemonCtx } from "@/components/daemonContext";
 import { agentStateTone, type AgentState } from "@/lib/agentState";
 import { openHostPathInVSCode } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
-import type { AgentRow, AgentStatus, AgentView } from "@/lib/api";
+import type { AgentRow, AgentStatus, AgentView } from "@/types";
 import { togglePinnedAgent, usePinnedAgents } from "@/pages/terminals/sidebar/sidebarPrefs";
 import { agentKey } from "@/pages/terminals/sidebar/sidebarModel";
 import { canOpenAgentCwdInVSCode } from "./agentCwdVSCode";

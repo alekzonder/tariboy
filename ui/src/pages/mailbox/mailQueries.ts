@@ -2,7 +2,8 @@ import { useCallback } from "react";
 import { infiniteQueryOptions, queryOptions, useQueryClient } from "@tanstack/react-query";
 import { useApi } from "@/components/apiContext";
 import { useMailSocket } from "@/hooks/useMailSocket";
-import type { ApiClient, MailBox } from "@/lib/api";
+import type { ApiClient } from "@/lib/api";
+import type { MailBox } from "@/types";
 import type { Daemon } from "@/lib/daemons";
 import { apiServerKey } from "@/lib/queryClient";
 

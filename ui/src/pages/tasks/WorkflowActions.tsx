@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import type { WorkflowView } from "@/lib/api";
+import type { WorkflowView } from "@/types";
 import { errorText } from "@/lib/errors";
 import { canReturnToAgent, canRunWatch, canUpgrade, hasActiveRun, isClosed } from "./workflowGraph";
 

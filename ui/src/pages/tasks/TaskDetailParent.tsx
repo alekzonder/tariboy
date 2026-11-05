@@ -1,4 +1,4 @@
-import type { Queue, Task, TaskParent } from "@/lib/api";
+import type { Queue, Task, TaskParent } from "@/types";
 import { parentQueueLabel } from "@/lib/taskTree";
 import { cn } from "@/lib/utils";
 import { MONO } from "./panelStyles";

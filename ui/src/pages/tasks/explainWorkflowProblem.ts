@@ -1,5 +1,5 @@
 import type { StatusTone } from "@/lib/statusTone";
-import type { ScriptRun, TransitionRequest, WorkflowView } from "@/lib/api";
+import type { ScriptRun, TransitionRequest, WorkflowView } from "@/types";
 import {
   counterText,
   currentStatus,

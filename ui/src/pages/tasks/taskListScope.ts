@@ -1,4 +1,4 @@
-import type { TaskFilters, TaskStatusView } from "@/lib/api";
+import type { TaskFilters, TaskStatusView } from "@/types";
 import { actorAgent, principalScope, taskListFilters } from "@/lib/taskList";
 
 /** Whose tasks the list shows: anyone, the viewer ("mine"), or one agent as

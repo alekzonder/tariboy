@@ -1,4 +1,4 @@
-import type { ImageSummary } from "@/lib/api";
+import type { ImageSummary } from "@/types";
 import { BuiltImageTagRow } from "./BuiltImageTagRow";
 import type { TagActionHandlers } from "./BuiltImageTagActions";
 
