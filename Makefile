@@ -45,7 +45,7 @@ endif
 export TARIBOY_VITEST_MAX_WORKERS ?= $(CHECK_JOBS)
 endif
 
-.PHONY: build install uninstall setup check backend-check frontend-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet staticcheck gocyclo gocyclo-report e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e tariboy-tasks-e2e smoke full-smoke ui ui-dev ui-fmt-check ui-complexity-report store-ui docs clean up start down attach a desktop desktop-mac desktop-android desktop-binaries desktop-version-check desktop-lock-check desktop-rust-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
+.PHONY: build install uninstall setup check backend-check frontend-check designer-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet staticcheck gocyclo gocyclo-report e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e tariboy-tasks-e2e smoke full-smoke ui ui-dev ui-fmt-check ui-complexity-report store-ui docs clean up start down attach a desktop desktop-mac desktop-android desktop-binaries desktop-version-check desktop-lock-check desktop-rust-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
 
 build:
 	$(GO) build -trimpath -o $(BINDIR)/tariboyd ./cmd/tariboyd
@@ -121,6 +121,7 @@ smoke-contract-test:
 	./scripts/make-clean-contract-test.sh
 	./scripts/server-install-contract-test.sh
 	./scripts/publish-docs-contract-test.sh
+	bash ./scripts/designer-check-contract-test.sh
 
 smoke-image-skills-contract: build
 	./scripts/image-skills-harness-smoke-contract-test.sh
@@ -708,6 +709,27 @@ frontend-check:
 	run_step "ui-bundle-budget" 'cd ui && npm run bundle:budget'; \
 	run_step "docs"         './scripts/docs-build-cached.sh && ./scripts/docs-build-contract-test.sh'; \
 	summarize frontend-check
+
+# The designer's hand-off check (docs/docs/architecture/web-ui.mdx): the type
+# check, oxlint on the UI files changed against origin/main (uncommitted ones
+# included), the view-layer policy test, and the Storybook build. It takes the
+# host check slot and runs every step like frontend-check does. A successful
+# step prints nothing, so the oxlint file list is printed before its step.
+designer-check:
+	./scripts/npm-ci-locked.sh ui
+	@$(STEP_RUNNER); \
+	run_step "ui-typecheck" 'cd ui && npx tsc -b --checkers 1'; \
+	if __base=$$(git merge-base origin/main HEAD); then \
+		__changed=$$(git diff --name-only --diff-filter=d "$$__base" -- 'ui/*.ts' 'ui/*.tsx' | sed 's#^ui/##'); \
+		echo "oxlint files: $$(printf '%s' "$$__changed" | tr '\n' ' ')"; \
+		run_step "ui-oxlint" 'if [ -z "$$__changed" ]; then echo "no changed UI files"; else cd ui && npx oxlint --deny-warnings $$__changed; fi'; \
+	else \
+		echo "designer-check: no merge base with origin/main, run: git fetch origin" >&2; \
+		failed=1; rows="$$rows$$(printf '%-28s %-4s %5ss' ui-oxlint FAIL 0)\n"; \
+	fi; \
+	run_step "viewLintPolicy" 'cd ui && TARIBOY_VITEST_MAX_WORKERS=2 npx vitest run src/test/viewLintPolicy.test.ts'; \
+	run_step "ui-storybook" 'cd ui && npm run build-storybook -- --output-dir "$$TMPDIR/storybook-static" --quiet'; \
+	summarize designer-check
 
 check:
 	@$(STEP_RUNNER); \

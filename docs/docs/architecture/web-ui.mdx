@@ -1361,10 +1361,10 @@ An idiomatic example:
 - Hand off a change:
   1. Work in a branch of your own worktree.
   2. Before you hand off, run
-     `flock -o /tmp/tariboy-check.lock sh -c 'cd ui && npx tsc -b && npm run lint'`. A later
-     stage adds `make designer-check`, which runs the type check, oxlint on
-     the files changed against `origin/main`, the view policy test and
-     `build-storybook` under the host check slot.
+     `make designer-check`. It runs the type check, oxlint on the files
+     changed against `origin/main` (uncommitted files included), the view
+     policy test `viewLintPolicy.test.ts` and `build-storybook`, under the
+     host check slot. It runs all four steps and fails if one failed.
   3. Give the branch and `handoff.md` to the developer through the lead's
      queue. The developer opens the pull request.
 - Propose a new prop in `handoff.md`. Do not add it to a container.
