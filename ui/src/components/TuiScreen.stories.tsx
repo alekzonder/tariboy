@@ -72,6 +72,8 @@ const absentController = {
 
 const meta = {
   component: TuiScreen,
+  // The toolbar's SendFilesButton reads the API host (useApi).
+  parameters: { tariboy: { daemon: true } },
   decorators: [
     (Story) => (
       <div className="flex h-[420px] flex-col">
