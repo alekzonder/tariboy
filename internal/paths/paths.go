@@ -93,6 +93,10 @@ func (p Paths) PricingCatalogFile() string {
 func (p Paths) Socket() string  { return filepath.Join(p.RuntimeDir(), "tariboyd.sock") }
 func (p Paths) PidFile() string { return filepath.Join(p.RuntimeDir(), "tariboyd.pid") }
 func (p Paths) LogFile() string { return filepath.Join(p.RuntimeDir(), "tariboyd.log") }
+
+// HandoffMarker exists while a restart hands the daemon over: the stopping
+// daemon then leaves its script runs to the next one, which removes it.
+func (p Paths) HandoffMarker() string { return filepath.Join(p.RuntimeDir(), "daemon-handoff") }
 func (p Paths) AccessLogFile() string {
 	return filepath.Join(p.RuntimeDir(), "tariboyd.access.log")
 }

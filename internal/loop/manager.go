@@ -92,9 +92,9 @@ type ManagerConfig struct {
 	// takes over the script runs. Then they keep running; otherwise, and when
 	// nil, the stop interrupts them.
 	ScriptHandoff func() bool
-	Emit               func(events.Event)
-	Proxy               ProxyBinder
-	Groups              GroupProvisioner
+	Emit          func(events.Event)
+	Proxy         ProxyBinder
+	Groups        GroupProvisioner
 
 	// Assessments serves the agent's /tools/assessment routes; nil answers
 	// them unavailable.
