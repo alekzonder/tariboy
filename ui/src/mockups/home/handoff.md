@@ -1,3 +1,5 @@
+Implemented in #342
+
 # Handoff: Home
 
 2026-11-05 · задача дизайна TARIDESIGN-an52 (пилот этапа 6, TARI-v96u) · story `mockups-home--width-360`, `mockups-home--width-390`, `mockups-home--width-820`, `mockups-home--width-1024`, `mockups-home--width-1180`, `mockups-home--busy`.
@@ -20,12 +22,12 @@ Storybook строит id story из имени экспорта: `Width360` д�
 
 Предложение для разделения контейнера `NeedsYouList` (вопрос 1):
 
-| Component | Prop | Type | Meaning | Source of data |
-| --- | --- | --- | --- | --- |
-| `NeedsYouListView` (новый view) | `rows` | `NeedsYouViewRow[]`: `id`, `kind: "task" \| "letter"`, `label`, `title`, `meta` | Строки списка, уже отформатированные | `needsYouRows(needs.hosts)` в `HomeContainer`; `meta` собирает `taskState`, `hostLabel` и `formatTaskTime` |
-| `NeedsYouListView` | `expanded` | `ReadonlySet<string>` | Строки задач с открытой карточкой ответа | состояние контейнера |
-| `NeedsYouListView` | `onToggle`, `onOpen` | `(id: string) => void` | Открыть карточку; открыть задачу или письмо | обработчики контейнера |
-| `NeedsYouListView` | `status` | `"loading" \| "error" \| "ready"` и `error: string` | Состояния загрузки и ошибки | `useNeedsYou()`: `loaded`, `hosts[].error` |
+| Component                       | Prop                 | Type                                                                            | Meaning                                     | Source of data                                                                                             |
+| ------------------------------- | -------------------- | ------------------------------------------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `NeedsYouListView` (новый view) | `rows`               | `NeedsYouViewRow[]`: `id`, `kind: "task" \| "letter"`, `label`, `title`, `meta` | Строки списка, уже отформатированные        | `needsYouRows(needs.hosts)` в `HomeContainer`; `meta` собирает `taskState`, `hostLabel` и `formatTaskTime` |
+| `NeedsYouListView`              | `expanded`           | `ReadonlySet<string>`                                                           | Строки задач с открытой карточкой ответа    | состояние контейнера                                                                                       |
+| `NeedsYouListView`              | `onToggle`, `onOpen` | `(id: string) => void`                                                          | Открыть карточку; открыть задачу или письмо | обработчики контейнера                                                                                     |
+| `NeedsYouListView`              | `status`             | `"loading" \| "error" \| "ready"` и `error: string`                             | Состояния загрузки и ошибки                 | `useNeedsYou()`: `loaded`, `hosts[].error`                                                                 |
 
 Окончательный тип определяет разработчик.
 
@@ -35,14 +37,14 @@ Storybook строит id story из имени экспорта: `Width360` д�
 
 ## States
 
-| Состояние | Story |
-| --- | --- |
-| Обычная страница: 2 агента работают, 2 записи в Needs you | `mockups-home--width-1024` |
-| Много агентов: 50 в боковой панели, 17 работают, 6 записей в Needs you | `mockups-home--busy` |
-| Пусто: нет работающих и недавних агентов | `pages-home-homepage--empty` |
-| Ошибка итогов дня: `totals: null`, текст ошибки под плитками | `pages-home-homepage--today-error` |
+| Состояние                                                                                      | Story                                                                 |
+| ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Обычная страница: 2 агента работают, 2 записи в Needs you                                      | `mockups-home--width-1024`                                            |
+| Много агентов: 50 в боковой панели, 17 работают, 6 записей в Needs you                         | `mockups-home--busy`                                                  |
+| Пусто: нет работающих и недавних агентов                                                       | `pages-home-homepage--empty`                                          |
+| Ошибка итогов дня: `totals: null`, текст ошибки под плитками                                   | `pages-home-homepage--today-error`                                    |
 | Needs you: загрузка (`Loading…`) и ошибка (`Could not read what needs you: …`, кнопка `Retry`) | нет story: состояния живут в контейнере `NeedsYouList.tsx` (вопрос 1) |
-| Длинное имя агента | нет story; `agentLinks.longText` есть в фикстурах (вопрос 3) |
+| Длинное имя агента: имена обрезаются через `truncate`                                          | `pages-home-homepage--long-text`                                      |
 
 ## Behavior
 
@@ -68,24 +70,24 @@ Storybook строит id story из имени экспорта: `Width360` д�
 
 ## Accessibility
 
-Изменений нет. Текущие правила:
+Одно изменение: ошибка итогов дня (`todayError`) получила `role="alert"`. Вид страницы не изменился. Текущие правила:
 
 - Шеврон строки задачи имеет `aria-label="Answer in place"` и `aria-expanded`.
 - Иконки имеют `aria-hidden="true"`.
 - Ошибка Needs you имеет `role="alert"`.
-- Ошибка итогов дня (`todayError`) не имеет `role="alert"` (вопрос 2).
+- Ошибка итогов дня (`todayError`) имеет `role="alert"`. Тест: `HomeView › announces the today error as an alert`.
 - Порядок фокуса: `New agent`, строки Needs you, строки Running now, `History ›`, строки Recent.
 - Новых пар токенов нет, поэтому контраст не изменён.
 
 ## Layout at widths
 
-| Ширина | Раскладка | Story |
-| --- | --- | --- |
-| 360 px | Только остров. Плитки Today в 2 колонки, Recent в 1 колонку. В строке задачи Needs you заголовок скрыт полностью, метаданные обрезаны (вопрос 5) | `mockups-home--width-360` |
-| 390 px | Как 360 px | `mockups-home--width-390` |
-| 820 px | Боковая панель 268 px и остров. Плитки Today в 3 колонки, Recent в 2 колонки (`sm:`) | `mockups-home--width-820` |
-| 1024 px | Как 820 px. Шесть плиток Today в один ряд | `mockups-home--width-1024`, `mockups-home--busy` |
-| 1180 px | Как 1024 px, остров шире | `mockups-home--width-1180` |
+| Ширина  | Раскладка                                                                                                                                        | Story                                            |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
+| 360 px  | Только остров. Плитки Today в 2 колонки, Recent в 1 колонку. В строке задачи Needs you заголовок скрыт полностью, метаданные обрезаны (вопрос 5) | `mockups-home--width-360`                        |
+| 390 px  | Как 360 px                                                                                                                                       | `mockups-home--width-390`                        |
+| 820 px  | Боковая панель 268 px и остров. Плитки Today в 3 колонки, Recent в 2 колонки (`sm:`)                                                             | `mockups-home--width-820`                        |
+| 1024 px | Как 820 px. Шесть плиток Today в один ряд                                                                                                        | `mockups-home--width-1024`, `mockups-home--busy` |
+| 1180 px | Как 1024 px, остров шире                                                                                                                         | `mockups-home--width-1180`                       |
 
 Снимки (`npm run story:shot -- <story-id> <light|dark> <width>`), каталог `ui/.story-shots/`:
 
@@ -121,7 +123,21 @@ Storybook строит id story из имени экспорта: `Width360` д�
 ## Open questions
 
 1. Разделите `NeedsYouList.tsx` на контейнер и `NeedsYouList.view.tsx` по предложению из раздела «New props»? Тогда макет возьмёт настоящий view вместо локальной копии, а состояния загрузки и ошибки получат story.
+
+   Ответ: нужно, но отдельной задачей. Контейнер держит панель задачи, карточку ответа и данные `useNeedsYou`. Это рефакторинг вне пилота. До него макет применяет локальную копию `ui/src/mockups/home/NeedsYouList.view.tsx`.
+
 2. Добавить `role="alert"` к тексту `todayError`? Ошибка Needs you его уже имеет, ошибка итогов дня — нет.
+
+   Ответ: сделано в этом PR, тест `HomeView › announces the today error as an alert`.
+
 3. Нужна story длинного имени агента (`agentLinks.longText`) в `HomePage.stories.tsx`? Строки обрезаются через `truncate`, но story этого не показывает.
+
+   Ответ: сделано в этом PR, story `pages-home-homepage--long-text`.
+
 4. Боковая панель макета показывает только раздел Agents. Навигации (Home, Tasks, Inbox), кнопки `New agent`, подвала и заголовка окна в макете нет: это контейнеры без view-файлов. Нужен декоратор Storybook или view для каркаса окна, чтобы макеты страниц показывали полную оболочку?
+
+   Ответ: нужен view каркаса, отдельной задачей. Эти части сейчас контейнеры без view-файлов. Декоратор без view повторил бы разметку и разошёлся бы с продуктом.
+
 5. На 360 px строка задачи в Needs you не показывает заголовок: колонка ключа `w-24` и метаданные `shrink-0` занимают всю ширину (`mockups-home--width-360`). Это текущее поведение продукта и нарушение правила Floor «рабочая ширина телефона». Предложение: ниже `sm` перенести метаданные на вторую строку под заголовок. Решение о правке принимает заказчик отдельной задачей: эта задача без редизайна.
+
+   Ответ: вне пилота, решение о правке у заказчика (TARI-v96u).
