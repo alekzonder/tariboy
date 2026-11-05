@@ -10,14 +10,7 @@ import type {
 } from "../api-types.generated";
 import { readResult, type Transport } from "./client";
 
-export type {
-  AgentFileContent,
-  AgentFileEntry,
-  AgentFileList,
-  FileUploadResult,
-  FsEntry,
-  FsListing,
-} from "../api-types.generated";
+export type * from "@/types/files";
 
 export function filesApi(t: Transport) {
   return {

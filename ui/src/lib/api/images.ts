@@ -12,23 +12,9 @@ import type {
   ImageValidateResult,
 } from "../api-types.generated";
 
-export type {
-  ImageDiagnostic,
-  ImageFileEntry,
-  ImageManifest,
-  ImagePromptTemplate,
-  ImageProvenance,
-  ImageSummary,
-  ImageValidateResult,
-  ManifestRole,
-} from "../api-types.generated";
+import type { ImageArchiveUpload } from "@/types/images";
 
-// Not in /api/openapi.json: served by internal/api/server.go POST /api/image-imports.
-export interface ImageArchiveUpload {
-  import_id: string;
-  ref: string;
-  digest: string;
-}
+export type * from "@/types/images";
 
 const imageDigestQuery = (digest?: string) =>
   digest ? `?expected_digest=${encodeURIComponent(digest)}` : "";

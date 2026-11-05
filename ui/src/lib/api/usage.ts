@@ -1,21 +1,8 @@
 import type { AgentUsage, TaskActivityReport, UsageReport } from "../api-types.generated";
+import type { UsageParams } from "@/types/usage";
 import type { Transport } from "./client";
 
-export type {
-  AgentUsage,
-  BudgetSpend,
-  BudgetStatusList,
-  TaskActivityAgent,
-  TaskActivityReport,
-  TaskActivityRow,
-  TaskActivityTotals,
-  UsageReport,
-  UsageSeriesPoint,
-} from "../api-types.generated";
-
-export interface UsageParams {
-  group?: string;
-}
+export type * from "@/types/usage";
 
 export function usageApi(t: Transport) {
   return {

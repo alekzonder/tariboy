@@ -2,12 +2,7 @@ import type { StoreDetail, StoreRemoveResult, StoreView } from "../api-types.gen
 import type { Transport } from "./client";
 import { UI_INITIATOR, type OperationStarted } from "./operations";
 
-export type {
-  StoreDetail,
-  StoreImageView,
-  StoreView,
-  StoreWorkflowView,
-} from "../api-types.generated";
+export type * from "@/types/stores";
 
 const storePath = (name: string) => `/api/stores/${encodeURIComponent(name)}`;
 
