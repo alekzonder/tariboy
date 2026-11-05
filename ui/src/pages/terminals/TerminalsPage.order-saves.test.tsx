@@ -85,6 +85,10 @@ vi.mock("@/components/TuiScreen", () => ({
 // "/" is Home: its live "needs you" read would hit the unmocked network and
 // raise a second alert that can win the race with the order-save alert.
 vi.mock("@/pages/terminals/NeedsYouLive", () => ({ default: () => null }));
+// Same for the Today read of Home: its failed request is an alert too.
+vi.mock("@/hooks/useTaskActivity", () => ({
+  useTaskActivity: () => ({ report: null, error: "" }),
+}));
 
 beforeEach(() => setupTerminalsPage(calls));
 afterEach(cleanupTerminalsPage);
