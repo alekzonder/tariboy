@@ -1236,7 +1236,7 @@ it never reaches a daemon.
   A design reads as a control surface for dense operator tooling (agent
   consoles, task trees, image and host tables), not as a marketing page.
 - Colors are always semantic tokens, never hex and never a Tailwind color
-  scale. So light and dark both work. A later stage adds a policy test for it.
+  scale. So light and dark both work. `viewLintPolicy.test.ts` enforces it.
   - Surfaces: `bg-background`, `bg-card`, `bg-popover`, `bg-muted`,
     `bg-accent`, `bg-secondary`.
   - Text: `text-foreground`, `text-muted-foreground`, `text-card-foreground`,
@@ -1325,8 +1325,8 @@ An idiomatic example:
   under `ui/src/mockups/`, the fixtures, `ui/src/index.css` and the primitives
   in `ui/src/components/ui/`.
 - Never import `@/lib/api` or `@tanstack/react-query`, and never call `fetch`,
-  in view files, stories, mockups and fixtures. A later stage adds a lint rule
-  for this. The other designer paths have no data access to forbid.
+  in view files, stories, mockups and fixtures. `npm run lint` enforces this.
+  The other designer paths have no data access to forbid.
 - Take types from `@/types`. A view takes the narrowest type it needs:
   `Pick<…>` or its own `XProps`.
 - A component without a view file: copy its markup into a local view part
