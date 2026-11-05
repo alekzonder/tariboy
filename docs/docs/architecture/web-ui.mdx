@@ -1236,7 +1236,7 @@ it never reaches a daemon.
   A design reads as a control surface for dense operator tooling (agent
   consoles, task trees, image and host tables), not as a marketing page.
 - Colors are always semantic tokens, never hex and never a Tailwind color
-  scale. So light and dark both work. A policy test enforces it.
+  scale. So light and dark both work. A later stage adds a policy test for it.
   - Surfaces: `bg-background`, `bg-card`, `bg-popover`, `bg-muted`,
     `bg-accent`, `bg-secondary`.
   - Text: `text-foreground`, `text-muted-foreground`, `text-card-foreground`,
@@ -1343,11 +1343,25 @@ An idiomatic example:
   `iframe.html?id=<story-id>&viewMode=story&globals=theme:<theme>`. It prints
   the path of the PNG, `ui/.story-shots/<story-id>.<theme>.<width>.png`. Check
   each changed story in `light` and `dark`, at the smallest supported width
-  (360 px) and at 1024 px. The story id is in the URL of the story and in
+  (360 px) and at 1024 px. The story id is the title and the story name in
+  kebab case, joined by `--`: `mockups-home--width360`. All ids are in
   `storybook-static/index.json`.
+- Build stories from the fixture factories:
+  `agentRow({ name: "builder", state: "running" })`. Take dates from `NOW` and
+  `minutesAgo()` in `ui/src/fixtures/time.ts`. `NOW` is a string, so a
+  component with a `now` prop of type `Date` gets `new Date(NOW)`. A mockup
+  story uses `parameters: { layout: "fullscreen" }` and one story for each
+  supported width (`Width360`, `Width390`, `Width820`, `Width1024`,
+  `Width1180`) with `withWidth(width)`.
+- Put `handoff.md` next to its mockup. A page change has
+  `ui/src/mockups/<page>/handoff.md` next to `<Page>.stories.tsx`
+  (`title: "Mockups/<Page>"`). A change of one component without a page mockup
+  has `ui/src/mockups/<component>/handoff.md` next to
+  `<Component>.stories.tsx` (`title: "Mockups/<Component>"`).
 - Hand off a change:
   1. Work in a branch of your own worktree.
-  2. Before you hand off, run `npx tsc -b` and `npm run lint` in `ui/`. A later
+  2. Before you hand off, run
+     `flock -o /tmp/tariboy-check.lock sh -c 'cd ui && npx tsc -b && npm run lint'`. A later
      stage adds `make designer-check`, which runs the type check, oxlint on
      the files changed against `origin/main`, the view policy test and
      `build-storybook` under the host check slot.
