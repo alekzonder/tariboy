@@ -18,8 +18,8 @@ const RULES = [
   "max-params",
 ];
 
-// The quality rules only, with the overrides that turn them off (test files,
-// .design-sync) and without the overrides that raise a threshold.
+// The quality rules only, with the overrides that turn them off (test files)
+// and without the overrides that raise a threshold.
 export function reportConfig(config) {
   const rules = Object.fromEntries(
     Object.entries(config.rules).filter(([rule]) => RULES.includes(rule)),

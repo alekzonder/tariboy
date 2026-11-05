@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["tests/**/*.{ts,tsx,mjs}", ".design-sync/**/*.{ts,tsx,mjs}"],
+  "entry": ["tests/**/*.{ts,tsx,mjs}"],
   "project": [
     "src/**/*.{ts,tsx,css}!",
     "store/**/*.{ts,tsx,css}!",
@@ -9,8 +9,7 @@
     "!src/mockups/**!",
     "!src/fixtures/**!",
     "!src/storybook/**!",
-    "tests/**/*.{ts,tsx,mjs}",
-    ".design-sync/**/*.{ts,tsx,mjs}"
+    "tests/**/*.{ts,tsx,mjs}"
   ],
   "playwright": { "config": ["playwright.*.config.ts"] },
   "vite": { "config": ["vite*.config.ts"] },

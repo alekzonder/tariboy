@@ -28,10 +28,6 @@ const testOverride = {
   files: ["**/*.test.{ts,tsx}", "**/*.pw.ts", "src/test/**", "tests/**"],
   rules: { "max-lines": "off", "max-lines-per-function": "off" },
 };
-const designSyncOverride = {
-  files: [".design-sync/**"],
-  rules: Object.fromEntries(Object.keys(thresholds).map((rule) => [rule, "off"])),
-};
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -42,7 +38,7 @@ function sources(dir: string): string[] {
   });
 }
 
-const files = ["src", "store", ".design-sync"].flatMap((dir) => sources(join(ui, dir)));
+const files = ["src", "store", ".storybook"].flatMap((dir) => sources(join(ui, dir)));
 
 it("turns on the correctness category and no warning", () => {
   expect(config.categories.correctness).toBe("error");
@@ -54,9 +50,9 @@ it("turns on the complexity and size thresholds as errors", () => {
     expect(config.rules[rule]).toEqual(setting);
 });
 
-it("overrides rules only for test files and .design-sync", () => {
+it("overrides rules only for test files", () => {
   const overrides = (config.overrides ?? []).filter((override) => override.rules);
-  expect(overrides).toEqual([testOverride, designSyncOverride]);
+  expect(overrides).toEqual([testOverride]);
 });
 
 it("suppresses only with an oxlint comment that names the rule and a reason", () => {
