@@ -177,7 +177,7 @@ smoke contracts. Its
 committed OpenAPI snapshot; see [Go control plane and plugins](#go-control-plane-and-plugins). The
 frontend target runs the UI format check, the generated API types check, UI
 typecheck, lint with the complexity and size thresholds, the unused-code check, unit tests,
-which fail when Vitest finishes fewer test files than it found, branding, the bundle budget, and the documentation checks. The documentation
+which fail when Vitest finishes fewer test files than it found, the Storybook build (`ui-storybook`), branding, the bundle budget, and the documentation checks. The documentation
 step restores the last build from a host cache when no input of the site
 changed; see [Documentation build cache](#documentation-build-cache). Before checking, `backend-check` runs `go mod download`
 for the module and for `tools.mod`. `frontend-check` uses
@@ -548,7 +548,7 @@ npm ci
 ```
 
 `make check` then covers `npm run fmt:check`, `npm run api-types:check`, `npx tsc -b --checkers 1`, `npm run lint`,
-`npm run knip`, `npm test`, `npm run branding:check`, and `npm run bundle:budget`. The type check uses one checker
+`npm run knip`, `npm test`, `npm run build-storybook`, `npm run branding:check`, and `npm run bundle:budget`. The type check uses one checker
 thread, because the default parallel checkers use about 0.4 GB more memory on a shared host. `make full-check` adds `npm run test:tasks-browser`
 and `npm run test:images-browser`, and builds the desktop bundle through its
 desktop step. Run any of them directly under `ui/` while iterating:
@@ -593,6 +593,49 @@ failure, load the new code with `React.lazy`, or keep the library out of the
 groups that the shell imports (see
 [Code splitting](/docs/architecture/web-ui#code-splitting)). To fix a failure
 of all JavaScript, make the lazily loaded code smaller.
+
+#### Storybook
+
+Storybook shows a component in a theme and a width without the app and
+without a daemon. It builds the stories in `ui/src/**/*.stories.tsx`. Run it
+from `ui/`:
+
+```bash
+cd ui
+npm run storybook        # http://127.0.0.1:6006
+npm run build-storybook  # writes ui/storybook-static (ignored by git)
+```
+
+The `ui-storybook` step of `make frontend-check` runs `npm run build-storybook`
+into the run's temporary directory. It fails when a story does not compile or
+does not build. `npx tsc -b` also checks every story against the real
+component props, because the stories are under `src/`. An extra prop in
+`args` fails the type check. Measured on the shared host on 2026-11-05, the
+build takes about 10 seconds and its peak resident memory is about 0.86 GB
+(`/usr/bin/time -v`). If the peak grows above 1.5 GB, set
+`NODE_OPTIONS=--max-old-space-size=1536` in the step command.
+
+Storybook never reaches a daemon. Three layers keep it that way:
+
+1. Storybook reads `ui/vite.storybook.config.ts`, not `ui/vite.config.ts`.
+   The app config proxies `/api` to `127.0.0.1:9990`. The Storybook file has
+   the same plugins and alias and no `server.proxy`. `ui/.storybook/main.ts`
+   has no `viteFinal` and no addons.
+2. The `withDaemon` decorator (`ui/src/storybook/decorators.tsx`) writes a
+   host registry with one host, `http://storybook.invalid`, into the
+   `tariboy_daemons` and `tariboy_active_daemon` keys. The `.invalid` name
+   never resolves. After the story, the decorator restores both keys. A story
+   asks for it with `parameters.tariboy = { daemon: true }`.
+3. `ui/src/test/storybookSafety.test.ts` fails when a story or a mockup
+   imports `CustomerQuestionNotifications`, because that component opens the
+   tasks WebSocket.
+
+`ui/src/test/storybookConfig.test.ts` and
+`ui/src/test/storybookDecorators.test.tsx` pin layers 1 and 2. The tests check
+the config and the decorators, not future stories. A new story that gets its
+data in another way must pass a manual network check: open it with Playwright
+and `page.on("request")`, and make sure that no request goes to
+`127.0.0.1:9990` or to a relative `/api` path.
 
 `npm run fmt` formats `ui/src`, `ui/store`, `ui/tests`, and `ui/.design-sync`
 in place with [oxfmt](https://oxc.rs/docs/guide/usage/formatter) and
@@ -778,6 +821,10 @@ which the first pass does not check. Add an exception to `ignoreIssues` in
 `ui/knip.json` only for code that the app does not use on purpose. Name each
 file, list only the issue types it needs, and give the reason in the pull
 request. Do not add a pattern that covers all of `src/` or all components.
+Stories, mockups, fixtures and Storybook decorators are not reported as unused
+files (`project` excludes `src/**/*.stories.tsx`, `src/mockups/**`,
+`src/fixtures/**` and `src/storybook/**`), and the exports of
+`src/storybook/decorators.tsx` are allowed, because stories use them.
 The current exceptions are the shadcn primitives under `src/components/ui/`.
 The repository keeps that kit complete for the design-sync catalog, so its
 unused exports and the unused `separator.tsx` and `tooltip.tsx` files are

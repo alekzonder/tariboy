@@ -19,6 +19,8 @@
     "lint": "oxlint . --deny-warnings",
     "knip": "knip --production --include files && knip",
     "preview": "vite preview",
+    "storybook": "storybook dev -p 6006 --host 127.0.0.1",
+    "build-storybook": "storybook build",
     "test": "node scripts/vitest-run.mjs",
     "test:tasks-browser": "playwright test -c playwright.tasks.config.ts",
     "test:images-browser": "playwright test -c playwright.images.config.ts",
@@ -70,6 +72,7 @@
     "unified": "^11.0.5"
   },
   "devDependencies": {
+    "@storybook/react-vite": "10.6.5",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
@@ -84,6 +87,7 @@
     "oxlint": "^1.81.0",
     "playwright": "^1.60.0",
     "sharp": "^0.35.3",
+    "storybook": "10.6.5",
     "typescript": "~7.0.2",
     "vite": "^8.0.12",
     "vitest": "^4.1.7"

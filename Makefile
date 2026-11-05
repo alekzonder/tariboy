@@ -703,6 +703,7 @@ frontend-check:
 	run_step "ui-dead-code" 'cd ui && npm run knip'; \
 	./scripts/ui-test-memory-gate.sh 9>&-; \
 	run_step "ui-test"      'cd ui && npm test'; \
+	run_step "ui-storybook" 'cd ui && npm run build-storybook -- --output-dir "$$TMPDIR/storybook-static" --quiet'; \
 	run_step "ui-branding"  'cd ui && npm run branding:check'; \
 	run_step "ui-bundle-budget" 'cd ui && npm run bundle:budget'; \
 	run_step "docs"         './scripts/docs-build-cached.sh && ./scripts/docs-build-contract-test.sh'; \

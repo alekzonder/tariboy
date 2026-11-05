@@ -7,12 +7,11 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const ui = readdirSync(join(here, "../src/components/ui"))
-  .filter((f) => f.endsWith(".tsx") && !f.endsWith(".test.tsx"))
-  .sort();
-const applied = readdirSync(join(here, "../src/components"))
-  .filter((f) => f.endsWith(".tsx") && !f.endsWith(".test.tsx"))
-  .sort();
+// Storybook stories sit next to the components and are not components.
+const isModule = (f) =>
+  f.endsWith(".tsx") && !f.endsWith(".test.tsx") && !f.endsWith(".stories.tsx");
+const ui = readdirSync(join(here, "../src/components/ui")).filter(isModule).sort();
+const applied = readdirSync(join(here, "../src/components")).filter(isModule).sort();
 
 // Page-level surfaces: the real screens the app routes to — whole compositions
 // rather than atoms — so the design agent sees Tariboy's actual density and

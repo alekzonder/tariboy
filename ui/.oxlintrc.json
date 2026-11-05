@@ -12,6 +12,7 @@
   },
   "ignorePatterns": [
     "dist",
+    "storybook-static",
     "src/lib/api-types.generated.ts"
   ],
   "rules": {
