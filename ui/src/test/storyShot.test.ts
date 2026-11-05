@@ -1,8 +1,8 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { expect, it } from "vitest";
 
 // ui/scripts/story-shot.mjs has no type declarations, so the test types the
@@ -83,4 +83,68 @@ it("takes the host check slot unless it already holds it", async () => {
   expect(command?.slice(-argv.length)).toEqual(argv);
   expect(slotCommand({ TARIBOY_CHECK_LOCK: "/run/x.lock" }, argv)).toContain("/run/x.lock");
   expect(slotCommand({ TARIBOY_CHECK_LOCK_HELD: "1" }, argv)).toBeNull();
+});
+
+// buildIsStale: the static build is stale when it is missing or an input file
+// of the Storybook build is newer than storybook-static/index.json.
+type Stale = { buildIsStale(uiDir: string): string | null };
+const staleFixture = (touch: (dir: string, at: Date) => void) => {
+  const dir = mkdtempSync(join(tmpdir(), "story-stale-"));
+  const old = new Date(Date.now() - 60_000);
+  const mk = (rel: string, at: Date) => {
+    const file = join(dir, rel);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, "x");
+    utimesSync(file, at, at);
+  };
+  for (const rel of ["src/a.ts", ".storybook/main.ts", "vite.storybook.config.ts", "README.md"])
+    mk(rel, old);
+  mk("storybook-static/index.json", new Date(Date.now() - 30_000));
+  touch(dir, new Date());
+  return { dir, mk, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+};
+
+it("reports a missing build as stale", async () => {
+  const { buildIsStale } = (await load()) as unknown as Stale;
+  const dir = mkdtempSync(join(tmpdir(), "story-stale-"));
+  try {
+    expect(buildIsStale(dir)).toMatch(/missing/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+it("reports a build newer than every input as fresh", async () => {
+  const { buildIsStale } = (await load()) as unknown as Stale;
+  const f = staleFixture(() => {});
+  try {
+    expect(buildIsStale(f.dir)).toBeNull();
+  } finally {
+    f.cleanup();
+  }
+});
+
+it.each(["src/a.ts", "src/new/deep.tsx", ".storybook/main.ts", "vite.storybook.config.ts"])(
+  "reports a build older than %s as stale",
+  async (rel) => {
+    const { buildIsStale } = (await load()) as unknown as Stale;
+    const f = staleFixture(() => {});
+    try {
+      f.mk(rel, new Date());
+      expect(buildIsStale(f.dir)).toContain(rel);
+    } finally {
+      f.cleanup();
+    }
+  },
+);
+
+it("ignores a newer file that is not an input", async () => {
+  const { buildIsStale } = (await load()) as unknown as Stale;
+  const f = staleFixture(() => {});
+  try {
+    f.mk("README.md", new Date());
+    expect(buildIsStale(f.dir)).toBeNull();
+  } finally {
+    f.cleanup();
+  }
 });

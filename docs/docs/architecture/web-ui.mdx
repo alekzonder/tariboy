@@ -1233,9 +1233,10 @@ and gives the reason for each at its top.
 
 A designer sees and changes the UI in Storybook, not in the app. The stories
 live next to the components (`ui/src/components/**/*.stories.tsx`,
-`ui/src/pages/**/*.stories.tsx`). Shared values are in `ui/src/fixtures/`
-(`agents.ts`, `tasks.ts`, `images.ts`, `operations.ts`, `metrics.ts`, and the
-fixed clock `time.ts`). The decorators are in `ui/src/storybook/decorators.tsx`.
+`ui/src/pages/**/*.stories.tsx`) and in the mockups
+(`ui/src/mockups/**/*.stories.tsx`). Shared values are in `ui/src/fixtures/`
+(`agents.ts`, `tasks.ts`, `images.ts`, `operations.ts`, `metrics.ts`,
+`activity.ts`, and the fixed clock `time.ts`). The decorators are in `ui/src/storybook/decorators.tsx`.
 `npx tsc -b` compiles the stories with the app, so a change of the props of a
 view component breaks the stories that use it until they compile.
 [Development](/docs/development#storybook) tells how to run Storybook and why
@@ -1350,8 +1351,9 @@ An idiomatic example:
   `## Tokens and styles` of the handoff. Check those stories in both themes.
 - See a story. Run
   `cd ui && npm run story:shot -- <story-id> <light|dark> <width>`. The command
-  builds `storybook-static` when there is no build (or with `--rebuild`),
-  serves it on a loopback port, and writes a PNG of
+  builds `storybook-static` when there is no build, when a file the build
+  reads is newer than it, or with `--rebuild` (it prints the reason on
+  stderr), serves it on a loopback port, and writes a PNG of
   `iframe.html?id=<story-id>&viewMode=story&globals=theme:<theme>`. It prints
   the path of the PNG, `ui/.story-shots/<story-id>.<theme>.<width>.png`. Check
   each changed story in `light` and `dark`, at the smallest supported width
@@ -1372,14 +1374,26 @@ An idiomatic example:
   has `ui/src/mockups/<component>/handoff.md` next to
   `<Component>.stories.tsx` (`title: "Mockups/<Component>"`).
 - Hand off a change:
-  1. Work in a branch of your own worktree.
-  2. Before you hand off, run
-     `make designer-check`. It runs the type check, oxlint on the files
-     changed against `origin/main` (uncommitted files included), the view
-     policy test `viewLintPolicy.test.ts` and `build-storybook`, under the
-     host check slot. It runs all four steps and fails if one failed.
-  3. Give the branch and `handoff.md` to the developer through the lead's
-     queue. The developer opens the pull request.
+  1. Work in a branch `designer/<task>-<topic>` of your own worktree.
+  2. Before you hand off, run `make designer-check`. After
+     `scripts/npm-ci-locked.sh ui` (about 30 seconds in a new worktree), it
+     takes the host check slot and runs six steps: the type check, oxlint on
+     the files changed against `origin/main` (uncommitted files included),
+     `ui-fmt-check` (oxfmt), one Vitest run of `viewLintPolicy.test.ts`,
+     `storybookSafety.test.ts`, `storyNetwork.test.tsx`,
+     `arbitraryPxPolicy.test.ts` and `textInputPolicy.test.ts`, Knip
+     (`ui-dead-code`) and `build-storybook`. It fails if one step failed. It
+     does not run `ui-api-types`, `ui-lint`, the rest of `ui-test`,
+     `ui-branding`, `ui-bundle-budget` and `docs`: the developer's pull request
+     runs them.
+  3. Run `git rebase origin/main` and `git push origin <branch>`. Report the
+     branch on your own TARIDESIGN task in a comment that mentions the PM. The
+     developer opens the pull request.
+  4. When `make frontend-check` fails in the developer's pull request on a
+     designer file, the developer fixes a mechanical error (the format) in that
+     pull request and says so on the developer's own task. For any other
+     error, the developer reports it to the PM on the developer's own task, and
+     the PM orders the fix from the designer.
 - Propose a new prop in `handoff.md`. Do not add it to a container.
 
 ### Roles
@@ -1437,7 +1451,11 @@ page or component shows the same states. Git history keeps the handoff.
   `operation` and `metricsReport`. A story writes only the fields that matter.
 - Each domain also exports a set of edge states: `empty`, `one`, `many` (50
   items) and `longText` (long names and texts, for truncation and wrapping),
-  such as `agentRows.many` and `taskItems.longText`.
+  such as `agentRows.many` and `taskItems.longText`. The exception is
+  `activity.ts`: it exports one factory of totals, `taskActivityTotals`, not a
+  list, so it has no set.
+- A fixture of a shape that only the UI uses takes the type of the prop of its
+  view, as `agents.ts` does with `HomeAgentLink`.
 - All dates come from `NOW` in `ui/src/fixtures/time.ts`, or from `minutesAgo()`
   and `hoursAgo()`, which count back from it. A story passes `NOW` as `now` to
   a component that takes one, so "5 min ago" is the same on each run and in
@@ -1472,13 +1490,17 @@ designer's request, and the interface texts in it are in English.
    closes, how an error is announced, and the contrast of new token pairs.
 9. `## Layout at widths`: the layout at each supported width, at least at 360
    px, each with the story or the `story:shot` width that shows it.
-10. `## Tokens and styles`: new or changed tokens in `ui/src/index.css` and
+10. `## Screenshots`: a table of the shots that show the change, with the
+    columns Story id, Theme and Width. The PNG files are not in git. The
+    developer repeats each shot with `npm run story:shot`.
+11. `## Tokens and styles`: new or changed tokens in `ui/src/index.css` and
     changed `cva()` variants. List every affected story.
-11. `## Acceptance criteria`: numbered criteria that the developer and the
+12. `## Acceptance criteria`: numbered criteria that the developer and the
     reviewer check one by one.
-12. `## Open questions`: questions for the developer.
+13. `## Open questions`: questions for the developer.
 
-The reference example is `ui/src/mockups/home/handoff.md`.
+The reference example is `ui/src/mockups/home/handoff.md`. The reference
+mockup is `ui/src/mockups/home/Home.stories.tsx`.
 
 ### Safety
 
@@ -1535,7 +1557,7 @@ tests that pin them.
   Dialog, AlertDialog, Sheet and Collapsible. Radix `Select` needs a
   `pointerdown` PointerEvent. Inputs take the native value setter and a
   bubbling `input` event.
-- Two components cannot have a meaningful static story. `UpdateBanner` renders
+- Three components cannot have a meaningful static story. `UpdateBanner` renders
   only after a Tauri update snapshot. `CustomerQuestionNotifications` is
   headless, and it never goes into a story because it opens a tasks websocket.
   `IterationAuditLog` shows only "No events." without a daemon.
