@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { DaemonProvider } from "@/components/DaemonProvider";
 import { createQueryClient } from "@/lib/queryClient";
 import { readKey, removeKey, storageKeys, writeKey } from "@/lib/storage";
 
@@ -54,5 +55,6 @@ export function DaemonHost({ children }: { children: ReactNode }) {
     applyRegistry();
     return () => restoreRegistry(saved);
   }, [saved]);
-  return <>{children}</>;
+  // DaemonProvider mounts the ApiProvider that useApi() needs, for the host above.
+  return <DaemonProvider>{children}</DaemonProvider>;
 }
