@@ -125,6 +125,11 @@ func setupProcess(ctx context.Context, o Options, stack *shutdownStack) (*proces
 		}
 		stack.push("pidfile", func() { os.Remove(p.PidFile()) })
 	}
+	// A restart's handoff ends here: this daemon adopts the runs, and its own
+	// plain stop must interrupt them.
+	if err := os.Remove(p.HandoffMarker()); err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("remove handoff marker: %w", err)
+	}
 
 	listen, err := api.ParseListen(o.Listen, o.AuthTokenFile)
 	if err != nil {
@@ -546,6 +551,12 @@ func buildManager(ctx context.Context, o Options, proc *process, c *coreParts, t
 		ShimBin:  firstNonEmpty(os.Getenv("TARIBOY_SHIM_BIN"), filepath.Join(firstNonEmpty(proc.exeDir, "."), "tariboy-shim")),
 		ImgStore: tk.images, Store: c.agents, Log: log, Clock: time.Now, Mail: c.mail, Assessments: c.assessments,
 		Schedules: schedStore, Scripts: scriptStore, ScriptResults: scriptPublisher, Emit: c.hub.Emit, Proxy: px.proxy,
+		// `tariboy update` and `daemon restart` write the marker before they
+		// stop this daemon; then the next daemon adopts the script runs.
+		ScriptHandoff: func() bool {
+			_, err := os.Stat(p.HandoffMarker())
+			return err == nil
+		},
 		Groups: groupProv,
 		CodexApproval: func() string {
 			v, _, err := st.ConfigGet(harness.CodexApprovalConfigKey)

@@ -637,30 +637,48 @@ func (s *Store) RemoveDefinition(agent, scriptID string) error {
 	return tx.Commit()
 }
 
-func (s *Store) RecoverRunning() error {
+// RunningRuns returns every run in status running, oldest first.
+func (s *Store) RunningRuns() ([]Run, error) {
+	return queryRunningRuns(s.db)
+}
+
+func queryRunningRuns(q interface {
+	Query(string, ...any) (*sql.Rows, error)
+}) ([]Run, error) {
+	rows, err := q.Query(selectRun+` WHERE status=? ORDER BY id`, RunRunning)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var runs []Run
+	for rows.Next() {
+		run, err := scanRun(rows)
+		if err != nil {
+			return nil, err
+		}
+		runs = append(runs, run)
+	}
+	return runs, rows.Err()
+}
+
+// RecoverRunning ends every running run that keep does not claim, as
+// interrupted or, after a cancellation request, as cancelled. A nil keep
+// claims none. A kept run is one the daemon still watches after a restart.
+func (s *Store) RecoverRunning(keep func(Run) bool) error {
 	now := basestore.FormatTime(s.clock())
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	rows, err := tx.Query(selectRun+` WHERE status=? ORDER BY id`, RunRunning)
+	runs, err := queryRunningRuns(tx)
 	if err != nil {
 		return err
 	}
-	var runs []Run
-	for rows.Next() {
-		run, err := scanRun(rows)
-		if err != nil {
-			rows.Close()
-			return err
-		}
-		runs = append(runs, run)
-	}
-	if err := rows.Close(); err != nil {
-		return err
-	}
 	for _, run := range runs {
+		if keep != nil && keep(run) {
+			continue
+		}
 		definition, err := scanDefinition(tx.QueryRow(selectDefinition+` WHERE agent=? AND id=?`, run.Agent, run.ScriptID))
 		if err != nil {
 			return err

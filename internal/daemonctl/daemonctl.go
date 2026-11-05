@@ -242,7 +242,18 @@ func waitPidGone(ctx context.Context, pid int, timeout, poll time.Duration) bool
 // so EnsureUp always observes a dead daemon and starts a fresh one.
 func Restart(ctx context.Context, cfg Config, out io.Writer) error {
 	oldPid, hadPid := readPid(cfg)
+	// The marker tells the stopping daemon that the next one takes over its
+	// script runs; `daemon stop` writes none, so its runs are interrupted.
+	// The next daemon removes it when it starts.
+	marker := paths.Paths{Runtime: cfg.RuntimeDir}.HandoffMarker()
+	if err := os.MkdirAll(cfg.RuntimeDir, 0o700); err != nil {
+		return fmt.Errorf("create runtime dir: %w", err)
+	}
+	if err := os.WriteFile(marker, nil, 0o600); err != nil {
+		return fmt.Errorf("write handoff marker: %w", err)
+	}
 	if err := Down(ctx, cfg, out); err != nil {
+		tidy.Log(nil, "remove handoff marker", os.Remove(marker), "path", marker)
 		return err
 	}
 	if hadPid {

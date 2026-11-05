@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
@@ -47,6 +48,19 @@ func runFakeDaemon() {
 	// signal and forces the SIGKILL-escalation path. Only SIGKILL then stops us.
 	if os.Getenv("DAEMONCTL_FAKE_IGNORE_SIGTERM") != "" {
 		signal.Notify(make(chan os.Signal, 1), syscall.SIGTERM)
+	}
+	if report := os.Getenv("DAEMONCTL_FAKE_MARKER_REPORT"); report != "" {
+		terms := make(chan os.Signal, 1)
+		signal.Notify(terms, syscall.SIGTERM)
+		go func() {
+			<-terms
+			seen := "absent"
+			if _, err := os.Stat(os.Getenv("DAEMONCTL_FAKE_MARKER")); err == nil {
+				seen = "present"
+			}
+			_ = os.WriteFile(report, []byte(seen), 0o600)
+			os.Exit(0)
+		}()
 	}
 	sock := os.Getenv("DAEMONCTL_FAKE_SOCK")
 	pidfile := os.Getenv("DAEMONCTL_FAKE_PIDFILE")
@@ -406,5 +420,66 @@ func TestTailLogReturnsLastLines(t *testing.T) {
 	}
 	if got := sb.String(); got != "c\nd\n" {
 		t.Fatalf("tail = %q, want \"c\\nd\\n\"", got)
+	}
+}
+
+// startMarkerReportingDaemon starts a fake daemon that, on SIGTERM, writes
+// whether the handoff marker existed to the returned file and exits.
+func startMarkerReportingDaemon(t *testing.T, cfg *Config) (report string) {
+	t.Helper()
+	startFakeDaemonEnv(t, cfg)
+	report = filepath.Join(t.TempDir(), "marker-report")
+	t.Setenv("DAEMONCTL_FAKE_MARKER_REPORT", report)
+	t.Setenv("DAEMONCTL_FAKE_MARKER", paths.Paths{Runtime: cfg.RuntimeDir}.HandoffMarker())
+	if started, err := EnsureUp(context.Background(), *cfg, io.Discard); err != nil || !started {
+		t.Fatalf("EnsureUp started=%v err=%v", started, err)
+	}
+	pid, ok := readPid(*cfg)
+	if !ok {
+		t.Fatal("no pidfile after start")
+	}
+	reap(pid)
+	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
+	return report
+}
+
+func TestRestartWritesHandoffMarker(t *testing.T) {
+	cfg := cfgIn(t.TempDir())
+	report := startMarkerReportingDaemon(t, &cfg)
+	if err := Restart(context.Background(), cfg, io.Discard); err != nil {
+		t.Fatalf("Restart err = %v", err)
+	}
+	if pid, ok := readPid(cfg); ok {
+		reap(pid)
+		defer syscall.Kill(pid, syscall.SIGKILL)
+	}
+	if got, _ := os.ReadFile(report); string(got) != "present" {
+		t.Fatalf("stopped daemon saw handoff marker %q, want present", got)
+	}
+}
+
+func TestDownDoesNotWriteHandoffMarker(t *testing.T) {
+	cfg := cfgIn(t.TempDir())
+	report := startMarkerReportingDaemon(t, &cfg)
+	if err := Down(context.Background(), cfg, io.Discard); err != nil {
+		t.Fatalf("Down err = %v", err)
+	}
+	if got, _ := os.ReadFile(report); string(got) != "absent" {
+		t.Fatalf("stopped daemon saw handoff marker %q, want absent", got)
+	}
+}
+
+func TestRestartRemovesHandoffMarkerWhenDownFails(t *testing.T) {
+	cfg := cfgIn(t.TempDir())
+	startMarkerReportingDaemon(t, &cfg)
+	// A live daemon without a pidfile makes Down refuse.
+	if err := os.Remove(cfg.PidFile); err != nil {
+		t.Fatal(err)
+	}
+	if err := Restart(context.Background(), cfg, io.Discard); err == nil {
+		t.Fatal("Restart succeeded without a pidfile")
+	}
+	if _, err := os.Stat(paths.Paths{Runtime: cfg.RuntimeDir}.HandoffMarker()); !os.IsNotExist(err) {
+		t.Fatalf("handoff marker after a failed stop: stat err = %v", err)
 	}
 }

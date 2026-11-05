@@ -448,7 +448,7 @@ func TestRecoveryHonorsDurableCancellationIntent(t *testing.T) {
 	if _, err := st.RequestRunCancellation("alice", recurringRun.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.RecoverRunning(); err != nil {
+	if err := st.RecoverRunning(nil); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := st.GetRun("alice", oneRun.ID); err != nil || got.Status != RunCancelled || got.CancelRequested {
@@ -489,5 +489,43 @@ func TestRemoveDefinitionKeepsUnpublishedResult(t *testing.T) {
 	var count int
 	if err := st.db.QueryRow(`SELECT COUNT(*) FROM script_result_outbox WHERE run_id=? AND published_at=''`, run.ID).Scan(&count); err != nil || count != 1 {
 		t.Fatalf("unpublished result after remove = %d, err=%v", count, err)
+	}
+}
+
+func TestRecoverRunningKeepsAdoptedRuns(t *testing.T) {
+	now := time.Date(2026, 8, 20, 7, 0, 0, 0, time.UTC)
+	st := newContractStore(t, now)
+	_, kept, err := st.CreateOnce("alice", CreateOnce{Name: "kept", Description: "kept", Command: "sleep 30"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lostDefinition, lost, err := st.CreateOnce("alice", CreateOnce{Name: "lost", Description: "lost", Command: "sleep 30"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, run := range []Run{kept, lost} {
+		if claimed, err := st.ClaimRun("alice", run.ID, now.Format(time.RFC3339), "/tmp/"+run.ID+".log"); err != nil || !claimed {
+			t.Fatalf("claim=%v err=%v", claimed, err)
+		}
+	}
+	running, err := st.RunningRuns()
+	if err != nil || len(running) != 2 {
+		t.Fatalf("running=%#v err=%v, want both runs", running, err)
+	}
+	if err := st.RecoverRunning(func(run Run) bool { return run.ID == kept.ID }); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := st.GetRun("alice", kept.ID); err != nil || got.Status != RunRunning {
+		t.Fatalf("adopted run=%#v err=%v, want running", got, err)
+	}
+	if got, err := st.GetRun("alice", lost.ID); err != nil || got.Status != RunInterrupted {
+		t.Fatalf("lost run=%#v err=%v, want interrupted", got, err)
+	}
+	if got, err := st.GetDefinition("alice", lostDefinition.ID); err != nil || got.State != StateCompleted {
+		t.Fatalf("lost run definition=%#v err=%v", got, err)
+	}
+	var results int
+	if err := st.db.QueryRow(`SELECT COUNT(*) FROM script_result_outbox WHERE run_id=?`, kept.ID).Scan(&results); err != nil || results != 0 {
+		t.Fatalf("adopted run results=%d err=%v, want none", results, err)
 	}
 }

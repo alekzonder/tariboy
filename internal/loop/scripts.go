@@ -20,6 +20,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/harness"
 	"github.com/alekzonder/tariboy/internal/script"
+	"github.com/alekzonder/tariboy/internal/shim"
 	"github.com/alekzonder/tariboy/internal/store"
 	"golang.org/x/sys/unix"
 )
@@ -28,6 +29,10 @@ var (
 	scriptPollInterval = 100 * time.Millisecond
 	scriptCancelGrace  = 2 * time.Second
 )
+
+// errScriptLost ends a run whose process is gone without a result, or that a
+// plain daemon stop ended: the run is interrupted.
+var errScriptLost = errors.New("script process lost")
 
 // scriptSupervisor runs agents' durable scripts: it starts claimed runs as
 // their agent and records how each ended. Its mutex guards only the process
@@ -39,16 +44,49 @@ type scriptSupervisor struct {
 	// scriptsWake wakes the supervisor after a new record is created. It is
 	// deliberately buffered: callers never wait for a process to start in
 	// order to receive a script ID.
-	scriptsWake   chan struct{}
-	scriptRuns    map[string]*exec.Cmd
+	scriptsWake chan struct{}
+	// scriptRuns holds a nil placeholder while a run starts.
+	scriptRuns    map[string]*scriptProc
 	scriptCancels map[string]bool
+}
+
+// scriptProc is one run the supervisor watches: started by this daemon or
+// adopted from the previous one. The run's tariboy-shim __script-run wrapper
+// leads the process group pid and holds the lock of statePath until it exits.
+type scriptProc struct {
+	run       script.Run
+	pid       int
+	statePath string
+	logPath   string
+	// deadline is the end of the run's timeout; zero means none.
+	deadline time.Time
+	// timedOut is set under the supervisor mutex.
+	timedOut bool
 }
 
 func newScriptSupervisor(cfg *ManagerConfig, wg *sync.WaitGroup) *scriptSupervisor {
 	return &scriptSupervisor{
 		cfg: cfg, wg: wg, scriptsWake: make(chan struct{}, 1),
-		scriptRuns: map[string]*exec.Cmd{}, scriptCancels: map[string]bool{},
+		scriptRuns: map[string]*scriptProc{}, scriptCancels: map[string]bool{},
 	}
+}
+
+// scriptStatePath is the state file of the run whose log is logPath.
+func scriptStatePath(logPath string) string {
+	return strings.TrimSuffix(logPath, ".log") + ".state"
+}
+
+// scriptDeadline is the end of a run's timeout counted from its start, so a
+// run adopted after a restart keeps the deadline it had.
+func (s *scriptSupervisor) scriptDeadline(startedAt string) time.Time {
+	if s.cfg.ScriptTimeout <= 0 {
+		return time.Time{}
+	}
+	started, err := store.ParseTime(startedAt)
+	if err != nil {
+		started = s.cfg.Clock()
+	}
+	return started.Add(s.cfg.ScriptTimeout)
 }
 
 func (s *scriptSupervisor) markScriptCancellation(key string) bool {
@@ -65,13 +103,152 @@ func (s *scriptSupervisor) terminateScriptProcess(key string, pid int) {
 	logCleanup(s.cfg.Log, "terminate script process group", syscall.Kill(-pid, syscall.SIGTERM), "run", key, "pid", pid)
 	time.AfterFunc(scriptCancelGrace, func() {
 		s.mu.Lock()
-		cancelPending := s.scriptCancels[key]
-		_, stillRunning := s.scriptRuns[key]
+		proc := s.scriptRuns[key]
+		pending := proc != nil && (s.scriptCancels[key] || proc.timedOut)
 		s.mu.Unlock()
-		if cancelPending && stillRunning {
+		if !pending {
+			return
+		}
+		// A free lock means the wrapper is gone and its group may belong to
+		// someone else by now.
+		if alive, _, _ := probeScriptState(proc.statePath); alive {
 			logCleanup(s.cfg.Log, "kill script process group", syscall.Kill(-pid, syscall.SIGKILL), "run", key, "pid", pid)
 		}
 	})
+}
+
+// adoptRunningScripts takes over the runs a previous daemon left running
+// whose wrapper still lives or has recorded a result, and returns their keys.
+// Any other running run lost its process.
+func (s *scriptSupervisor) adoptRunningScripts() (map[string]bool, error) {
+	runs, err := s.cfg.Scripts.RunningRuns()
+	if err != nil {
+		return nil, err
+	}
+	adopted := map[string]bool{}
+	for _, r := range runs {
+		if r.PID == nil || r.LogPath == "" {
+			continue
+		}
+		_, logPath, err := s.scriptLogLocation(r.Agent, r.LogPath)
+		if err != nil {
+			s.cfg.Log.Warn("script run not adopted", "agent", r.Agent, "run", r.ID, "err", err)
+			continue
+		}
+		statePath := scriptStatePath(logPath)
+		alive, state, err := probeScriptState(statePath)
+		if err != nil {
+			s.cfg.Log.Warn("script run not adopted", "agent", r.Agent, "run", r.ID, "err", err)
+			continue
+		}
+		if !alive && state == nil {
+			continue
+		}
+		key := r.Agent + "/" + r.ID
+		s.mu.Lock()
+		s.scriptRuns[key] = &scriptProc{run: r, pid: *r.PID, statePath: statePath, logPath: logPath, deadline: s.scriptDeadline(r.StartedAt)}
+		if r.CancelRequested {
+			s.scriptCancels[key] = true
+		}
+		s.mu.Unlock()
+		if r.CancelRequested && alive {
+			s.terminateScriptProcess(key, *r.PID)
+		}
+		adopted[key] = true
+	}
+	return adopted, nil
+}
+
+// watchScripts finishes every watched run whose wrapper has exited and
+// terminates every run past its deadline.
+func (s *scriptSupervisor) watchScripts() {
+	now := s.cfg.Clock()
+	s.mu.Lock()
+	procs := make(map[string]*scriptProc, len(s.scriptRuns))
+	for key, proc := range s.scriptRuns {
+		if proc != nil {
+			procs[key] = proc
+		}
+	}
+	s.mu.Unlock()
+	for key, proc := range procs {
+		alive, state, err := probeScriptState(proc.statePath)
+		if err != nil {
+			s.cfg.Log.Error("probe script run", "run", key, "err", err)
+		}
+		s.mu.Lock()
+		expire := alive && !proc.deadline.IsZero() && !now.Before(proc.deadline) && !proc.timedOut
+		if expire {
+			proc.timedOut = true
+		}
+		timedOut := proc.timedOut
+		s.mu.Unlock()
+		if expire {
+			s.terminateScriptProcess(key, proc.pid)
+		}
+		if alive {
+			continue
+		}
+		code, runErr := scriptOutcome(state, timedOut)
+		s.finishScript(key, proc.run, code, runErr, proc.logPath)
+	}
+}
+
+// scriptOutcome maps a wrapper's recorded state to the exit code and error
+// finishScript records.
+func scriptOutcome(state *shim.ScriptState, timedOut bool) (int, error) {
+	switch {
+	case timedOut:
+		return -1, context.DeadlineExceeded
+	case state == nil:
+		return -1, errScriptLost
+	case state.ExitCode != nil:
+		return *state.ExitCode, nil
+	case state.Signal != nil:
+		return -1, fmt.Errorf("script ended by signal %d", *state.Signal)
+	default:
+		return -1, fmt.Errorf("start script: %s", state.StartError)
+	}
+}
+
+// stopScripts ends the supervisor's watch. In a handoff the runs keep going
+// for the next daemon to adopt. A plain stop interrupts them, as it always
+// did: TERM to each group, KILL after the grace period.
+func (s *scriptSupervisor) stopScripts() {
+	if s.cfg.ScriptHandoff != nil && s.cfg.ScriptHandoff() {
+		// Forgetting the runs keeps a pending cancel timer of this daemon
+		// from signalling a run the next daemon now owns.
+		s.mu.Lock()
+		s.scriptRuns, s.scriptCancels = map[string]*scriptProc{}, map[string]bool{}
+		s.mu.Unlock()
+		return
+	}
+	s.watchScripts()
+	s.mu.Lock()
+	procs := make(map[string]*scriptProc, len(s.scriptRuns))
+	for key, proc := range s.scriptRuns {
+		if proc != nil {
+			procs[key] = proc
+		}
+	}
+	s.mu.Unlock()
+	for key, proc := range procs {
+		logCleanup(s.cfg.Log, "terminate script process group", syscall.Kill(-proc.pid, syscall.SIGTERM), "run", key, "pid", proc.pid)
+	}
+	deadline := time.Now().Add(scriptCancelGrace)
+	for key, proc := range procs {
+		for {
+			if alive, _, _ := probeScriptState(proc.statePath); !alive {
+				break
+			}
+			if time.Now().After(deadline) {
+				logCleanup(s.cfg.Log, "kill script process group", syscall.Kill(-proc.pid, syscall.SIGKILL), "run", key, "pid", proc.pid)
+				break
+			}
+			time.Sleep(scriptPollInterval)
+		}
+		s.finishScript(key, proc.run, -1, errScriptLost, proc.logPath)
+	}
 }
 
 func (s *scriptSupervisor) wakeScripts() {
@@ -89,8 +266,10 @@ func (s *scriptSupervisor) startScriptSupervisor(ctx context.Context) {
 		defer ticker.Stop()
 		for {
 			s.superviseScripts(ctx)
+			s.watchScripts()
 			select {
 			case <-ctx.Done():
+				s.stopScripts()
 				return
 			case <-s.scriptsWake:
 			case <-ticker.C:
@@ -134,7 +313,7 @@ func (s *scriptSupervisor) superviseScripts(ctx context.Context) {
 	}
 }
 
-func (s *scriptSupervisor) startScript(ctx context.Context, ag agent.Agent, r script.Run) {
+func (s *scriptSupervisor) startScript(_ context.Context, ag agent.Agent, r script.Run) {
 	key := r.Agent + "/" + r.ID
 	s.mu.Lock()
 	if _, running := s.scriptRuns[key]; running {
@@ -156,7 +335,8 @@ func (s *scriptSupervisor) startScript(ctx context.Context, ag agent.Agent, r sc
 		s.finishScript(key, r, -1, fmt.Errorf("resolve script log path: %w", err), "")
 		return
 	}
-	claimed, err := s.cfg.Scripts.ClaimRun(r.Agent, r.ID, store.FormatTime(s.cfg.Clock()), logPath)
+	startedAt := s.cfg.Clock()
+	claimed, err := s.cfg.Scripts.ClaimRun(r.Agent, r.ID, store.FormatTime(startedAt), logPath)
 	if err != nil {
 		s.finishScript(key, r, -1, err, logPath)
 		return
@@ -181,89 +361,74 @@ func (s *scriptSupervisor) startScript(ctx context.Context, ag agent.Agent, r sc
 	// Appended last: os/exec keeps the final value of a duplicated key, so an
 	// agent's own environment cannot redefine the protocol.
 	env = append(env, script.ProtocolEnv()...)
-	runContext := ctx
-	cancelRunContext := func() {}
-	if s.cfg.ScriptTimeout > 0 {
-		runContext, cancelRunContext = context.WithTimeout(ctx, s.cfg.ScriptTimeout)
-	}
 	bash, err := harness.FindExecutable("bash", env, cwdOf(ag, l))
 	if err != nil {
-		cancelRunContext()
 		s.finishScript(key, r, -1, errors.New("bash is required for agent shell scripts"), logPath)
 		return
 	}
 	argv := agentShellCommand(bash, filepath.Dir(s.cfg.AgentsDir), l, []string{"sh", "-c", definition.Command})
-	cmd := exec.CommandContext(runContext, argv[0], argv[1:]...)
-	cmd.Dir, cmd.Env = cwdOf(ag, l), env
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.WaitDelay = 2 * time.Second
-	cmd.Cancel = func() error {
-		if cmd.Process == nil {
-			return nil
-		}
-		return syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
-	}
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err != nil {
-		cancelRunContext()
 		s.finishScript(key, r, -1, err, logPath)
 		return
 	}
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
-		cancelRunContext()
 		s.finishScript(key, r, -1, err, logPath)
 		return
 	}
-	if _, err := fmt.Fprintf(logFile, "cwd: %s\n", cmd.Dir); err != nil {
-		cancelRunContext()
-		logCleanup(s.cfg.Log, "close script log", logFile.Close(), "agent", r.Agent, "run", r.ID)
+	// The wrapper holds the log and the state file from here on; this daemon
+	// keeps no copy, so the run outlives it.
+	defer func() { logCleanup(s.cfg.Log, "close script log", logFile.Close(), "agent", r.Agent, "run", r.ID) }()
+	dir := cwdOf(ag, l)
+	if _, err := fmt.Fprintf(logFile, "cwd: %s\n", dir); err != nil {
 		s.finishScript(key, r, -1, err, logPath)
 		return
 	}
+	statePath := scriptStatePath(logPath)
+	state, err := createScriptState(statePath)
+	if err != nil {
+		s.finishScript(key, r, -1, err, logPath)
+		return
+	}
+	// The run is started through the tariboy-shim wrapper, which records the
+	// exit code for whichever daemon watches the run when it ends.
+	cmd := exec.Command(s.cfg.ShimBin, append([]string{shim.ScriptRunMode, "--"}, argv...)...)
+	cmd.Dir, cmd.Env = dir, env
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdout, cmd.Stderr = logFile, logFile
-	if err := cmd.Start(); err != nil {
-		cancelRunContext()
-		logCleanup(s.cfg.Log, "close script log", logFile.Close(), "agent", r.Agent, "run", r.ID)
+	cmd.ExtraFiles = []*os.File{state}
+	err = cmd.Start()
+	logCleanup(s.cfg.Log, "close script state", state.Close(), "agent", r.Agent, "run", r.ID)
+	if err != nil {
+		_, werr := fmt.Fprintf(logFile, "error: %v\n", err)
+		logCleanup(s.cfg.Log, "write script log", werr, "agent", r.Agent, "run", r.ID)
 		s.finishScript(key, r, -1, err, logPath)
 		return
 	}
-	pidSet, err := s.cfg.Scripts.SetRunPID(r.Agent, r.ID, cmd.Process.Pid)
+	pid := cmd.Process.Pid
+	// Only reaps the process: the state file, not Wait, decides how the run
+	// ended, so a daemon that adopted the run decides the same way.
+	go func() {
+		_ = cmd.Wait() // the exit status is the wrapper's, not the script's
+		s.wakeScripts()
+	}()
+	pidSet, err := s.cfg.Scripts.SetRunPID(r.Agent, r.ID, pid)
 	if err != nil || !pidSet {
-		cancelRunContext()
-		logCleanup(s.cfg.Log, "terminate script process group", syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM), "agent", r.Agent, "run", r.ID, "pid", cmd.Process.Pid)
-		logCleanup(s.cfg.Log, "close script log", logFile.Close(), "agent", r.Agent, "run", r.ID)
+		logCleanup(s.cfg.Log, "terminate script process group", syscall.Kill(-pid, syscall.SIGTERM), "agent", r.Agent, "run", r.ID, "pid", pid)
 		if err == nil {
 			err = errors.New("script claim was canceled before process startup completed")
 		}
 		s.finishScript(key, r, -1, err, logPath)
 		return
 	}
+	r.PID, r.StartedAt, r.LogPath = &pid, store.FormatTime(startedAt), logPath
 	s.mu.Lock()
-	s.scriptRuns[key] = cmd
+	s.scriptRuns[key] = &scriptProc{run: r, pid: pid, statePath: statePath, logPath: logPath, deadline: s.scriptDeadline(r.StartedAt)}
 	cancelRequested := s.scriptCancels[key]
 	s.mu.Unlock()
 	if cancelRequested {
-		s.terminateScriptProcess(key, cmd.Process.Pid)
+		s.terminateScriptProcess(key, pid)
 	}
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
-		defer cancelRunContext()
-		err := cmd.Wait()
-		logCleanup(s.cfg.Log, "close script log", logFile.Close(), "agent", r.Agent, "run", r.ID)
-		code := 0
-		if err != nil {
-			if exitErr, ok := err.(*exec.ExitError); ok {
-				code = exitErr.ExitCode()
-			} else {
-				code = -1
-			}
-		}
-		if runContext.Err() != nil {
-			code, err = -1, runContext.Err()
-		}
-		s.finishScript(key, r, code, err, logPath)
-	}()
 }
 
 // writeScriptStartFailure puts a start failure into the run's log file, so the
@@ -315,7 +480,7 @@ func (s *scriptSupervisor) finishScript(key string, r script.Run, code int, runE
 	var exitCode *int
 	if errors.Is(runErr, context.DeadlineExceeded) {
 		status = script.RunTimedOut
-	} else if errors.Is(runErr, context.Canceled) {
+	} else if errors.Is(runErr, context.Canceled) || errors.Is(runErr, errScriptLost) {
 		status = script.RunInterrupted
 	} else if code >= 0 {
 		exitCode = &code
@@ -589,6 +754,11 @@ func (s *scriptSupervisor) RemoveScript(agentName, id string) error {
 	for _, log := range moved {
 		if err := os.Remove(log.to); err != nil && !os.IsNotExist(err) {
 			s.cfg.Log.Error("remove quarantined script log", "path", log.to, "err", err)
+		}
+	}
+	for _, path := range logPaths {
+		if err := os.Remove(scriptStatePath(path)); err != nil && !os.IsNotExist(err) {
+			s.cfg.Log.Error("remove script state", "path", scriptStatePath(path), "err", err)
 		}
 	}
 	return nil
