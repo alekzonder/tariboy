@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { DeleteAgentButton } from "@/components/AgentControls";
 import { useAgentName, useAgentStatus } from "@/lib/agent";
 import { useApi } from "@/components/apiContext";
-import type { AgentStatus, AgentView } from "@/lib/api";
+import type { AgentStatus, AgentView } from "@/types";
 import { useMultiHost } from "@/lib/navRoutes";
 import { SECTIONS, filterSections, sectionOfKey } from "./configuration/registry";
 import { countDirtyByGroup, groupOfKey, isStopped } from "./configuration/configurationPageModel";

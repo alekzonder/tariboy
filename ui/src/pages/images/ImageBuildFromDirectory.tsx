@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { type ImageDiagnostic, type ImageValidateResult } from "@/lib/api";
+import type { ImageDiagnostic, ImageValidateResult } from "@/types";
 import { notifyImagesChanged } from "@/lib/imageEvents";
 import { useApi } from "@/components/apiContext";
 import { useOperationStartedToast } from "@/hooks/useOperationStartedToast";

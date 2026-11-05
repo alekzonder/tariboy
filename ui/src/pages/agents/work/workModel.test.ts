@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Queue, Task } from "@/lib/api";
+import type { Queue, Task } from "@/types";
 import { taskItem } from "@/test/fixtures/apiFixtures";
 import {
   composerRequest,

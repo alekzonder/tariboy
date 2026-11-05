@@ -6,7 +6,7 @@ import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useApiQuery } from "@/hooks/useApiQuery";
-import type { AgentRow, QueueWorkflow, TaskPriority } from "@/lib/api";
+import type { AgentRow, QueueWorkflow, TaskPriority } from "@/types";
 import { errorText } from "@/lib/errors";
 import { idempotencyKey } from "@/lib/ids";
 import { hostToParam } from "@/lib/terminalsHost";

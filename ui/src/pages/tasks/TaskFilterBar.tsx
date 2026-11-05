@@ -3,7 +3,7 @@ import { Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/search-input";
 import { Segmented } from "@/components/ui/segmented";
-import type { TaskStatusView } from "@/lib/api";
+import type { TaskStatusView } from "@/types";
 import { TaskFiltersMenu, TaskScopeAgentChip, type TaskFiltersMenuProps } from "./TaskFilterMenus";
 
 const STATUS_OPTIONS = [

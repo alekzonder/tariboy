@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import type { AgentPool, CreateQueueInput, Queue, UpdateQueueInput } from "@/lib/api";
+import type { AgentPool, CreateQueueInput, Queue, UpdateQueueInput } from "@/types";
 import { cn } from "@/lib/utils";
 import { EMPTY, LABEL, MONO } from "./panelStyles";
 import QueuePools from "./QueuePools";

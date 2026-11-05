@@ -14,7 +14,7 @@ import StoresPage from "@/pages/StoresPage";
 import { routeFetch } from "@/test/fetchRoutes";
 import { FakeWebSocket } from "@/test/fakeWebSocket";
 import { operation, operationStarted } from "@/test/fixtures/apiFixtures";
-import type { OnboardingStatus } from "@/lib/api";
+import type { OnboardingStatus } from "@/types";
 
 vi.mock("@/lib/aggregate", () => ({ fetchAllAgents: vi.fn() }));
 

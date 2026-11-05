@@ -1,4 +1,4 @@
-import type { ImageSummary } from "@/lib/api";
+import type { ImageSummary } from "@/types";
 import { groupBuiltImages } from "./built/builtImages";
 
 /** One image name on the Library's Images tab. */

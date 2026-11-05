@@ -1,4 +1,4 @@
-import type { ImageSummary } from "@/lib/api";
+import type { ImageSummary } from "@/types";
 
 function buildTime(image: ImageSummary): number {
   const value = Date.parse(image.built_at ?? "");

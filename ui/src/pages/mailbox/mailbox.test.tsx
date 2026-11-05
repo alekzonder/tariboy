@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { act, fireEvent, render, screen, waitFor, within } from "@/test/queryRender";
 import { fakeApi } from "@/test/api";
 import { letter } from "@/test/fixtures/mailFixtures";
-import type { CommentResult, Letter, MailBox, MailListQuery, TaskDetail } from "@/lib/api";
+import type { CommentResult, Letter, MailBox, MailListQuery, TaskDetail } from "@/types";
 import Mailbox from "./Mailbox";
 
 const socket = vi.hoisted(() => ({

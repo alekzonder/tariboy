@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { Queue, Task } from "@/lib/api";
+import type { Queue, Task } from "@/types";
 import TaskSubtasksSection from "./TaskSubtasksSection";
 
 const base: Task = {

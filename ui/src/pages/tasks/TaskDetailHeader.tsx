@@ -1,7 +1,7 @@
 import { useState, type Ref } from "react";
 import { MoreHorizontal, Pencil, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import type { Queue, Task, TaskParent } from "@/lib/api";
+import type { Queue, Task, TaskParent } from "@/types";
 import { isWorkflowTask, taskStatusLabel } from "@/lib/tasks";
 import { Button } from "@/components/ui/button";
 import { DialogTitle } from "@/components/ui/dialog";

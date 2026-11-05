@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type StoreImageView, type StoreWorkflowView, type WorkflowImageListing } from "@/lib/api";
+import type { StoreImageView, StoreWorkflowView, WorkflowImageListing } from "@/types";
 import { catalogRow, hasTariboyStore, latestWorkflowVersion, workflowStatus } from "./storeStatus";
 
 const image = (fields: Partial<StoreImageView>): StoreImageView => ({

@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { Button } from "@/components/ui/button";
-import type { AgentScript } from "@/lib/api";
+import type { AgentScript } from "@/types";
 import { canRerun, when } from "./scriptsModel";
 import { ScriptRunList } from "./ScriptRunList";
 import type { AgentScriptsState } from "./useAgentScripts";

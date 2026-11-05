@@ -1,6 +1,6 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
 import { toast } from "sonner";
-import type { AgentFileEntry } from "@/lib/api";
+import type { AgentFileEntry } from "@/types";
 import type { FileBrowserApi } from "../FileBrowser";
 import type { FileTreeApi } from "./useFileTree";
 import { dirName } from "./paths";

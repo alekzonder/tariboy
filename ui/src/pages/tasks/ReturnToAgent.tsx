@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import type { WorkflowView } from "@/lib/api";
+import type { WorkflowView } from "@/types";
 import { cn } from "@/lib/utils";
 import { EMPTY, LABEL, SelectShell } from "./panelStyles";
 import { useWorkflowConfirm } from "./WorkflowConfirm";

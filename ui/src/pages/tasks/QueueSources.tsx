@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
-import type { QueueSource } from "@/lib/api";
+import type { QueueSource } from "@/types";
 import { cn } from "@/lib/utils";
 import { COUNT, EMPTY, LABEL, MONO, QUIET_ACTION } from "./panelStyles";
 import RunRow from "./RunRow";

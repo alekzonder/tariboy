@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@/test/queryRender";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
-import type { TaskDetail, TransitionRequest } from "@/lib/api";
+import type { TaskDetail, TransitionRequest } from "@/types";
 import { fakeApi } from "@/test/api";
 import { taskItem } from "@/test/fixtures/apiFixtures";
 import { customerView, workflowTask } from "@/test/fixtures/workflowFixtures";

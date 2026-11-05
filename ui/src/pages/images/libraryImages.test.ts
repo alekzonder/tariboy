@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ImageSummary } from "@/lib/api";
+import type { ImageSummary } from "@/types";
 import { libraryImageRows, unusedCount, visibleImageRows } from "./libraryImages";
 
 function tag(name: string, tagName: string, extra: Partial<ImageSummary> = {}): ImageSummary {

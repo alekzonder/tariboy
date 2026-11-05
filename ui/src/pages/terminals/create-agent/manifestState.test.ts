@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ImageManifest, ImageSummary } from "@/lib/api";
+import type { ImageManifest, ImageSummary } from "@/types";
 import { newAgentDraft } from "../agentCreateDraft";
 import { draftFromManifest, manifestState, type ManifestInputs } from "./manifestState";
 

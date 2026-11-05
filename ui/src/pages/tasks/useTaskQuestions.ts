@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import { useApi } from "@/components/apiContext";
-import type { Letter, Task } from "@/lib/api";
+import type { Letter, Task } from "@/types";
 import { actorAgent, missingQuestionTaskKeys, unreadQuestionsFor } from "@/lib/taskList";
 import { taskKeys, taskQueries } from "./taskQueries";
 

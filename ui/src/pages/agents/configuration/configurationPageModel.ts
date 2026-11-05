@@ -1,4 +1,4 @@
-import type { AgentStatus, AgentView } from "@/lib/api";
+import type { AgentStatus, AgentView } from "@/types";
 import { SECTIONS, sectionOfKey } from "./registry";
 
 // groupOfKey names where a field sits on the page: one of the four groups, or

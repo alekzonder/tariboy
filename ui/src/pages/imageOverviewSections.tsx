@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import type { ImageManifest } from "@/lib/api";
+import type { ImageManifest } from "@/types";
 import { Chips, Row, ToolList } from "./imageOverviewParts";
 
 interface ImageSection {

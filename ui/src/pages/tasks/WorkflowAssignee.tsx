@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useApi } from "@/components/apiContext";
 import { useApiQuery } from "@/hooks/useApiQuery";
-import type { Task } from "@/lib/api";
+import type { Task } from "@/types";
 import { cn } from "@/lib/utils";
 import { FIELD_MONO, LABEL, MONO, SelectShell } from "./panelStyles";
 import { taskQueries, writeTask } from "./taskQueries";

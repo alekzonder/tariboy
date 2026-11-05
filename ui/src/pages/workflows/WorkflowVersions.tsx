@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import type { WorkflowImageListing } from "@/lib/api";
+import type { WorkflowImageListing } from "@/types";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { errorText } from "@/lib/errors";

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { type PluginContribution, type SettingField } from "@/lib/api";
+import type { PluginContribution, SettingField } from "@/types";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

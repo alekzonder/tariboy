@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useApi } from "@/components/apiContext";
 import { useAgentName } from "@/lib/agent";
-import type { AgentStatusEvent } from "@/lib/api";
+import type { AgentStatusEvent } from "@/types";
 import { fmtDateTime } from "@/lib/time";
 
 /** The agent's status changes inside the Activity period. An empty since (an

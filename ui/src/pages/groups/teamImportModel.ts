@@ -1,4 +1,5 @@
-import type { ApiClient, TeamImportPlan } from "@/lib/api";
+import type { ApiClient } from "@/lib/api";
+import type { TeamImportPlan } from "@/types";
 
 type PreviewEntry = TeamImportPlan["agents"][number];
 

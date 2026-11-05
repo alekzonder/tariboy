@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TOUR_ANCHORS } from "@/lib/onboarding/tour";
 import { cn } from "@/lib/utils";
-import type { Queue } from "@/lib/api";
+import type { Queue } from "@/types";
 import { queueMenuItems } from "@/lib/taskFilterMenus";
 import TaskColumnsMenuItems from "./TaskColumnsMenu";
 import type { TaskRowMode } from "./taskColumns";

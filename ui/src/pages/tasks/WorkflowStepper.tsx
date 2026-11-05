@@ -1,7 +1,7 @@
 import { Check, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { StatusDot } from "@/components/ui/status";
-import type { StatusView, WorkflowView } from "@/lib/api";
+import type { StatusView, WorkflowView } from "@/types";
 import { cn } from "@/lib/utils";
 import { LABEL, MONO } from "./panelStyles";
 import { stepMarks, type StepMark } from "./workflowGraph";

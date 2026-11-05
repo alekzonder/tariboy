@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { WorkflowView } from "@/lib/api";
+import type { WorkflowView } from "@/types";
 import { errorText } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { FIELD, LABEL, SelectShell } from "./panelStyles";

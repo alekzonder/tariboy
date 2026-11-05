@@ -7,7 +7,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import type { FsEntry } from "@/lib/api";
+import type { FsEntry } from "@/types";
 import { useApi } from "@/components/apiContext";
 import { cn } from "@/lib/utils";
 import { splitPath } from "./splitPath";

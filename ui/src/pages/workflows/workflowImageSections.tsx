@@ -1,9 +1,5 @@
 import type { ReactNode } from "react";
-import type {
-  WorkflowImageDefinition,
-  WorkflowImageStatus,
-  WorkflowImageManifest,
-} from "@/lib/api";
+import type { WorkflowImageDefinition, WorkflowImageStatus, WorkflowImageManifest } from "@/types";
 import { Button } from "@/components/ui/button";
 import { effectiveLimits, ownerLabel } from "./workflowImages";
 

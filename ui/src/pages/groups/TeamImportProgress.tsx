@@ -1,4 +1,4 @@
-import type { TeamImportOperation } from "@/lib/api";
+import type { TeamImportOperation } from "@/types";
 import { Button } from "@/components/ui/button";
 
 interface Props {

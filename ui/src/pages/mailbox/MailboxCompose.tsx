@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import type { Letter } from "@/lib/api";
+import type { Letter } from "@/types";
 import { cn } from "@/lib/utils";
 import { instantAllowed, principalName, type MailboxMode } from "./mailboxModel";
 

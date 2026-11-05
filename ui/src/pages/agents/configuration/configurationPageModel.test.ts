@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AgentStatus, AgentView } from "@/lib/api";
+import type { AgentStatus, AgentView } from "@/types";
 import { countDirtyByGroup, isStopped } from "./configurationPageModel";
 
 describe("countDirtyByGroup", () => {

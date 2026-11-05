@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { WorkflowView } from "@/lib/api";
+import type { WorkflowView } from "@/types";
 import {
   canReturnToAgent,
   counterText,

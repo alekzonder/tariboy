@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useApi } from "@/components/apiContext";
-import type { IterationList, IterationRow } from "@/lib/api";
+import type { IterationList, IterationRow } from "@/types";
 
 // useIterationList loads an agent's iterations for AuditLogPage. filterKey
 // identifies the filter the rows belong to; queryString is what is sent.

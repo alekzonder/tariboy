@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api";
-import type { WorkflowImageManifest } from "@/lib/api";
+import type { WorkflowImageManifest } from "@/types";
 import { apiWrapper, fakeApi } from "@/test/api";
 import WorkflowImageDetail from "./WorkflowImageDetail";
 

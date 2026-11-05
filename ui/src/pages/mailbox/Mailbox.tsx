@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { useApiQuery } from "@/hooks/useApiQuery";
 import { DRAWER_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
-import type { Letter, MailBox } from "@/lib/api";
+import type { Letter, MailBox } from "@/types";
 import { cn } from "@/lib/utils";
 import { MailboxCompose, type ComposeTarget, type ComposeValues } from "./MailboxCompose";
 import { MailboxLetter } from "./MailboxLetter";

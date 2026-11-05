@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import type { StoreImageView } from "@/lib/api";
+import type { StoreImageView } from "@/types";
 import { Button } from "@/components/ui/button";
 import { catalogRow, type CatalogRow } from "./storeStatus";
 import type { ImageBuildError } from "./useStoreActions";

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import type { Artifact, DeclaredArtifact } from "@/lib/api";
+import type { Artifact, DeclaredArtifact } from "@/types";
 import { cn } from "@/lib/utils";
 import { COUNT, DANGER_FILL, EMPTY, LABEL, MONO, QUIET_ACTION } from "./panelStyles";
 import { MarkdownContent, MarkdownModeSegment, type MarkdownMode } from "./TaskMarkdown";

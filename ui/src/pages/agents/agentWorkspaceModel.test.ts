@@ -7,7 +7,7 @@ import {
   hasBudgetLimits,
   resolveAgentTab,
 } from "./agentWorkspaceModel";
-import type { AgentBudget } from "@/lib/api";
+import type { AgentBudget } from "@/types";
 
 const base = "/agents/local/dev";
 

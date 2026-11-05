@@ -1,4 +1,4 @@
-import type { OnboardingDefaultStore, OnboardingStatus, StoreView } from "@/lib/api";
+import type { OnboardingDefaultStore, OnboardingStatus, StoreView } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useApi } from "@/components/apiContext";

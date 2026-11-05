@@ -1,5 +1,5 @@
 import { AlertCircle } from "lucide-react";
-import type { Task } from "@/lib/api";
+import type { Task } from "@/types";
 import { cn } from "@/lib/utils";
 import TaskTransferDialog from "./TaskTransferDialog";
 import TaskRequeueDialog from "./TaskRequeueDialog";

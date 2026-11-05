@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/components/apiContext";
-import type { AgentImageStatus, AgentView } from "@/lib/api";
+import type { AgentImageStatus, AgentView } from "@/types";
 import { useMultiHost } from "@/lib/navRoutes";
 import { guard } from "@/lib/toast-guard";
 import { ActionRow } from "./ConfigControls";

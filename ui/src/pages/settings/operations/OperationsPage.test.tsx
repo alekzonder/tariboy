@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { OperationList } from "@/lib/api";
+import type { OperationList } from "@/types";
 import { apiWrapper, fakeApi } from "@/test/api";
 import { FakeWebSocket } from "@/test/fakeWebSocket";
 import { operation } from "@/test/fixtures/apiFixtures";

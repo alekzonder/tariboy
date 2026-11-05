@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { usePolling } from "@/hooks/usePolling";
-import type { GroupRow, UsageReport, UsageSeriesPoint } from "@/lib/api";
+import type { GroupRow, UsageReport, UsageSeriesPoint } from "@/types";
 import { useApi } from "@/components/apiContext";
 import { fmtTokens } from "@/lib/audit";
 import { fmtDateTime } from "@/lib/time";

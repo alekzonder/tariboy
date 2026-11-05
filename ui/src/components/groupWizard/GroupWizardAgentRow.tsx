@@ -1,4 +1,4 @@
-import type { ImageSummary } from "@/lib/api";
+import type { ImageSummary } from "@/types";
 import { PathAutocomplete } from "@/components/PathAutocomplete";
 import { ImageCombobox } from "@/components/AgentFormFields";
 import { Button } from "@/components/ui/button";

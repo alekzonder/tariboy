@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { ApiClient, TeamImportPlan } from "@/lib/api";
+import type { ApiClient } from "@/lib/api";
+import type { TeamImportPlan } from "@/types";
 import { changedImageRefs, previewFromImport } from "./teamImportModel";
 
 const api = {} as ApiClient;

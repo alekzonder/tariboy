@@ -1,6 +1,6 @@
 import { agentApiPath, type ApiClient } from "@/lib/api";
 import { rememberRuntimePreset } from "@/lib/runtimePresets";
-import type { AgentImageStatus, AgentView, RetentionView } from "@/lib/api";
+import type { AgentImageStatus, AgentView, RetentionView } from "@/types";
 import { normalizeField, type Values } from "./registry";
 import type { CommitUnit } from "./useConfigDraft";
 

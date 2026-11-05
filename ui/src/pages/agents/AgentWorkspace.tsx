@@ -4,7 +4,7 @@ import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
 import { ApiProvider } from "@/components/ApiProvider";
 import { useActiveLinkIntoView } from "@/hooks/useActiveLinkIntoView";
 import { targetFor } from "@/lib/terminalsHost";
-import type { AgentRow, AgentView } from "@/lib/api";
+import type { AgentRow, AgentView } from "@/types";
 import { LazyBoundary } from "@/components/LazyBoundary";
 import { FirstVisitHint } from "@/components/onboarding/FirstVisitHint";
 import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";

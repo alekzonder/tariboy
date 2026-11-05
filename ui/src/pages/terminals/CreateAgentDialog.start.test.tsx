@@ -10,7 +10,7 @@ import type {
   HarnessModelCatalog,
   ImageManifest,
   ImageSummary,
-} from "@/lib/api";
+} from "@/types";
 import type { Daemon } from "@/lib/daemons";
 import { RUNTIME_PRESETS_STORAGE_KEY } from "@/lib/runtimePresets";
 import { targetFor } from "@/lib/terminalsHost";

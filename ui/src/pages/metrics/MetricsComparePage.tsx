@@ -6,7 +6,7 @@ import { AboutNumbers } from "@/components/metrics/AboutNumbers";
 import { MetricsError, MetricsLoading } from "@/components/metrics/MetricsStatus";
 import { Button } from "@/components/ui/button";
 import { useMetrics } from "@/hooks/useMetrics";
-import type { MetricsReport, MetricsSlice } from "@/lib/api";
+import type { MetricsReport, MetricsSlice } from "@/types";
 import { byVersionDesc, metricsErrorKind, versionLabel, workflowLabel } from "@/lib/metricsFormat";
 import {
   METRICS_PERIODS,

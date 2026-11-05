@@ -8,7 +8,7 @@ import type {
   TaskPriority,
   TaskRelationType,
   TaskStatus,
-} from "@/lib/api";
+} from "@/types";
 
 export interface TaskDetailProps {
   detail: Detail;

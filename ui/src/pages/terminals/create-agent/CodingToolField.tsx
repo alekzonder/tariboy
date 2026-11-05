@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { EditablePresetCombobox } from "@/components/EditablePresetCombobox";
-import type { OnboardingHarness } from "@/lib/api";
+import type { OnboardingHarness } from "@/types";
 import { DESKTOP_HARNESSES, harnessLabel } from "@/lib/onboarding/firstRun";
 import { Field } from "./formControls";
 import type { CreateAgentForm } from "./useCreateAgentForm";

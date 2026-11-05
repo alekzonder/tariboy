@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ImageSummary } from "@/lib/api";
+import type { ImageSummary } from "@/types";
 import { archiveFilename, groupBuiltImages, sourceLabel, splitImageRef } from "./builtImages";
 
 const image = (overrides: Partial<ImageSummary>) =>

@@ -1,4 +1,4 @@
-import type { UsageSeriesPoint } from "@/lib/api";
+import type { UsageSeriesPoint } from "@/types";
 import { fmtDateTime } from "@/lib/time";
 import { fmtCost } from "@/lib/usage";
 

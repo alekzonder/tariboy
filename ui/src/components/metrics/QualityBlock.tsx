@@ -1,4 +1,4 @@
-import type { MetricsQuality } from "@/lib/api";
+import type { MetricsQuality } from "@/types";
 import { QUALITY_AXES } from "@/lib/metricsFormat";
 
 /** The assessment scores of a slice or a task: one row per axis, or an empty

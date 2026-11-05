@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useHarnessCatalog } from "@/hooks/useHarnessCatalog";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
-import type { OnboardingStatus } from "@/lib/api";
+import type { OnboardingStatus } from "@/types";
 import { runtimePresetGroups } from "@/lib/runtimePresets";
 import { harnessLabel, type ImageChoice } from "@/lib/onboarding/firstRun";
 import { newAgentDraft, type AgentCreateDraft } from "../agentCreateDraft";

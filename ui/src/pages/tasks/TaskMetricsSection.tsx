@@ -3,7 +3,7 @@ import { ChevronRight, RefreshCw } from "lucide-react";
 import { LazyBoundary } from "@/components/LazyBoundary";
 import { Button } from "@/components/ui/button";
 import { useTaskMetrics } from "@/hooks/useTaskMetrics";
-import type { Task } from "@/lib/api";
+import type { Task } from "@/types";
 import { fmtMoney } from "@/lib/metricsFormat";
 import { readKey, storageKeys, writeKey } from "@/lib/storage";
 import { cn } from "@/lib/utils";

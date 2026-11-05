@@ -1,4 +1,4 @@
-import type { AgentView } from "@/lib/api";
+import type { AgentView } from "@/types";
 
 export type AgentPolicy = "restart" | "stop";
 

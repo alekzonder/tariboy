@@ -10,7 +10,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { buildTaskForest, flattenVisible, resolveTaskDrop } from "@/lib/taskTree";
-import type { Queue, Task, TaskPriority } from "@/lib/api";
+import type { Queue, Task, TaskPriority } from "@/types";
 import type { TaskRowMode } from "./taskColumns";
 import TaskRow from "./TaskRow";
 import TaskTableHeader from "./TaskTableHeader";

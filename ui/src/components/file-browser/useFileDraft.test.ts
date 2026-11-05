@@ -1,7 +1,7 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { toast } from "sonner";
-import type { AgentFileContent } from "@/lib/api";
+import type { AgentFileContent } from "@/types";
 import { useFileDraft } from "./useFileDraft";
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));

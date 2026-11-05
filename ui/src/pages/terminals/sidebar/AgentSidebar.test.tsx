@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import type { Task } from "@/lib/api";
+import type { Task } from "@/types";
 import type { HostNeeds } from "@/lib/needsYou";
 import { agentRow } from "@/test/fixtures/apiFixtures";
 import { NeedsYouContext } from "../needsYouContext";

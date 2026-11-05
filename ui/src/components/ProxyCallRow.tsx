@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { fmtTokens } from "@/lib/audit";
-import type { Call, Block, Message } from "@/lib/api";
+import type { Call, Block, Message } from "@/types";
 import { useApi } from "@/components/apiContext";
 
 function toolInput(input: unknown): Record<string, unknown> {

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { fireEvent, render, screen, waitFor, within } from "@/test/queryRender";
 import type { HostAgents } from "@/lib/aggregate";
-import type { Letter, Task } from "@/lib/api";
+import type { Letter, Task } from "@/types";
 import type { HostNeeds } from "@/lib/needsYou";
 import { agentRow } from "@/test/fixtures/apiFixtures";
 import { letter } from "@/test/fixtures/mailFixtures";

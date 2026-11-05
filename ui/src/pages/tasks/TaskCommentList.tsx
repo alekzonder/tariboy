@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { PRIMARY_FILL } from "./panelStyles";
 import { formatTaskTime } from "./taskTime";
-import type { TaskComment } from "@/lib/api";
+import type { TaskComment } from "@/types";
 
 /** Two letters is enough to tell one author from another down a column. */
 function initials(author: string): string {

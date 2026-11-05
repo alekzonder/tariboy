@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import type { AgentScriptRun } from "@/lib/api";
+import type { AgentScriptRun } from "@/types";
 import { isRunActive, runDuration, when } from "./scriptsModel";
 
 type RunActions = {

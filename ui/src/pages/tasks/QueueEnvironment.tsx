@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useApi } from "@/components/apiContext";
-import type { QueueEnvVar, WorkflowImageDefinition } from "@/lib/api";
+import type { QueueEnvVar, WorkflowImageDefinition } from "@/types";
 import { COUNT, EMPTY, LABEL, QUIET_ACTION } from "./panelStyles";
 import KeyValueForm from "./KeyValueForm";
 import QueueSecrets from "./QueueSecrets";

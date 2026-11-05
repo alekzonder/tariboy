@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useApi } from "@/components/apiContext";
 import { guard } from "@/lib/toast-guard";
-import type { PluginList, PluginLogs, PluginSummary } from "@/lib/api";
+import type { PluginList, PluginLogs, PluginSummary } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

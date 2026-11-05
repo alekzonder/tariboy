@@ -6,7 +6,7 @@ import type {
   WorkflowImageStatus,
   WorkflowImageListing,
   WorkflowImageLimits,
-} from "@/lib/api";
+} from "@/types";
 import { resolveDaemon, type Daemon } from "@/lib/daemons";
 import { errorText } from "@/lib/errors";
 

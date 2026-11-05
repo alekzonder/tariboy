@@ -2,12 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import FileBrowser from "@/components/FileBrowser";
 import { useImageContext } from "@/components/imageContext";
 import { useApi } from "@/components/apiContext";
-import {
-  type AgentFileContent,
-  type AgentFileEntry,
-  type AgentFileList,
-  type ImageFileEntry,
-} from "@/lib/api";
+import type { AgentFileContent, AgentFileEntry, AgentFileList, ImageFileEntry } from "@/types";
 
 // Read-only Files tab for an image. The backend serves a FLAT list of every
 // packed tar member (full slash paths) plus a single-file read; the shared

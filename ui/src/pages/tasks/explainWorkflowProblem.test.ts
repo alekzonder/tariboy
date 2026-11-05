@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ScriptRun, TransitionRequest, WorkflowView } from "@/lib/api";
+import type { ScriptRun, TransitionRequest, WorkflowView } from "@/types";
 import { customerView, poolView } from "@/test/fixtures/workflowFixtures";
 import { explainProblem } from "./explainWorkflowProblem";
 

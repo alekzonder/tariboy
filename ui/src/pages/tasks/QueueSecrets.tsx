@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useApi } from "@/components/apiContext";
-import type { QueueSecretInfo } from "@/lib/api";
+import type { QueueSecretInfo } from "@/types";
 import { COUNT, EMPTY, LABEL, QUIET_ACTION } from "./panelStyles";
 import KeyValueForm from "./KeyValueForm";
 import type { KeyHint } from "./queueSettingsModel";

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { ImageSummary } from "@/lib/api";
+import type { ImageSummary } from "@/types";
 import { groupBuiltImages } from "./builtImages";
 
 export function useBuiltImageGroups(images: ImageSummary[], imageName?: string) {

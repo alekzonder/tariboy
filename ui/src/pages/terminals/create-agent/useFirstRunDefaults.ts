@@ -1,5 +1,5 @@
 import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
-import type { ImageSummary, OnboardingStatus } from "@/lib/api";
+import type { ImageSummary, OnboardingStatus } from "@/types";
 import {
   imageChoices,
   pickHarness,

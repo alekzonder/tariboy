@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import type { Task } from "@/lib/api";
+import type { Task } from "@/types";
 import { formatTaskTime } from "@/pages/tasks/taskTime";
 import { useWorkflowAdvance } from "@/pages/tasks/useWorkflowAdvance";
 import { OutcomeNotice } from "@/pages/tasks/WorkflowOutcomes";

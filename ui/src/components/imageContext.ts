@@ -1,5 +1,5 @@
 import { useOutletContext } from "react-router-dom";
-import type { ImageManifest, ImageProvenance } from "@/lib/api";
+import type { ImageManifest, ImageProvenance } from "@/types";
 
 export interface ImageOutletContext {
   ref: string;

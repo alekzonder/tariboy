@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { AlertTriangle, Check, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { OnboardingStatus } from "@/lib/api";
+import type { OnboardingStatus } from "@/types";
 import { checklistRows, harnessLabel, type ChecklistRow } from "@/lib/onboarding/firstRun";
 import { errorText } from "@/lib/errors";
 

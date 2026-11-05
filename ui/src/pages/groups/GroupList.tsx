@@ -1,4 +1,4 @@
-import type { GroupRow } from "@/lib/api";
+import type { GroupRow } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 

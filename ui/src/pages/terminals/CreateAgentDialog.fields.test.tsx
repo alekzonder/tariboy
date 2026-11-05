@@ -10,7 +10,7 @@ import type {
   ImageManifest,
   ImageSummary,
   OnboardingStatus,
-} from "@/lib/api";
+} from "@/types";
 import type { Daemon } from "@/lib/daemons";
 import {
   setupCreateAgentDialog,

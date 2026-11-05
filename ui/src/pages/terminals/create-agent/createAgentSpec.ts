@@ -1,4 +1,4 @@
-import type { CreateAgentSpec } from "@/lib/api";
+import type { CreateAgentSpec } from "@/types";
 import type { AgentCreateDraft } from "../agentCreateDraft";
 
 function integerField(raw: string, label: string, minimum: number): number {

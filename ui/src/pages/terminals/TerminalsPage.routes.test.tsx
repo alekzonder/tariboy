@@ -9,7 +9,7 @@ import type {
   ImageManifest,
   ImageSummary,
   Task,
-} from "@/lib/api";
+} from "@/types";
 import { addDaemon, type Daemon } from "@/lib/daemons";
 import {
   cleanupTerminalsPage,

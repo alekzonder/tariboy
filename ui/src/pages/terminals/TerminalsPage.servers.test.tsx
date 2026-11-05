@@ -8,7 +8,7 @@ import type {
   CreateAgentSpec,
   ImageManifest,
   ImageSummary,
-} from "@/lib/api";
+} from "@/types";
 import { addDaemon, listDaemons, getDaemonToken, setActiveId, type Daemon } from "@/lib/daemons";
 import * as desktop from "@/lib/desktop";
 import {

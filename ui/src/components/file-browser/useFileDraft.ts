@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { AgentFileContent } from "@/lib/api";
+import type { AgentFileContent } from "@/types";
 import { errorText } from "@/lib/errors";
 
 // Loads one file and owns its edit draft, save state and Preview/Source choice.

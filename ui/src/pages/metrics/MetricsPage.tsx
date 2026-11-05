@@ -9,7 +9,7 @@ import { VersionGroups } from "@/components/metrics/VersionGroups";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { useMetrics } from "@/hooks/useMetrics";
-import type { MetricsReport } from "@/lib/api";
+import type { MetricsReport } from "@/types";
 import { metricsErrorKind } from "@/lib/metricsFormat";
 import {
   FILTER_NAMES,

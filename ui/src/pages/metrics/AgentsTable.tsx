@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import type { MetricsSlice } from "@/lib/api";
+import type { MetricsSlice } from "@/types";
 import { SliceTable, SortBySelect } from "@/components/metrics/SliceTable";
 import { SLICE_COLUMNS, TASKS_DONE } from "@/components/metrics/sliceColumns";
 import { useSort, type Column } from "@/components/metrics/sliceSort";

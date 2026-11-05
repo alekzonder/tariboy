@@ -8,7 +8,7 @@ import type {
   CreateAgentSpec,
   ImageManifest,
   ImageSummary,
-} from "@/lib/api";
+} from "@/types";
 import { type Daemon } from "@/lib/daemons";
 import { createWorkspace, addHostToWorkspace } from "@/lib/workspaces";
 import {

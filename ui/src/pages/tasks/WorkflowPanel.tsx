@@ -4,7 +4,7 @@ import { useApiQuery } from "@/hooks/useApiQuery";
 import { taskKeys, taskQueries, refreshTasks, writeTask } from "./taskQueries";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import type { Task, WorkflowView, StatusVisit } from "@/lib/api";
+import type { Task, WorkflowView, StatusVisit } from "@/types";
 import { cn } from "@/lib/utils";
 import { EMPTY, LABEL, MONO, QUIET_ACTION, ROW } from "./panelStyles";
 import ReturnToAgent from "./ReturnToAgent";

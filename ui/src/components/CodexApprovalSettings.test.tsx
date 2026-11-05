@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CodexApprovalCard } from "./CodexApprovalSettings";
 import { render } from "@/test/queryRender";
 import { fakeApi } from "@/test/api";
-import type { CodexApprovalMode } from "@/lib/api";
+import type { CodexApprovalMode } from "@/types";
 
 const target = { id: "r", label: "R", baseURL: "https://r.test", token: "t" };
 

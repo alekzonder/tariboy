@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { ACTIVITY_PERIODS, type ActivityPeriod, type ActivityWindow } from "@/lib/activityPeriod";
-import type { TaskActivityAgent, TaskActivityRow, TaskActivityTotals } from "@/lib/api";
+import type { TaskActivityAgent, TaskActivityRow, TaskActivityTotals } from "@/types";
 import { fmtDateTime, fmtPeriod } from "@/lib/time";
 import { cn } from "@/lib/utils";
 

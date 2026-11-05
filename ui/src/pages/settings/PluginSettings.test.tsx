@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import PluginSettings from "./PluginSettings";
-import type { PluginContribution } from "@/lib/api";
+import type { PluginContribution } from "@/types";
 import type { Daemon } from "@/lib/daemons";
 import { apiWrapper, fakeApi } from "@/test/api";
 

@@ -1,5 +1,5 @@
 import type { HostAgents } from "@/lib/aggregate";
-import type { AgentRow } from "@/lib/api";
+import type { AgentRow } from "@/types";
 import { customerQuestionAttentionKey } from "@/components/customerQuestionNotificationModel";
 
 /** Identity of one agent across the whole sidebar. The same encoding the
