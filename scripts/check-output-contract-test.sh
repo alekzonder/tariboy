@@ -190,9 +190,10 @@ test "$(sed -n '6p' "$fixture/events")" = 'ui:npm run lint'
 test "$(sed -n '7p' "$fixture/events")" = 'ui:npm run knip'
 test "$(sed -n '8p' "$fixture/events")" = 'memory-gate'
 test "$(sed -n '9p' "$fixture/events")" = 'ui:npm test'
-test "$(sed -n '10p' "$fixture/events")" = 'ui:npm run branding:check'
-test "$(sed -n '11p' "$fixture/events")" = 'ui:npm run bundle:budget'
-test "$(sed -n '12p' "$fixture/events")" = 'docs:cached-build'
+sed -n '10p' "$fixture/events" | grep -Eq '^ui:npm run build-storybook -- --output-dir .*/storybook-static --quiet$'
+test "$(sed -n '11p' "$fixture/events")" = 'ui:npm run branding:check'
+test "$(sed -n '12p' "$fixture/events")" = 'ui:npm run bundle:budget'
+test "$(sed -n '13p' "$fixture/events")" = 'docs:cached-build'
 echo "Check dependency preparation contract ok"
 
 # Format drift fails the aggregate without skipping the later steps.
