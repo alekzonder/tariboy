@@ -24,7 +24,11 @@ export interface HostAgents {
 export async function fetchAllAgents(): Promise<HostAgents[]> {
   const registered = await listDaemons();
   const targets = [
-    ...(hasLocalDaemon() ? [{ id: "", label: "This daemon (local)" }] : []),
+    // Storybook sets VITE_TARIBOY_NO_LOCAL_HOST: a story must not request the
+    // relative /api of the page origin (spec 9.1). The app never sets it.
+    ...(hasLocalDaemon() && import.meta.env.VITE_TARIBOY_NO_LOCAL_HOST !== "1"
+      ? [{ id: "", label: "This daemon (local)" }]
+      : []),
     ...registered.map((m) => ({ id: m.id, label: m.label })),
   ];
   return Promise.all(

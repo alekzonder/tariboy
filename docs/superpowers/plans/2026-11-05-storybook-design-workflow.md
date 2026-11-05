@@ -222,6 +222,7 @@ Done when: the fixture test passes, the guard test passed before its deletion, `
 - [ ] **Step 3: Implement** the override, the scanner `findColorViolations(files: string[], palettes: string[]): string[]` (returns `file:line: match`) in the test file, the `lintPolicy.test.ts` change, and the rename of `AgentRow.tsx`. Fix each violation that `npm run lint` and the scanner report in stories, mockups and fixtures with tokens of spec section 7.1.
 - [ ] **Step 4: Run** the tests of Step 2, then `npm run lint` under the slot. Expected: PASS.
 - [ ] **Step 5: Run** `make frontend-check`. Expected: every step `ok`.
+- [ ] **Story without `/api`** (added in stage 5): `fetchAllAgents` in `ui/src/lib/aggregate.ts` polled the implicit host "This daemon (local)" with an empty base URL, so three `TerminalsPage` stories requested the relative `/api/agents`, `/api/groups` and `/api/daemon/config`. The host is now left out when `import.meta.env.VITE_TARIBOY_NO_LOCAL_HOST === "1"`. `ui/vite.storybook.config.ts` defines it; the app never does, so the app does not change. `ui/src/test/storyNetwork.test.tsx` mounts every story, records each `fetch` and `WebSocket` URL, and fails on any URL outside `storybook.invalid`.
 - [ ] **Step 6: Commit** `ui: forbid data access and raw colors in the view layer`.
 
 ### Task 8: `make designer-check`

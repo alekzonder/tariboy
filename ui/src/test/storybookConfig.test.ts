@@ -26,4 +26,6 @@ it("has no /api proxy and no live listener in the Storybook Vite config", () => 
   expect(source).not.toContain("/api");
   expect(source).not.toContain("127.0.0.1:9990");
   expect(source).not.toMatch(/\btest\s*:/);
+  // Without it the page polls "This daemon (local)" at the relative /api.
+  expect(source).toMatch(/define:\s*\{\s*"import\.meta\.env\.VITE_TARIBOY_NO_LOCAL_HOST":\s*'"1"'/);
 });
