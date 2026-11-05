@@ -1,4 +1,5 @@
 import type { Decorator, Meta, StoryObj } from "@storybook/react-vite";
+import { letter } from "@/fixtures/mail";
 import { taskItem } from "@/fixtures/tasks";
 import type { NeedsYouRow } from "@/lib/needsYou";
 import { NeedsYouContext } from "@/pages/terminals/needsYouContext";
@@ -26,7 +27,8 @@ type Story = StoryObj<typeof meta>;
 
 const HOST = "a-build-host-with-a-deliberately-long-label";
 
-// The data of `longText` in mockups/home/Home.stories.tsx.
+// The data of `longText` in mockups/home/Home.stories.tsx: a task with a long
+// key, title and meta, then a letter row (sender instead of the key).
 const longText: NeedsYouRow[] = [
   {
     kind: "task",
@@ -40,6 +42,14 @@ const longText: NeedsYouRow[] = [
       status: "wait_customer",
       assignee: "release-candidate-packager-for-the-long-running-nightly",
     }),
+  },
+  {
+    kind: "letter",
+    id: "m-1",
+    hostId: "",
+    hostLabel: HOST,
+    at: "2026-11-05T09:15:00Z",
+    letter: letter({ created_at: "2026-11-05T09:15:00Z" }),
   },
 ];
 
