@@ -109,7 +109,11 @@ export function HomeView({
         }
       >
         <ActivityTotals totals={totals} />
-        {todayError && <p className="px-2 text-body-sm text-destructive">{todayError}</p>}
+        {todayError && (
+          <p role="alert" className="px-2 text-body-sm text-destructive">
+            {todayError}
+          </p>
+        )}
       </Section>
       <Section title="Recent">
         <ul className="grid gap-x-6 gap-y-0.5 sm:grid-cols-2">
