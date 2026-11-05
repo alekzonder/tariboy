@@ -1,23 +1,8 @@
 import type { MetricsReport, TaskMetrics } from "../api-types.generated";
+import type { MetricsFilter } from "@/types/metrics";
 import type { Transport } from "./client";
 
-export type {
-  MetricsQuality,
-  MetricsReport,
-  MetricsSlice,
-  MetricsTokens,
-  TaskMetrics,
-} from "../api-types.generated";
-
-/** The period and filters of `GET /api/metrics`. `image` and `workflow` are
- *  `NAME` or `NAME:VERSION`; `workflow` may be `none`. */
-export interface MetricsFilter {
-  since: string;
-  until: string;
-  agent?: string;
-  image?: string;
-  workflow?: string;
-}
+export type * from "@/types/metrics";
 
 export function metricsApi(t: Transport) {
   return {

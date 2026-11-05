@@ -1,8 +1,8 @@
 import type { HarnessCodexApproval, HarnessModelCatalog } from "../api-types.generated";
+import type { CodexApprovalMode } from "@/types/harnesses";
 import type { Transport } from "./client";
 
-export type { HarnessModelCatalog } from "../api-types.generated";
-export type CodexApprovalMode = HarnessCodexApproval["mode"];
+export type * from "@/types/harnesses";
 
 export function harnessesApi(t: Transport) {
   return {

@@ -9,18 +9,9 @@ import type {
 } from "../api-types.generated";
 import { agentApiPath, type Transport } from "./client";
 
-export type { AgentScript, AgentScriptRun } from "../api-types.generated";
+import type { RunOnceScriptSpec, ScheduleScriptSpec } from "@/types/scripts";
 
-// ---- Durable agent scripts ----
-export type ScriptMode = "once" | "every";
-export interface RunOnceScriptSpec {
-  script_name: string;
-  description: string;
-  command: string;
-}
-export interface ScheduleScriptSpec extends RunOnceScriptSpec {
-  interval_seconds: number;
-}
+export type * from "@/types/scripts";
 
 export function scriptsApi(t: Transport) {
   return {

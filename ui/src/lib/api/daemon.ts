@@ -11,14 +11,7 @@ import type {
 import type { Transport } from "./client";
 import type { ShellScriptResult } from "./agents";
 
-export type {
-  DaemonConfig,
-  DaemonStatus,
-  MaintenanceRun,
-  MaintenanceSettings,
-  RetentionPolicy,
-  RetentionView,
-} from "../api-types.generated";
+export type * from "@/types/daemon";
 
 export function daemonApi(t: Transport) {
   return {

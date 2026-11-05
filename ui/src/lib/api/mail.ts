@@ -9,35 +9,11 @@ import type {
   MailThread,
   MailUnread,
 } from "../api-types.generated";
+import type { MailListQuery, MailReplyInput, MailSendInput } from "@/types/mail";
 import type { Transport } from "./client";
 import { queryPath } from "./tasks";
 
-export type { Letter, MailList, MailUnread } from "../api-types.generated";
-
-export type MailBox = "inbox" | "sent" | "archive";
-
-// Every mail call acts as `as`; without it the daemon acts as the customer.
-export interface MailListQuery {
-  box: MailBox;
-  as?: string;
-  limit?: number;
-  before?: string;
-}
-export interface MailSendInput {
-  to: string[];
-  subject?: string;
-  text: string;
-  notice?: boolean;
-  /** Deliver into the agent's running iteration after its current tool call. */
-  instant?: boolean;
-  as?: string;
-}
-export interface MailReplyInput {
-  text: string;
-  ask?: boolean;
-  instant?: boolean;
-  as?: string;
-}
+export type * from "@/types/mail";
 
 const letterPath = (id: string, rest = "") => `/api/mail/${encodeURIComponent(id)}${rest}`;
 

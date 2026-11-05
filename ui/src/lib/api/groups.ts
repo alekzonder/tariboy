@@ -8,14 +8,7 @@ import type {
 } from "../api-types.generated";
 import type { Transport } from "./client";
 
-export type {
-  GroupList,
-  GroupRow,
-  GroupView,
-  TeamImportApplyResult,
-  TeamImportOperation,
-  TeamImportPlan,
-} from "../api-types.generated";
+export type * from "@/types/groups";
 
 const groupPath = (name: string) => `/api/groups/${encodeURIComponent(name)}`;
 

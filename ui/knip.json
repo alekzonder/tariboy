@@ -15,6 +15,7 @@
     "src/components/ui/*.tsx": ["exports"],
     "src/components/ui/separator.tsx": ["files"],
     "src/components/ui/tooltip.tsx": ["files"],
-    "src/lib/api-types.generated.ts": ["exports", "types"]
+    "src/lib/api-types.generated.ts": ["exports", "types"],
+    "src/types/*.ts": ["types"]
   }
 }

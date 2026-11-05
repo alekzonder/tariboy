@@ -8,18 +8,10 @@ import type {
   ImageSourceSaveResult,
   ImageSourceValidateResult,
 } from "../api-types.generated";
+import type { CreateImageSource } from "@/types/imageSources";
 import type { Transport } from "./client";
 
-export type {
-  ImageSource,
-  ImageSourceBuildResult,
-  ImageSourceValidateResult,
-} from "../api-types.generated";
-
-export interface CreateImageSource {
-  name: string;
-  prompt?: string;
-}
+export type * from "@/types/imageSources";
 
 const sourcePath = (name: string) => `/api/image-sources/${encodeURIComponent(name)}`;
 const sourceFilePath = (name: string, path: string) =>

@@ -1,11 +1,7 @@
 import type { OnboardingStatus } from "../api-types.generated";
 import type { Transport } from "./client";
 
-export type {
-  OnboardingDefaultStore,
-  OnboardingHarness,
-  OnboardingStatus,
-} from "../api-types.generated";
+export type * from "@/types/onboarding";
 
 export function onboardingApi(t: Transport) {
   return {

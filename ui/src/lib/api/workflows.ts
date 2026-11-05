@@ -24,29 +24,7 @@ import type {
 import { UI_INITIATOR, type OperationStarted } from "./operations";
 import { queryPath } from "./tasks";
 
-export type {
-  Artifact,
-  DeclaredArtifact,
-  OutcomeView,
-  QueueEnvVar,
-  QueueSecretInfo,
-  QueueSource,
-  QueueWorkflow,
-  ScriptRun,
-  SourceRun,
-  StatusView,
-  StatusVisit,
-  TransitionRequest,
-  WorkflowImageBuildResult,
-  WorkflowImageDefinition,
-  WorkflowImageLimits,
-  WorkflowImageListing,
-  WorkflowImageManifest,
-  WorkflowImageStatus,
-  WorkflowImageValidation,
-  WorkflowImageValidationError,
-  WorkflowView,
-} from "../api-types.generated";
+export type * from "@/types/workflows";
 
 const taskPath = (key: string) => `/api/tasks/${encodeURIComponent(key)}`;
 const queuePath = (queue: string) => `/api/task-queues/${encodeURIComponent(queue)}`;

@@ -1,12 +1,7 @@
 import type { Operation, OperationList, OperationLog } from "../api-types.generated";
 import type { Transport } from "./client";
 
-export type {
-  Operation,
-  OperationList,
-  OperationLog,
-  OperationStarted,
-} from "../api-types.generated";
+export type * from "@/types/operations";
 
 /** What the UI sends as `initiator` when it starts a background operation. */
 export const UI_INITIATOR = "ui";

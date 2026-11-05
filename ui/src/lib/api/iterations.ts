@@ -7,13 +7,7 @@ import type {
 } from "../api-types.generated";
 import type { Transport } from "./client";
 
-export type {
-  IterationList,
-  IterationLogs,
-  IterationRow,
-  IterationTimeoutResult,
-  IterationView,
-} from "../api-types.generated";
+export type * from "@/types/iterations";
 
 export function iterationsApi(t: Transport) {
   return {
