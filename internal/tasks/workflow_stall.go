@@ -22,6 +22,9 @@ type IterationEnd struct {
 	GoalTaskKey string // the Goal the iteration ran with; "" when none
 	StartedAt   time.Time
 	FinishedAt  time.Time
+	// HarnessError is set when the harness could not run or died before it
+	// worked: the iteration showed its letters but handled none of them.
+	HarnessError bool
 }
 
 // pauseAtLimitTx pauses the task with reason when the visit's counter for
@@ -60,7 +63,9 @@ var staleNoticeKinds = []string{"task.goal", "task.assigned", "task.answered"}
 // closeIterationNoticesTx closes the notices about key to the agent that were
 // created up to the end of an iteration that ran with key as its Goal, and
 // drops such notifications not sent yet. A later wake comes from the Goal
-// reconciler only when the task still needs the agent.
+// reconciler only when the task still needs the agent. After a harness error
+// it closes only the Goal letters: the reconciler sends the Goal again, and
+// the other notices wait for an iteration that can handle them.
 func (s *WorkflowEngine) closeIterationNoticesTx(ctx context.Context, end IterationEnd, key string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -69,8 +74,15 @@ func (s *WorkflowEngine) closeIterationNoticesTx(ctx context.Context, end Iterat
 	defer tx.Rollback()
 	recipient := "agent:" + strings.TrimSpace(end.Agent)
 	note := "iteration-end:" + end.IterationID
-	if _, err := mail.CloseTaskNoticesTx(tx, recipient, key, staleNoticeKinds, end.FinishedAt, note, s.clock()); err != nil {
+	kinds := staleNoticeKinds
+	if end.HarnessError {
+		kinds = []string{"task.goal"}
+	}
+	if _, err := mail.CloseTaskNoticesTx(tx, recipient, key, kinds, end.FinishedAt, note, s.clock()); err != nil {
 		return err
+	}
+	if end.HarnessError {
+		return tx.Commit()
 	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE task_notification_outbox SET published_at = ?, last_error = 'seen by the iteration before delivery'
@@ -118,7 +130,8 @@ func (s *WorkflowEngine) RecordIterationEnd(ctx context.Context, end IterationEn
 	if key == "" || strings.TrimSpace(end.Agent) == "" {
 		return nil
 	}
-	if err := s.closeIterationNoticesTx(ctx, end, key); err != nil {
+	if err := s.closeIterationNoticesTx(ctx, end, key); err != nil || end.HarnessError {
+		// A harness that did no work left none undone: not an idle iteration.
 		return err
 	}
 	tx, err := s.db.BeginTx(ctx, nil)

@@ -30,6 +30,12 @@ type ReconcilerConfig struct {
 	Clock    func() time.Time
 	Interval time.Duration
 	Log      *slog.Logger
+	// Audit returns the agent's audit log for the goal_redelivered event;
+	// nil writes no event.
+	Audit func(agent string) Recorder
+	// AfterFunc arms the timer that wakes a pass when a Goal is due again
+	// after a failed iteration; nil uses time.AfterFunc.
+	AfterFunc func(time.Duration, func()) Stopper
 }
 
 type Reconciler struct {
@@ -41,6 +47,14 @@ type Reconciler struct {
 	log      *slog.Logger
 	signals  chan struct{}
 	mu       sync.Mutex
+
+	audit     func(agent string) Recorder
+	afterFunc func(time.Duration, func()) Stopper
+	// The one redelivery timer, armed for the earliest due date.
+	timerMu  sync.Mutex
+	timer    Stopper
+	timerDue time.Time
+	timerGen uint64
 }
 
 func NewReconciler(config ReconcilerConfig) *Reconciler {
@@ -53,9 +67,13 @@ func NewReconciler(config ReconcilerConfig) *Reconciler {
 	if config.Log == nil {
 		config.Log = slog.Default()
 	}
+	if config.AfterFunc == nil {
+		config.AfterFunc = func(d time.Duration, fn func()) Stopper { return time.AfterFunc(d, fn) }
+	}
 	return &Reconciler{
 		agents: agent.NewStore(config.Store), store: NewStore(config.Store), mail: config.Mail,
 		clock: config.Clock, interval: config.Interval, log: config.Log, signals: make(chan struct{}, 1),
+		audit: config.Audit, afterFunc: config.AfterFunc,
 	}
 }
 
@@ -103,39 +121,49 @@ func (r *Reconciler) Reconcile(ctx context.Context, agentName, iterationID strin
 			failures = append(failures, err)
 			break
 		}
-		goal, err := r.store.ReconcileAgent(name, r.clock().UTC())
-		if err != nil {
-			failures = append(failures, fmt.Errorf("reconcile task goal for %s: %w", name, err))
-			continue
-		}
-		if goal.TaskKey == "" || goal.Waiting {
-			continue
-		}
-		allowed, err := r.store.GoalDeliveryAllowed(name, r.clock().UTC())
-		if err != nil {
-			failures = append(failures, fmt.Errorf("check task goal delivery for %s: %w", name, err))
-			continue
-		}
-		if !allowed {
-			continue
-		}
-		generation := iterationID
-		if generation == "" {
-			generation, err = r.latestTerminalIteration(name)
-			if err != nil {
-				failures = append(failures, fmt.Errorf("read latest iteration for task goal %s: %w", name, err))
-				continue
-			}
-		} else {
-			goal.Reason = "iteration_completed"
-		}
-		if _, err := r.mail.Send(goalLetter(goal, generation)); err != nil {
-			failures = append(failures, fmt.Errorf("send task goal for %s: %w", name, err))
-		} else if err := r.store.MarkGoalDelivered(name, r.clock().UTC()); err != nil {
-			failures = append(failures, fmt.Errorf("record task goal delivery for %s: %w", name, err))
+		if err := r.reconcileAgent(name, iterationID); err != nil {
+			failures = append(failures, err)
 		}
 	}
 	return errors.Join(failures...)
+}
+
+// reconcileAgent selects the agent's goal and sends its Goal letter when one
+// is due.
+func (r *Reconciler) reconcileAgent(name, iterationID string) error {
+	goal, err := r.store.ReconcileAgent(name, r.clock().UTC())
+	if err != nil {
+		return fmt.Errorf("reconcile task goal for %s: %w", name, err)
+	}
+	if goal.TaskKey == "" || goal.Waiting {
+		return nil
+	}
+	if handled, err := r.redeliver(name, goal); handled || err != nil {
+		return err
+	}
+	allowed, err := r.store.GoalDeliveryAllowed(name, r.clock().UTC())
+	if err != nil {
+		return fmt.Errorf("check task goal delivery for %s: %w", name, err)
+	}
+	if !allowed {
+		return nil
+	}
+	generation := iterationID
+	if generation == "" {
+		generation, err = r.latestTerminalIteration(name)
+		if err != nil {
+			return fmt.Errorf("read latest iteration for task goal %s: %w", name, err)
+		}
+	} else {
+		goal.Reason = "iteration_completed"
+	}
+	if _, err := r.mail.Send(goalLetter(goal, generation)); err != nil {
+		return fmt.Errorf("send task goal for %s: %w", name, err)
+	}
+	if err := r.store.MarkGoalDelivered(name, r.clock().UTC()); err != nil {
+		return fmt.Errorf("record task goal delivery for %s: %w", name, err)
+	}
+	return nil
 }
 
 func (r *Reconciler) latestTerminalIteration(agentName string) (string, error) {
@@ -174,6 +202,7 @@ func (r *Reconciler) Run(ctx context.Context) {
 	run()
 	ticker := time.NewTicker(r.interval)
 	defer ticker.Stop()
+	defer r.stopRedeliveryTimer()
 	for {
 		select {
 		case <-ctx.Done():

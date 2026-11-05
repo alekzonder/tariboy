@@ -31,7 +31,10 @@ The loop is driven three ways, all requiring the agent to be **enabled**:
   iteration now (only while the agent's inbox holds open letters).
 
 A message iteration can end with an error (`harness_error`, or a launch that
-failed). Open letters then stay open. If the agent still has open letters and
+failed). Open letters then stay open, except the Goal letter of a
+`harness_error` iteration (see
+[Redelivery after a failed iteration](#redelivery-after-a-failed-iteration)).
+If the agent still has open letters and
 `on_error` is not `stop`, the loop starts a new message iteration after a
 delay. The first delay is 30 seconds. Each further error doubles the delay, up
 to 10 minutes. An iteration that does not fail resets the delay to 30 seconds.
@@ -114,6 +117,71 @@ valid sticky key; only disabling Goal clears it. The end of an iteration
 closes the agent's open Goal and task notices about its Goal task, and stale
 task notices start no iteration; see
 [Task notifications](/docs/architecture/messaging#task-notifications).
+After a `harness_error` iteration, the end closes only the Goal letters. The
+`task.assigned` and `task.answered` notices stay open for the next iteration.
+
+#### Redelivery after a failed iteration
+
+A failed iteration is an iteration that ended without `loop.sh done`, with the
+status `harness_error`, `timeout` or `no_i_am_done`. If the newest iteration of
+the agent failed, the reconciler sends the Goal again after a pause. It does
+not wait for a new letter.
+
+The reconciler counts `n`, the failed iterations of the agent in a row. It
+reads the count from the `iterations` table, newest first, up to the last `done`
+iteration. The count therefore survives a daemon restart. A `done` iteration
+resets the count. A `killed` or `failed` iteration does not change the count
+and does not reset it. The pause starts at the end of the newest failed
+iteration:
+
+```text
+pause = max(c, min(c × 2^(n−1), 600 s))
+```
+
+In this formula, `c` is the `goal_delivery_cooldown_s` of the agent. The first
+pause is `c`. Each further failure in a row doubles the pause, up to 10 minutes.
+If `c` is more than 10 minutes, the pause is `c`: the bound never makes the
+pause shorter than the configured cooldown. For `c` = 60 seconds, the pauses
+are 60, 120, 240, 480, 600 and 600 seconds.
+
+Before the pause ends, the reconciler sends no Goal letter and arms one timer
+in memory for the due time. The timer starts a full reconciliation pass. After
+a restart, the startup pass reads the due time from the database. If the
+timer does not fire, the one-minute pass sends the letter up to one minute late.
+When the pause ends, the reconciler sends one `task.goal` letter with the
+reason `retry`. The usual delivery checks still apply: an open Goal letter
+blocks it, and so does the cooldown since the last delivery. Each failed
+iteration gets at most one such letter.
+
+For each letter, the reconciler writes the `goal_redelivered` event to the
+audit log of the agent, with the source `system` and the ID of the failed
+iteration. The event data has these fields:
+
+- `task_key`: the key of the Goal task.
+- `failures`: the count `n`.
+- `pause_s`: the pause in seconds.
+- `last_status`: the status of the failed iteration.
+
+These rules apply in special cases:
+
+- If the newest iteration is still running, the reconciler sends nothing. The
+  end of that iteration starts the next decision.
+- If the agent is disabled, it gets no Goal, so it gets no letter and no event.
+- If a stop policy (`on_error=stop` or `on_timeout=stop`) halted the loop, the
+  reconciler sends nothing. After Start clears the halt, the next pass sends
+  the Goal with the pause of the current count.
+- If the newest iteration is `killed` (an operator stop) or `failed`, the usual
+  Goal delivery applies, with no pause and no event.
+
+The engine retry for open letters (30 seconds, doubled up to 10 minutes) still
+applies after a `harness_error` iteration when other letters stay open. The
+Goal letter of that iteration is closed, so if it was the only open letter,
+the engine does not retry and only the reconciler wakes the agent. If other
+letters stay open, the engine retry can start the next iteration before the
+pause ends. A Goal letter sent while the engine retry is armed joins that
+retry and starts no second iteration. When the pause ends, the reconciler
+decides again from the newest iteration, so one failure gives one new
+iteration. The engine retry stays in memory and writes no event.
 
 Every non-bare agent receives daemon-owned Goal guidance inside **Task Processing
 Order**, regardless of image plugins or runtime entries. The guidance has two
@@ -145,7 +213,9 @@ an iteration (normal finish, runner error, a manual failure with the tmux sessio
 alive, and the adoption and stale-kill recovery paths) calls
 `Manager.iterationCompleted`, which first hands the daemon the agent, the
 iteration, the Goal task key the iteration was prepared with, and its start and
-end times, and only then wakes the Goal reconciler. The daemon counts the
+end times, and only then wakes the Goal reconciler. A `harness_error` iteration
+is reported with a harness-error mark: the daemon closes its Goal letters and
+does not count it as idle. For other iterations, the daemon counts the
 iteration as idle when the agent held the task's pool status when the iteration
 began and made no transition request during it, and pauses the task at the
 limit; see [Pauses](/docs/task-workflows#pauses).
