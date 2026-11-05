@@ -320,13 +320,12 @@ func (m *Manager) recordIterationEnd(agentName, iterationID string) {
 	if m.cfg.RecordIterationEnd == nil {
 		return
 	}
-	// A harness that could not be launched or died before producing output
-	// did no work and left none undone: it is not an idle iteration.
-	if goal.key != "" && m.iterationStatus(agentName, iterationID) == agent.IterationHarnessError {
-		return
-	}
 	end := tasks.IterationEnd{Agent: agentName, IterationID: iterationID, GoalTaskKey: goal.key,
 		StartedAt: goal.readAt, FinishedAt: m.cfg.Clock().UTC()}
+	// A harness that could not be launched or died before producing output
+	// did no work and left none undone: it is not an idle iteration, but its
+	// Goal letter is closed so the Goal reconciler can send it again.
+	end.HarnessError = goal.key != "" && m.iterationStatus(agentName, iterationID) == agent.IterationHarnessError
 	if err := m.cfg.RecordIterationEnd(context.Background(), end); err != nil && m.cfg.Log != nil {
 		m.cfg.Log.Warn("record iteration end", "agent", agentName, "id", iterationID, "goal", goal.key, "err", err)
 	}

@@ -271,6 +271,7 @@ func buildTasks(ctx context.Context, proc *process, c *coreParts) (*taskParts, e
 	taskService.SetLogger(log)
 	goalReconciler := taskgoal.NewReconciler(taskgoal.ReconcilerConfig{
 		Store: st, Mail: c.mail, Clock: time.Now, Log: log,
+		Audit: func(a string) taskgoal.Recorder { return c.audit.For(a) },
 	})
 	// A task change, an agent change, and a finished iteration wake both the
 	// goal reconciler and the workflow dispatcher.

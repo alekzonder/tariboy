@@ -85,6 +85,39 @@ func TestIterationEndClosesTheNoticesAboutItsGoal(t *testing.T) {
 	}
 }
 
+// A harness_error iteration showed its Goal letter but did no work: the end
+// closes only that Goal letter, so it does not block the next Goal delivery,
+// keeps the other notices for the next iteration, and counts nothing idle.
+func TestRecordIterationEndHarnessErrorClosesGoalOnly(t *testing.T) {
+	t.Parallel()
+	svc, _, task := requestFixture(t)
+	f := newStaleMail(t, svc)
+	assigned := f.send(1, "task.assigned", task.Key)
+	goal := f.send(2, "task.goal", task.Key)
+	answered := f.send(3, "task.answered", task.Key)
+	later := f.send(6, "task.goal", task.Key)
+
+	end := iterationBetween("dev-1", task.Key, 0, 5)
+	end.HarnessError = true
+	recordEnd(t, svc, end)
+
+	if f.open(goal) {
+		t.Fatal("the Goal letter the iteration showed stays open")
+	}
+	for _, l := range []mail.Letter{assigned, answered, later} {
+		if !f.open(l) {
+			t.Fatalf("%s at %s was closed", l.Kind, l.CreatedAt)
+		}
+	}
+	var note string
+	if err := svc.db.QueryRow(`SELECT close_note FROM mail WHERE id = ?`, goal.ID).Scan(&note); err != nil || note != "iteration-end:it-1" {
+		t.Fatalf("close note = %q, %v", note, err)
+	}
+	if got := visitCounters(t, svc, task); got[0] != 0 {
+		t.Fatalf("counters = %v; a harness error is not an idle iteration", got)
+	}
+}
+
 func TestCloseStaleTaskLettersClosesNoticesForWorkThatIsNotTheAgents(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

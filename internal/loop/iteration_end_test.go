@@ -47,7 +47,7 @@ func TestManagerReportsTheIterationEndBeforeTheGoalWake(t *testing.T) {
 	}
 }
 
-func TestManagerDoesNotReportAHarnessErrorAsAnIterationEnd(t *testing.T) {
+func TestManagerReportsAHarnessErrorAsAHarnessErrorEnd(t *testing.T) {
 	t.Parallel()
 	start := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
 	var ends []tasks.IterationEnd
@@ -64,13 +64,15 @@ func TestManagerDoesNotReportAHarnessErrorAsAnIterationEnd(t *testing.T) {
 	m.cfg.iterationStore = st
 	m.noteIterationGoal("alice", "alice-1", "DEV-1", start)
 	m.iterationCompleted("alice", "alice-1")
-	if len(ends) != 0 || completed != 1 {
-		t.Fatalf("ends = %#v completed %d; a harness that never ran is not an idle iteration", ends, completed)
+	// The end closes the Goal letter the harness never handled, so it does not
+	// block the next Goal delivery; it is not an idle iteration.
+	if len(ends) != 1 || !ends[0].HarnessError || ends[0].GoalTaskKey != "DEV-1" || completed != 1 {
+		t.Fatalf("ends = %#v completed %d; want one harness-error end", ends, completed)
 	}
 	st.it = agent.Iteration{ID: "alice-2", Agent: "alice", Status: "done"}
 	m.noteIterationGoal("alice", "alice-2", "DEV-1", start)
 	m.iterationCompleted("alice", "alice-2")
-	if len(ends) != 1 || ends[0].IterationID != "alice-2" {
+	if len(ends) != 2 || ends[1].IterationID != "alice-2" || ends[1].HarnessError {
 		t.Fatalf("ends = %#v", ends)
 	}
 }
