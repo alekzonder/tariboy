@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { agentLink, agentLinks } from "@/fixtures/agents";
-import type { TaskActivityTotals } from "@/types";
+import { taskActivityTotals } from "@/fixtures/activity";
 import { HomeView } from "./HomePage.view";
 
 const meta = { component: HomeView } satisfies Meta<typeof HomeView>;
@@ -8,17 +8,7 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-// shortcut: one typed constant, the factory `taskActivityTotals` comes with the Home mockup.
-const totals: TaskActivityTotals = {
-  tasks: 35,
-  completed: 32,
-  transitions: 4,
-  comments: 2,
-  iterations: 101,
-  requests: 410,
-  tokens: 1_250_000,
-  cost_usd: 145.23,
-};
+const totals = taskActivityTotals();
 
 const running = [
   agentLink({ key: "local/builder", name: "builder", meta: "12 min", href: "/a/builder" }),
