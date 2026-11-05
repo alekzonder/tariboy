@@ -1197,7 +1197,8 @@ to it. When you add a text size or a radius to `@theme`, add it to `cn()` too.
 `ui/src` or `ui/store` uses a class of the form `utility-[Npx]`. Composite
 values, such as `grid-cols-[76px_minmax(0,1fr)]`, are allowed. The shadcn
 primitives under `ui/src/components/ui/` are not checked, so they stay the same
-as upstream. An inline `style` is only for a value that the code calculates at
+as upstream. Story files are not checked: a story sizes its demo frame in
+pixels. An inline `style` is only for a value that the code calculates at
 run time, such as a column width or a CSS variable.
 
 Text fields use the shared controls: `Input`, `Textarea` and `CommandInput`

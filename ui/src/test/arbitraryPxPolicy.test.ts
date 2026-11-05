@@ -6,7 +6,9 @@ import { expect, it } from "vitest";
 // src/index.css and the 4px spacing scale (h-6.5 is 26px), never a bare
 // `utility-[12px]`. Composite values such as `grid-cols-[76px_1fr]` stay.
 // The shadcn primitives under src/components/ui stay as upstream ships them,
-// so they can be updated. A source scan, like webStoragePolicy.test.ts.
+// so they can be updated. Stories are not production code: a story sizes its
+// demo frame in pixels (a 460px field, a 620px page frame). A source scan, like
+// webStoragePolicy.test.ts.
 const ui = resolve(__dirname, "../..");
 const generated = join("src", "components", "ui");
 const arbitraryPx = /\b[a-z][a-z0-9-]*-\[-?\d+(?:\.\d+)?px\]/g;
@@ -15,7 +17,8 @@ function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) return entry.name === "test" ? [] : sources(path);
-    return /\.(ts|tsx)$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [path] : [];
+    const code = /\.(ts|tsx)$/.test(entry.name) && !/\.(test|stories)\.tsx?$/.test(entry.name);
+    return code ? [path] : [];
   });
 }
 
