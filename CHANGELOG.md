@@ -1,3 +1,22 @@
+## [0.109.0] - 2026-11-05
+
+### Added
+
+- `tariboy store show` and `GET /api/stores/NAME` return `auto.results`. It has one entry for each selected image: the time, the selector, the `image_version` and the error of its last automatic build. A successful build clears the error. `tariboy store auto` removes the results of the images that it deselects. Migration 0078 adds the column `image_stores.auto_results`.
+
+### Changed
+
+- An automatic Store build uses only the files of the HEAD commit. The Store root must be the root of a Git repository. Tariboy exports HEAD with `git archive` and refuses a symlink, an `extends` layer, a skill directory or a prompt file that points outside the commit. It installs each `skills-lock.json` and compares the installed skills with the lock. The build records `git_commit` and `lock_digest`. Before, the build used the Store working copy, so ignored files entered the image. Manual Store builds, `--path` builds and agent image builds do not change.
+- A script run starts through the wrapper `tariboy-shim __script-run`, which writes the exit code of the script to the state file of the run. Script runs continue through `tariboy update` and `tariboy daemon restart`, and the next daemon publishes their results. `tariboy daemon stop` still interrupts them.
+
+### Fixed
+
+- A pane supervisor of an earlier iteration no longer stops the shim of the next iteration. Before, the new iteration sometimes ended with `harness_error` and `category=missing` about one second after it started.
+- If a message iteration fails and its letters stay open, the loop starts it again after 30 seconds. The delay doubles up to 10 minutes and resets after a successful attempt. This does not apply when `on_error` is `stop`. Before, the agent did not wake until the next publish.
+- Migration 0077 adds assessment indexes on `created_at`. The metrics report over 10,000 assessments takes about 155 ms again, down from about 290 ms.
+
+[0.109.0]: https://github.com/alekzonder/tariboy/compare/v0.108.0...v0.109.0
+
 ## [0.108.0] - 2026-11-03
 
 ### Added
