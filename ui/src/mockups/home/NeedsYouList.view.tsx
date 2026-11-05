@@ -17,8 +17,11 @@ export interface NeedsYouViewRow {
   meta: string;
 }
 
+// Below `sm` the row is a grid: the key and the title on the first line, the
+// meta under the title. From `sm` up it is one line and the meta takes at
+// most half of the space after the key.
 const ROW_CLASS =
-  "flex w-full min-w-0 items-baseline gap-3 rounded-control px-2 py-1.5 text-left text-body-sm hover:bg-accent";
+  "grid w-full min-w-0 grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-x-3 rounded-control px-2 py-1.5 text-left text-body-sm hover:bg-accent sm:flex";
 
 export function NeedsYouListView({ rows }: { rows: NeedsYouViewRow[] }) {
   if (rows.length === 0) {
@@ -53,7 +56,7 @@ export function NeedsYouListView({ rows }: { rows: NeedsYouViewRow[] }) {
                 </span>
               )}
               <span className="min-w-0 flex-1 truncate">{row.title}</span>
-              <span className="shrink-0 truncate text-caption text-muted-foreground">
+              <span className="col-start-2 min-w-0 truncate text-caption text-muted-foreground sm:max-w-1/2 sm:shrink-0">
                 {row.meta}
               </span>
             </button>

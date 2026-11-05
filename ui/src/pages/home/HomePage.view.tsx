@@ -27,6 +27,20 @@ export interface HomeViewProps {
   onNewAgent: () => void;
 }
 
+/** The name and the meta of one agent link. Below `sm` the meta goes to a
+ *  second line, so a long meta never hides the name. From `sm` up both stay
+ *  on one line and the meta takes at most half of it. */
+function AgentLinkText({ name, meta }: { name: string; meta: string }) {
+  return (
+    <span className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-baseline sm:gap-2">
+      <span className="min-w-0 truncate">{name}</span>
+      <span className="min-w-0 truncate text-caption text-muted-foreground sm:max-w-1/2 sm:shrink-0">
+        {meta}
+      </span>
+    </span>
+  );
+}
+
 function Section({
   title,
   aside,
@@ -88,10 +102,9 @@ export function HomeView({
               >
                 <span
                   aria-hidden="true"
-                  className="size-1.5 shrink-0 self-center rounded-full bg-status-running"
+                  className="mt-[7px] size-1.5 shrink-0 self-start rounded-full bg-status-running sm:mt-0 sm:self-center"
                 />
-                <span className="min-w-0 truncate">{row.name}</span>
-                <span className="shrink-0 text-caption text-muted-foreground">{row.meta}</span>
+                <AgentLinkText name={row.name} meta={row.meta} />
               </Link>
             </li>
           ))}
@@ -123,8 +136,7 @@ export function HomeView({
                 to={row.href}
                 className="flex items-baseline gap-2 rounded-control px-2 py-1 text-body-sm hover:bg-accent"
               >
-                <span className="min-w-0 truncate">{row.name}</span>
-                <span className="shrink-0 text-caption text-muted-foreground">{row.meta}</span>
+                <AgentLinkText name={row.name} meta={row.meta} />
               </Link>
             </li>
           ))}

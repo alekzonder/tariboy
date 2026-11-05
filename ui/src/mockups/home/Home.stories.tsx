@@ -154,6 +154,28 @@ const busy: PageData = {
   },
 };
 
+// A long agent name with a long meta in Running now and Recent, and a long
+// task key, title and meta in Needs you: each row still names its agent or
+// task (TARI-cset).
+const longText: PageData = {
+  ...base,
+  needs: [
+    {
+      id: "task/TARIDESIGN-38fp",
+      kind: "task",
+      label: "TARIDESIGN-38fp",
+      title: "Approve the release notes for the nightly release candidate of worker:v2",
+      meta: "wait_customer · release-candidate-packager-for-the-long-running-nightly · 09:42",
+    },
+    base.needs[1],
+  ],
+  view: {
+    ...base.view,
+    running: [...agentLinks.longText, ...base.view.running],
+    recent: [...agentLinks.longText, ...base.view.recent],
+  },
+};
+
 const atWidth = (width: number, data: PageData = base): Story => ({
   decorators: [withWidth(width)],
   render: () => <HomeMockup compact={width < DRAWER_BELOW} data={data} />,
@@ -170,3 +192,7 @@ export const Width1024: Story = atWidth(1024);
 export const Width1180: Story = atWidth(1180);
 
 export const Busy: Story = atWidth(1024, busy);
+
+export const LongText360: Story = atWidth(360, longText);
+
+export const LongText1024: Story = atWidth(1024, longText);
