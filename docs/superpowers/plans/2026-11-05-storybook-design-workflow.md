@@ -141,7 +141,7 @@ Done when: both commits pass `make frontend-check`, `@/lib/api` still exports ev
 
 - [ ] **Step 1: Write the failing test** `ui/src/test/storyShot.test.ts`:
   - `it("parses the id, the theme and the width")`, and `it("rejects a theme other than light or dark")`, `it("rejects a width that is not a positive integer")`;
-  - `it("builds the iframe URL with the theme global")`: `storyUrl("http://127.0.0.1:41234", "mockups-home--width360", "dark")` equals `http://127.0.0.1:41234/iframe.html?id=mockups-home--width360&viewMode=story&globals=theme:dark`;
+  - `it("builds the iframe URL with the theme global")`: `storyUrl("http://127.0.0.1:41234", "mockups-home--width-360", "dark")` equals `http://127.0.0.1:41234/iframe.html?id=mockups-home--width-360&viewMode=story&globals=theme:dark`;
   - `it("writes the PNG under .story-shots")`: `shotPath("/x/ui", "a--b", "light", 360)` is `/x/ui/.story-shots/a--b.light.360.png`;
   - `it("serves only on loopback")`: `serveStatic(tmpDir)` returns a server whose `address()` is `{ address: "127.0.0.1", port: > 0 }`; a GET of a file returns its content; close it;
   - `it("takes the host check slot unless it already holds it")`: `slotCommand({}, argv)` starts with `flock` and names `/tmp/tariboy-check.lock`; `slotCommand({ TARIBOY_CHECK_LOCK_HELD: "1" }, argv)` is `null`.
@@ -301,7 +301,7 @@ export function HomeView(props: HomeViewProps): JSX.Element;
 **Interfaces:**
 - Consumes: `HomeView`, `HomeAgentLink` from Task 9; `agentLink`, `agentLinks` from `ui/src/fixtures/agents.ts`; `withWidth`; `story:shot`; `make designer-check`.
 
-- [ ] **Step 1: Write** `Home.stories.tsx` with `title: "Mockups/Home"` and `parameters: { layout: "fullscreen" }`: the full page from `HomeView`, `AgentRow` (in a sidebar surface) and fixtures. Stories: one for each supported width (`Width360`, `Width390`, `Width820`, `Width1024`, `Width1180`, each with `withWidth`) and `Busy` (`agentLinks.many`) at 1024 px. Write `handoff.md` in the format of spec section 6, all twelve sections, with the key of the stage 6 design task and the story ids `mockups-home--width360` … `mockups-home--busy`.
+- [ ] **Step 1: Write** `Home.stories.tsx` with `title: "Mockups/Home"` and `parameters: { layout: "fullscreen" }`: the full page from `HomeView`, `AgentRow` (in a sidebar surface) and fixtures. Stories: one for each supported width (`Width360`, `Width390`, `Width820`, `Width1024`, `Width1180`, each with `withWidth`) and `Busy` (`agentLinks.many`) at 1024 px. Write `handoff.md` in the format of spec section 6, all twelve sections, with the key of the stage 6 design task and the story ids `mockups-home--width-360` … `mockups-home--busy`.
 - [ ] **Step 2: Run** `make designer-check`. Expected: four `ok` steps. A props change in `HomeViewProps` (try: rename `todayError`) makes the `tsc -b` step fail in both story files; revert it.
 - [ ] **Step 3: Run** `make frontend-check`. Expected: every step `ok`.
 - [ ] **Step 4: Visual check:** `story:shot` of each story in both themes; `make ui-dev` and the real Home page at the printed URL, compared with the mockup at 360 px and 1024 px.

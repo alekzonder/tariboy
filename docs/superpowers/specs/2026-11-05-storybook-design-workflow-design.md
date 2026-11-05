@@ -422,7 +422,7 @@ file is per mockup and refers to stories, not to HTML. It is in the language
 of the designer's request. It has these sections, in this order:
 
 1. `# Handoff: <page or component>` and one line: date, the key of the
-   design task, and story ids, such as `mockups-home--width1024`. The key
+   design task, and story ids, such as `mockups-home--width-1024`. The key
    tells the developer where to ask a question, and the review task refers
    to the handoff by it.
 2. `## What changed`: a list of visible changes, each with the story that
