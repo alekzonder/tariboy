@@ -42,10 +42,11 @@ export const ServerTasks: Story = {
   parameters: {
     tariboy: {
       daemon: true,
-      route: { path: "/servers/local/tasks", pattern: "/servers/:hostId/tasks" },
+      // /servers/:hostId/tasks is a legacy URL: TerminalsPage redirects it to /tasks.
+      route: { path: "/tasks", pattern: "/tasks" },
     },
   },
-  render: () => <TerminalsPage serverView="tasks" />,
+  render: () => <TerminalsPage serverView="tasks" scoped />,
 };
 
 export const ServerImages: Story = {

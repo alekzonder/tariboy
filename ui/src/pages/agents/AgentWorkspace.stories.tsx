@@ -43,12 +43,14 @@ const onTab = (tab: string): Story => ({
     tariboy: {
       daemon: true,
       route: {
-        path: `/agents/local/builder/${tab}`,
+        path: `/agents/storybook/builder/${tab}`,
         pattern: "/agents/:hostId/:agent/:tab/*",
       },
     },
   },
-  render: () => <AgentWorkspace hostId="" agent={BUILDER} refresh={() => {}} />,
+  // "storybook" is the host that withDaemon registers. The host "" is the
+  // same-origin daemon, so it would request the relative /api.
+  render: () => <AgentWorkspace hostId="storybook" agent={BUILDER} refresh={() => {}} />,
 });
 
 export const Console: Story = onTab("console");

@@ -10,6 +10,8 @@ import { AuditRow } from "./AuditRow";
 const meta = {
   component: AuditRow,
   decorators: [withSurface("panel")],
+  // The proxy-call rows read the API host (useApi).
+  parameters: { tariboy: { daemon: true } },
 } satisfies Meta<typeof AuditRow>;
 export default meta;
 
