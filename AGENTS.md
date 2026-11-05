@@ -44,6 +44,7 @@ documents that own the behavior in scope.
 | Plugins and agent tools | `docs/docs/plugins/index.mdx`, `docs/docs/binaries/index.mdx` |
 | Release, support, diagnostics | `docs/docs/support.mdx`, `docs/docs/security-controls.mdx`, `docs/internal-alpha-release-runbook.md` |
 | HTTP commands, response types, OpenAPI, generated UI types | `docs/docs/architecture/index.mdx` (Command registry), `docs/docs/architecture/web-ui.mdx` (API layer, API types) |
+| Designer stories, mockups, fixtures, handoff | `docs/docs/architecture/web-ui.mdx` (Designer workflow in Storybook) |
 
 When a task crosses boundaries, read all matching rows. For example, a Desktop
 terminal change requires the loop/shim, Web UI, and Desktop documentation.
@@ -167,8 +168,10 @@ for the full workflow and an end-to-end example.
   `cd ui && npm run api-types`. `make check` fails when either is out of date
   (the `test` and `ui-api-types` steps).
 - The UI does not declare daemon response types by hand. A domain module in
-  `ui/src/lib/api/` re-exports them from the generated file, and components
-  import them from `@/lib/api`. A hand-written type is allowed only for data
+  `ui/src/lib/api/` re-exports them from the generated file. The type-only
+  directory `ui/src/types/` holds one file for each domain, and components and
+  new code import response types from `@/types`. `@/lib/api` re-exports the
+  same types, so older imports keep working. A hand-written type is allowed only for data
   outside the spec: the exceptions listed under "API types" in
   `docs/docs/architecture/web-ui.mdx`, request bodies and filters, UI state,
   and `localStorage`. A hand-written response type carries a comment that says
@@ -234,6 +237,45 @@ Generated UI rules:
   `make store-ui` in an isolated worktree at the target commit when store UI or
   shared UI changes affect it.
 - `tariboyd` is API/WebSocket only and does not embed a Desktop UI.
+
+## Designer and developer roles
+
+A designer agent (`tariboy-designer`) changes the UI visually in Storybook. A
+developer agent connects the same components to data and logic. Each path has
+one owner. The full rules and the handoff format are in `docs/docs/architecture/web-ui.mdx`
+(Designer workflow in Storybook). Storybook setup and checks are in
+`docs/docs/development.mdx` (Storybook).
+
+| Paths | Designer | Developer |
+| --- | --- | --- |
+| `ui/src/index.css`, `ui/src/components/ui/*.tsx` | Owns colors, radii, density, shadows and the `cva()` variants | Changes only accessibility and behavior, after agreement with the designer |
+| `ui/src/**/*.view.tsx` | Owns markup and styles. Proposes a new prop in `handoff.md` | Owns the props type. Connects the view to data in a container |
+| Other `ui/src/components/**/*.tsx` and `ui/src/pages/**/*.tsx` | Does not change them. Copies the markup into a local view part of a mockup | Owns data hooks, `@/lib/api`, react-query, router hooks, state and handlers |
+| `ui/src/mockups/<name>/` | Builds the mockup stories and its local view parts | Moves the change into the real component or page |
+| `ui/src/**/*.stories.tsx` | Writes and changes them | Changes a story only when a props change breaks it, and tells the designer on the task of the change |
+| `ui/src/fixtures/<domain>.ts` | Writes and changes them | Keeps them typed against `@/types` |
+| `ui/src/mockups/<name>/handoff.md` | Writes it | Reads it, answers the open questions, and implements it |
+| `ui/src/types/` | Reads it | Owns it |
+| `ui/.storybook/`, `ui/src/storybook/` | Proposes a new decorator | Owns the configuration and the decorators |
+
+Rules for the developer:
+
+- Own the props type of every view file. When a props change breaks a story,
+  fix the story in the same commit.
+- Keep data hooks, `@/lib/api`, react-query, router hooks, state and handlers
+  in containers and pages. A view takes props and callbacks and returns JSX.
+- Import types from `@/types` in new code.
+- Move a component to the view layer one component at a time: split data and
+  markup, rename the markup file to `*.view.tsx`, and add or move its story.
+- Change the primitives in `ui/src/components/ui/` only for accessibility and
+  behavior, and tell the designer.
+- To implement a `handoff.md`, open the pull request from the designer's
+  branch. Answer each open question under it, and add the first line
+  `Implemented in #<PR>`.
+- Keep the Storybook setup and its checks (`ui-storybook`, `make designer-check`)
+  green.
+- Never import `CustomerQuestionNotifications` in a story or a mockup, and
+  never point Storybook at a daemon.
 
 ## Documentation maintenance
 

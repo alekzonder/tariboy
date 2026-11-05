@@ -625,6 +625,29 @@ port and opens it in the Playwright Chromium of `ui/node_modules`. It waits
 for one host check slot (`flock` on `/tmp/tariboy-check.lock`), like
 `make check`, and runs without the lock on a host that has no `flock`.
 
+The decorators are in `ui/src/storybook/decorators.tsx`.
+`ui/.storybook/preview.tsx` applies the first five to every story. A story
+adds `withSurface` and `withWidth` in its own `decorators` list:
+
+| Decorator | What it does |
+| --- | --- |
+| `withTheme` | Sets the `.dark` class when the toolbar theme is `dark` |
+| `withAppProviders` | Adds `TooltipProvider`, and a `MemoryRouter` unless the story sets a route |
+| `withQueryClient` | Adds a react-query client when `parameters.tariboy.query` is `true` |
+| `withDaemon` | Adds a host registry with one host on `storybook.invalid` when `parameters.tariboy.daemon` is `true`, and restores the real keys after the story |
+| `withRoute` | Mounts the story on `parameters.tariboy.route` for a component that reads `useParams()` |
+| `withSurface(kind, width?)` | Wraps the story in a frame: `sidebar` (288 px), `panel` (480 px), `card` (360 px) or `row` (720 px) |
+| `withWidth(width)` | Wraps a mockup story in a frame of that width and the full height of the viewport |
+
+A story sets `parameters.tariboy` with the type `TariboyParameters`:
+
+```ts
+parameters: { tariboy: { query: true, daemon: true, route: { path: "/tasks/TB-142", pattern: "/tasks/:key" } } }
+```
+
+All three fields are optional. `query` and `daemon` are booleans. `route` has
+the initial `path` and the route `pattern`.
+
 The `ui-storybook` step of `make frontend-check` runs `npm run build-storybook`
 into the run's temporary directory. It fails when a story does not compile or
 does not build. `npx tsc -b` also checks every story against the real
@@ -875,10 +898,12 @@ files (`project` excludes `src/**/*.stories.tsx`, `src/mockups/**`,
 `src/fixtures/**` and `src/storybook/**`), and the exports of
 `src/storybook/decorators.tsx` are allowed, because stories use them.
 The current exceptions are the shadcn primitives under `src/components/ui/`.
-The repository keeps that kit complete for the Storybook catalog, so its
-unused exports and the unused `separator.tsx` and `tooltip.tsx` files are
-allowed.
-
+The repository keeps that kit complete for the Storybook catalog, so the
+unused exports of `src/components/ui/*.tsx` are allowed. `knip.json` is JSON
+and has no comments, so the reason is here. Without the exceptions for
+`separator.tsx` and `tooltip.tsx`, the production pass reports both files as
+unused, because only their stories import them. Those two exceptions stay for
+the Storybook catalog.
 The Storybook catalog is checked by `make check` in two places. `npx tsc -b`
 compiles the stories with the app (`ui/tsconfig.app.json` includes `src`), so
 a story is checked against the real component props. When the props of a
