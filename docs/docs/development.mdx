@@ -634,6 +634,19 @@ build takes about 10 seconds and its peak resident memory is about 0.86 GB
 (`/usr/bin/time -v`). If the peak grows above 1.5 GB, set
 `NODE_OPTIONS=--max-old-space-size=1536` in the step command.
 
+`make designer-check` is the check a designer runs before a hand-off. It is
+not part of `check`. It takes the host check slot and runs four steps to the
+end, like `frontend-check`: `ui-typecheck` (`npx tsc -b --checkers 1`),
+`ui-oxlint` (oxlint on the `ui/*.ts` and `ui/*.tsx` files that differ from
+`git merge-base origin/main HEAD`, uncommitted files included), `viewLintPolicy`
+(`viewLintPolicy.test.ts` with `TARIBOY_VITEST_MAX_WORKERS=2`) and
+`ui-storybook` (the Storybook build). A step that passes prints nothing, so the
+target prints the file list of the oxlint step first
+(`oxlint files: …`); with no changed file the step passes with
+`no changed UI files`. Without `origin/main` the oxlint step fails: run
+`git fetch origin`. `scripts/designer-check-contract-test.sh`, a part of
+`smoke-contract-test`, pins the steps and their order.
+
 Storybook never reaches a daemon. Four layers keep it that way:
 
 1. Storybook reads `ui/vite.storybook.config.ts`, not `ui/vite.config.ts`.
