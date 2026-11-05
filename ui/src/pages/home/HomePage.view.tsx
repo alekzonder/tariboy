@@ -102,7 +102,7 @@ export function HomeView({
               >
                 <span
                   aria-hidden="true"
-                  className="mt-[7px] size-1.5 shrink-0 self-start rounded-full bg-status-running sm:mt-0 sm:self-center"
+                  className="mt-1.75 size-1.5 shrink-0 self-start rounded-full bg-status-running sm:mt-0 sm:self-center"
                 />
                 <AgentLinkText name={row.name} meta={row.meta} />
               </Link>
