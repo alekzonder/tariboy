@@ -656,7 +656,7 @@ data in another way must pass a manual network check: open it with Playwright
 and `page.on("request")`, and make sure that no request goes to
 `127.0.0.1:9990` or to a relative `/api` path.
 
-`npm run fmt` formats `ui/src`, `ui/store`, `ui/tests`, and `ui/.design-sync`
+`npm run fmt` formats `ui/src`, `ui/store`, `ui/tests`, and `ui/.storybook`
 in place with [oxfmt](https://oxc.rs/docs/guide/usage/formatter) and
 `ui/.oxfmtrc.json`: double quotes, semicolons, and two-space indentation
 without tabs. Import sorting and Tailwind class sorting are off. oxfmt skips
@@ -684,8 +684,7 @@ A warning therefore fails `make frontend-check` in the same way as an error.
 The configuration turns on the complete `correctness` category, adds
 selected rules from other categories, and turns on the
 [complexity and size thresholds](#frontend-complexity-thresholds). It has
-two kinds of rule override: the test override and the `.design-sync` override.
-The next section describes them.
+one kind of rule override: the test override. The next section describes it.
 
 Fix the code before you suppress a diagnostic. If a suppression is necessary,
 put an oxlint comment on the line before the diagnostic. The comment names the
@@ -744,10 +743,6 @@ files are unit tests, Playwright tests, and the shared test code in
 Unlike `make gocyclo`, which does not measure Go test files, these limits
 measure the complexity of the frontend tests.
 
-`ui/.design-sync` is the design synchronization tool, not app code. An
-override turns off the six limits for `.design-sync/**`. The `correctness`
-rules still apply to it.
-
 `make ui-complexity-report` prints every function and file over a limit. When
 nothing is over a limit, it prints
 `No UI function or file is over a complexity or size threshold.`. It never fails on a violation, like
@@ -800,20 +795,22 @@ passes:
 1. `knip --production --include files` follows imports from the Desktop and
    Android app (`src/main.tsx`, found through `index.html`) and from the Store
    app (`store/main.tsx`, found through `vite.store.config.ts`). Tests,
-   `tests/**`, and `.design-sync/**` are not entry points in this pass. A file
-   that only a test or the design-sync bundle imports is reported as unused.
+   stories, mockups, fixtures, `src/storybook/**` and `tests/**` are not entry
+   points in this pass. A file that only a test or a story imports is
+   reported as unused.
 2. `knip` checks the complete graph: the apps, the Vitest unit tests, the
-   Playwright tests and fixtures under `tests/`, and the design-sync files
-   under `.design-sync/`. It reports every issue type: unused files, exports,
+   Playwright tests and fixtures under `tests/`, and the stories with
+   `ui/.storybook/`. It reports every issue type: unused files, exports,
    exported types, duplicate exports, unused or unlisted dependencies and
    devDependencies, and unlisted binaries. An export that a test imports is
    not reported, but an export that no file imports is.
 
 Knip finds entry points in three ways. Its Vite, Vitest, and Playwright
 plugins read every `vite*.config.ts` and `playwright.*.config.ts` file in
-`ui/`, so a new config with a name of that form needs no change. The `entry`
-list in `ui/knip.json` adds `tests/**` and `.design-sync/**`, because a
-script or an external tool loads those files by path, not by import. A new
+`ui/`, so a new config with a name of that form needs no change. Its Storybook
+plugin finds the stories. The `entry` list in `ui/knip.json` adds `tests/**`,
+because a script or an external tool loads those files by path, not by
+import. A new
 file that is loaded by path, by a glob, or by a tool outside the import graph
 must be added to `entry`. Otherwise Knip reports it as an unused file. The
 `project` list names the files that can be reported. It includes `*.css`
@@ -845,21 +842,16 @@ files (`project` excludes `src/**/*.stories.tsx`, `src/mockups/**`,
 `src/fixtures/**` and `src/storybook/**`), and the exports of
 `src/storybook/decorators.tsx` are allowed, because stories use them.
 The current exceptions are the shadcn primitives under `src/components/ui/`.
-The repository keeps that kit complete for the design-sync catalog, so its
+The repository keeps that kit complete for the Storybook catalog, so its
 unused exports and the unused `separator.tsx` and `tooltip.tsx` files are
 allowed.
 
-The design-sync catalog under `ui/.design-sync` is checked by `make check` in
-two places. `npx tsc -b` builds `ui/tsconfig.design-sync.json`, which
-type-checks `.design-sync/entry.tsx` and every preview against the real
-component props: the `tariboy-ui` import in a preview resolves to the
-generated entry. When a component's props change, update its preview in the
-same change. `src/test/designSyncCatalog.test.ts` fails when the committed
-`entry.tsx` differs from a fresh `node .design-sync/make-entry.mjs` run, when a
-`componentSrcMap` path in `config.json` names a missing file, or when a preview
-or an override has no `componentSrcMap` key. To fix the first case, run
-`node .design-sync/make-entry.mjs` from `ui/` and commit the result. For the
-other cases, correct `config.json`.
+The Storybook catalog is checked by `make check` in two places. `npx tsc -b`
+compiles the stories with the app (`ui/tsconfig.app.json` includes `src`), so
+a story is checked against the real component props. When the props of a
+component change, update its story in the same change. The `ui-storybook`
+step runs `npm run build-storybook`, which fails when a story does not
+build.
 
 #### Onboarding steps for a new feature
 
