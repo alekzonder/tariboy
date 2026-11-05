@@ -15,7 +15,7 @@ import { useNeedsYou } from "@/pages/terminals/needsYouContext";
 const NeedsYouCard = lazy(() => import("@/pages/tasks/NeedsYouCard"));
 
 const ROW_CLASS =
-  "flex w-full min-w-0 items-baseline gap-3 rounded-control px-2 py-1.5 text-left text-body-sm hover:bg-accent";
+  "grid w-full min-w-0 grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-x-3 rounded-control px-2 py-1.5 text-left text-body-sm hover:bg-accent sm:flex";
 
 function taskState(row: Extract<NeedsYouRow, { kind: "task" }>): string {
   const { task } = row;
@@ -110,7 +110,7 @@ export function NeedsYouList({
                   <span className="min-w-0 flex-1 truncate">
                     {row.kind === "task" ? row.task.title : row.letter.subject || "(no subject)"}
                   </span>
-                  <span className="shrink-0 truncate text-caption text-muted-foreground">
+                  <span className="col-start-2 min-w-0 truncate text-caption text-muted-foreground sm:max-w-1/2 sm:shrink-0">
                     {row.kind === "task" ? taskState(row) : "letter"}
                     {multiHost ? ` · ${row.hostLabel}` : ""}
                     {` · ${formatTaskTime(row.at)}`}
