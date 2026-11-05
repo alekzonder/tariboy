@@ -256,7 +256,7 @@ one owner. The full rules and the handoff format are in `docs/docs/architecture/
 | `ui/src/fixtures/<domain>.ts` | Writes and changes them | Keeps them typed against `@/types` |
 | `ui/src/mockups/<name>/handoff.md` | Writes it | Reads it, answers the open questions, and implements it |
 | `ui/src/types/` | Reads it | Owns it |
-| `ui/.storybook/`, `ui/src/storybook/` | Proposes a new decorator | Owns the configuration and the decorators |
+| `ui/.storybook/`, `ui/src/storybook/`, `ui/vite.storybook.config.ts`, `ui/scripts/story-shot.mjs` | Proposes a new decorator | Owns the configuration and the decorators |
 
 Rules for the developer:
 

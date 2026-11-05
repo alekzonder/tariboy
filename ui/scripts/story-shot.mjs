@@ -4,7 +4,7 @@
 // It serves the static Storybook build on loopback and opens the story in
 // Playwright chromium. It never reaches a daemon: Storybook has no /api proxy.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -82,8 +82,49 @@ function takeSlot(argv) {
   process.exit(run.status ?? 1);
 }
 
+// Everything main.ts and vite.storybook.config.ts read.
+const INPUT_DIRS = ["src", ".storybook"];
+const INPUT_FILES = [
+  "vite.storybook.config.ts",
+  "vite.fsAllow.ts",
+  "package.json",
+  "package-lock.json",
+  "tsconfig.json",
+  "tsconfig.app.json",
+  "tsconfig.storybook.json",
+];
+
+function* walk(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const file = path.join(dir, entry.name);
+    if (entry.isDirectory()) yield* walk(file);
+    else yield file;
+  }
+}
+
+// Returns why the build must be redone, or null when it is fresh.
+// shortcut: compares mtimes, so a file restored with an old mtime (cp -p) is missed, use --rebuild then
+export function buildIsStale(dir) {
+  const index = path.join(dir, "storybook-static", "index.json");
+  if (!existsSync(index)) return "storybook-static is missing";
+  const built = statSync(index).mtimeMs;
+  const inputs = [
+    ...INPUT_DIRS.filter((d) => existsSync(path.join(dir, d))).flatMap((d) => [
+      ...walk(path.join(dir, d)),
+    ]),
+    ...INPUT_FILES.map((f) => path.join(dir, f)).filter((f) => existsSync(f)),
+  ];
+  const newer = inputs.find((file) => statSync(file).mtimeMs > built);
+  return newer ? `storybook-static is stale: ${path.relative(dir, newer)} is newer` : null;
+}
+
 function ensureBuild(staticDir, rebuild) {
-  if (!rebuild && existsSync(path.join(staticDir, "index.json"))) return;
+  const reason = rebuild ? "rebuild requested" : buildIsStale(uiDir);
+  if (!reason) {
+    console.error("storybook-static is fresh");
+    return;
+  }
+  console.error(reason);
   const build = spawnSync(
     "npm",
     ["run", "build-storybook", "--", "--output-dir", "storybook-static", "--quiet"],
@@ -111,6 +152,18 @@ async function shoot({ id, theme, width }, staticDir) {
     if (await page.locator("body.sb-show-errordisplay").count())
       throw new Error(`story ${id} failed to render`);
     await page.evaluate(() => document.fonts.ready);
+    // Wait for finite transitions (the theme switch) so the frame is the end state.
+    // Infinite animations (a spinner) are skipped, or the wait would never end.
+    await page.evaluate(async () => {
+      const finite = document
+        .getAnimations()
+        .filter((a) => Number.isFinite(a.effect?.getComputedTiming().endTime ?? Infinity));
+      await Promise.race([
+        Promise.allSettled(finite.map((a) => a.finished)),
+        new Promise((done) => setTimeout(done, 2000)),
+      ]);
+      await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+    });
     const file = shotPath(uiDir, id, theme, width);
     mkdirSync(path.dirname(file), { recursive: true });
     await page.screenshot({ path: file, fullPage: true });

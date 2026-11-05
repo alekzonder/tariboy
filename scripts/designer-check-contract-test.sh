@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # `make designer-check` is the designer's hand-off check: type check, oxlint on
-# the files changed against origin/main, the view policy test, and the
-# Storybook build, under the host check slot. A dry run prints the recipe
+# the files changed against origin/main, the format check, the five policy
+# tests, Knip, and the Storybook build, under the host check slot. A dry run prints the recipe
 # without running it, so this test pins the steps and their order.
 repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 recipe="$(make --no-print-directory -n -C "$repo_root" designer-check)"
@@ -14,8 +14,14 @@ for part in \
   'tsc -b' \
   'merge-base origin/main' \
   'oxlint' \
+  'npm run fmt:check' \
   'TARIBOY_VITEST_MAX_WORKERS=2' \
   'viewLintPolicy.test.ts' \
+  'storybookSafety.test.ts' \
+  'storyNetwork.test.tsx' \
+  'arbitraryPxPolicy.test.ts' \
+  'textInputPolicy.test.ts' \
+  'npm run knip' \
   'build-storybook'; do
   case "$rest" in
     *"$part"*) rest="${rest#*"$part"}" ;;

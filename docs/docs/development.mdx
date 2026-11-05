@@ -619,7 +619,14 @@ The arguments are the story id, `light` or `dark`, and the width in pixels.
 The supported widths are 360, 390, 820, 1024 and 1180. The command prints the
 path of the PNG, `ui/.story-shots/<id>.<theme>.<width>.png`. The directory is
 ignored by git. The command builds `ui/storybook-static` when it has no
-`index.json`, or when you pass `--rebuild`. It exits with the list of known ids
+`index.json`, when a file the build reads (`ui/src/**`, `ui/.storybook/**`,
+`vite.storybook.config.ts`, `vite.fsAllow.ts`, `package.json`,
+`package-lock.json` and the `tsconfig*.json` files) has a newer modification
+time than `index.json`, or when you pass `--rebuild`. It prints the reason, or
+`storybook-static is fresh`, on stderr. A file restored with an old modification
+time (`cp -p`) is not seen: pass `--rebuild`. Before the shot, it waits up to
+2 seconds for finite CSS transitions to end, so a `dark` shot does not show a
+frame of the theme change. It exits with the list of known ids
 when the id does not exist. It serves the build on `127.0.0.1` with a random
 port and opens it in the Playwright Chromium of `ui/node_modules`. It waits
 for one host check slot (`flock` on `/tmp/tariboy-check.lock`), like
@@ -658,14 +665,24 @@ build takes about 10 seconds and its peak resident memory is about 0.86 GB
 `NODE_OPTIONS=--max-old-space-size=1536` in the step command.
 
 `make designer-check` is the check a designer runs before a hand-off. It is
-not part of `check`. It takes the host check slot and runs four steps to the
-end, like `frontend-check`: `ui-typecheck` (`npx tsc -b --checkers 1`),
+not part of `check`. It first runs `scripts/npm-ci-locked.sh ui` (about 30
+seconds in a new worktree), then takes the host check slot and runs six steps
+to the end, like `frontend-check`: `ui-typecheck` (`npx tsc -b --checkers 1`),
 `ui-oxlint` (oxlint on the `ui/*.ts` and `ui/*.tsx` files that differ from
-`git merge-base origin/main HEAD`, uncommitted files included), `viewLintPolicy`
-(`viewLintPolicy.test.ts` with `TARIBOY_VITEST_MAX_WORKERS=2`) and
-`ui-storybook` (the Storybook build). A step that passes prints nothing, so the
-target prints the file list of the oxlint step first
-(`oxlint files: …`); with no changed file the step passes with
+`git merge-base origin/main HEAD`, uncommitted files included),
+`ui-fmt-check` (oxfmt), `ui-designer-tests` (one Vitest run with
+`TARIBOY_VITEST_MAX_WORKERS=2` of `viewLintPolicy.test.ts`,
+`storybookSafety.test.ts`, `storyNetwork.test.tsx`,
+`arbitraryPxPolicy.test.ts` and `textInputPolicy.test.ts`), `ui-dead-code`
+(Knip) and `ui-storybook` (the Storybook build). Measured on the shared host on
+2026-11-05, Knip takes about 10 seconds and 0.4 GB of peak resident memory; the
+step stays in the target while it takes at most 90 seconds and 1.5 GB.
+
+`designer-check` does not run these `frontend-check` steps: `ui-api-types`,
+`ui-lint`, the rest of `ui-test`, `ui-branding`, `ui-bundle-budget` and `docs`.
+The developer's pull request runs them. A successful step prints only its
+result line, except that the target first prints the file list of the oxlint
+step (`oxlint files: …`); with no changed file the step passes with
 `no changed UI files`. Without `origin/main` the oxlint step fails: run
 `git fetch origin`. `scripts/designer-check-contract-test.sh`, a part of
 `smoke-contract-test`, pins the steps and their order.
