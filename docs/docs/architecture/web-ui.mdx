@@ -1216,6 +1216,202 @@ pseudo-elements, a media query for one widget, or a rule that must override
 another component. `ui/src/pages/tasks/tasks.css` lists the rules it keeps
 and gives the reason for each at its top.
 
+## Designer workflow in Storybook
+
+A designer sees and changes the UI in Storybook, not in the app. The stories
+live next to the components (`ui/src/components/**/*.stories.tsx`,
+`ui/src/pages/**/*.stories.tsx`). Shared values are in `ui/src/fixtures/`
+(`agents.ts`, `tasks.ts`, `images.ts`, `operations.ts`, `metrics.ts`, and the
+fixed clock `time.ts`). The decorators are in `ui/src/storybook/decorators.tsx`.
+`npx tsc -b` compiles the stories with the app, so a change of the props of a
+view component breaks the stories that use it until they compile.
+[Development](/docs/development#storybook) tells how to run Storybook and why
+it never reaches a daemon.
+
+### Style rules
+
+- Character. Tariboy UI is shadcn/ui on Tailwind v4, with achromatic metal
+  neutrals (hue 250, chroma at most .008), one blue accent, and Geist Variable.
+  A design reads as a control surface for dense operator tooling (agent
+  consoles, task trees, image and host tables), not as a marketing page.
+- Colors are always semantic tokens, never hex and never a Tailwind color
+  scale. So light and dark both work. A policy test enforces it.
+  - Surfaces: `bg-background`, `bg-card`, `bg-popover`, `bg-muted`,
+    `bg-accent`, `bg-secondary`.
+  - Text: `text-foreground`, `text-muted-foreground`, `text-card-foreground`,
+    `text-primary-foreground`.
+  - Emphasis: `bg-primary` with `text-primary-foreground`.
+  - Danger: `text-destructive`, `bg-destructive/10`.
+  - Lines: `border border-border`, `border-t`, `border-b`, `border-input`.
+  - Focus: `ring-ring/50`, `focus-visible:border-ring`.
+- CSS custom properties are for inline styles and for what utilities do not
+  cover: `--background`, `--foreground`, `--card`, `--popover`, `--primary`,
+  `--secondary`, `--muted`, `--accent`, `--destructive`, `--border`,
+  `--input`, `--ring`, `--radius`, each with a `-foreground` partner where it
+  carries text, plus `--sidebar*` and `--chart-1` to `--chart-5`.
+- `--background` is a window-wide gradient. `background-color` and
+  `color-mix()` drop a gradient value. In an inline `background-color` and in
+  `color-mix(…, var(--background-base))`, use `--background-base`.
+  `bg-background` resolves to it. Only the window itself paints
+  `--background`.
+- Status is a system, not a color choice. `--status-running` is in progress.
+  `--status-failed` is failed or out of budget. `--primary` is waiting on the
+  customer. `--status-queued`, `--status-done` and `--status-stopped` are
+  quiet text. A fill is only for what is alive and what needs a person:
+  `text-status-running` with `bg-status-running/13`, `text-status-failed` with
+  `bg-status-failed/12`, `text-primary` with `bg-primary/12`. Open, done and
+  cancelled get `text-muted-foreground` and no fill.
+- Elevation has two levels, never three. `--raise` is for a selected row and
+  the active segment of a segmented control. `--lift` is for the content
+  island and menus. The island is `bg-card`, `rounded-[var(--panel-radius)]`
+  and `shadow-[var(--lift)]`, and it sits on a `--background` chrome without
+  borders.
+- Typography. Body is `text-sm`. Secondary meta is `text-xs`. Headings are
+  `text-base` or `text-lg` with `font-medium` or `font-semibold`. Task keys,
+  image refs, digests, paths and terminal output are `font-mono`. Identifiers,
+  durations and timestamps are `font-mono` with `tabular-nums`, so they line
+  up down a column.
+- Controls, spacing and radius. Buttons are `h-8` (`h-7` for sm, `h-6` for
+  xs). Inputs are `h-8`. Spacing is `gap-1`, `gap-2`, `gap-3`, `p-3` and
+  `p-4`. Radius comes from `--radius: 0.625rem` through `rounded-md`,
+  `rounded-lg` and `rounded-xl`. Console surfaces are denser: rows 30px,
+  buttons 24, 26 and 28px, pills 17, 19 and 20px, radii 5, 6, 7, 8, 9, 12 and
+  14px.
+- Icons are `lucide-react`: 16px at the default control size, 14px at sm.
+  Never use emoji.
+- Dark mode is the class `.dark` on an ancestor (`<html>` in the app).
+  `ThemeProvider` sets it, and `ThemeToggle` is the titlebar control.
+  Storybook has a theme switch in its toolbar.
+- Content is realistic product content: agents `builder`, `reviewer`,
+  `packager`, `docs-bot`; images `worker:v1`, `bare:latest`; hosts
+  `This daemon (local)` and `build-01`; task keys such as `TB-142`.
+- Where the truth is. The tokens are in `ui/src/index.css`. The API of a
+  component is its props type in its source file.
+- Storybook compiles `src/index.css` with Tailwind over the same `src`
+  sources, so every utility works in a story. An inline style with
+  `var(--token)` is only for what utilities do not cover.
+
+An idiomatic example:
+
+```jsx
+<Card size="sm">
+  <CardHeader>
+    <CardTitle>worker:v2</CardTitle>
+    <CardDescription>Built 2026-09-11 · sha256:9ac71e3f52</CardDescription>
+    <CardAction>
+      <Badge variant="secondary">Pending</Badge>
+    </CardAction>
+  </CardHeader>
+  <CardContent>
+    <div className="flex items-center justify-between gap-2 text-sm">
+      <span className="font-mono text-muted-foreground">builder</span>
+      <div className="flex gap-2">
+        <Button size="sm" variant="outline">
+          Export
+        </Button>
+        <Button size="sm" variant="destructive">
+          Remove
+        </Button>
+      </div>
+    </div>
+  </CardContent>
+</Card>
+```
+
+### Work rules
+
+- Work only in the designer paths: the view files, the stories, the mockups
+  under `ui/src/mockups/`, the fixtures, `ui/src/index.css` and the primitives
+  in `ui/src/components/ui/`.
+- Never import `@/lib/api` or `@tanstack/react-query`, and never call `fetch`,
+  in view files, stories, mockups and fixtures. A later stage adds a lint rule
+  for this. The other designer paths have no data access to forbid.
+- Take types from `@/types`. A view takes the narrowest type it needs:
+  `Pick<…>` or its own `XProps`.
+- A component without a view file: copy its markup into a local view part
+  `ui/src/mockups/<page>/<Name>.view.tsx` (or
+  `ui/src/mockups/<component>/<Name>.view.tsx`), change it there, show it in
+  the mockup story, and ask in `handoff.md` to split the component. Do not edit
+  the container.
+- A change of a token or a primitive variant lists every affected story in
+  `## Tokens and styles` of the handoff. Check those stories in both themes.
+- See a story. Run
+  `cd ui && npm run story:shot -- <story-id> <light|dark> <width>`. The command
+  builds `storybook-static` when there is no build (or with `--rebuild`),
+  serves it on a loopback port, and writes a PNG of
+  `iframe.html?id=<story-id>&viewMode=story&globals=theme:<theme>`. It prints
+  the path of the PNG, `ui/.story-shots/<story-id>.<theme>.<width>.png`. Check
+  each changed story in `light` and `dark`, at the smallest supported width
+  (360 px) and at 1024 px. The story id is in the URL of the story and in
+  `storybook-static/index.json`.
+- Hand off a change:
+  1. Work in a branch of your own worktree.
+  2. Before you hand off, run `npx tsc -b` and `npm run lint` in `ui/`. A later
+     stage adds `make designer-check`, which runs the type check, oxlint on
+     the files changed against `origin/main`, the view policy test and
+     `build-storybook` under the host check slot.
+  3. Give the branch and `handoff.md` to the developer through the lead's
+     queue. The developer opens the pull request.
+- Propose a new prop in `handoff.md`. Do not add it to a container.
+
+### Component notes
+
+- `Tooltip` needs `TooltipProvider`. The global decorator gives it, so a story
+  does not add its own.
+- A component that reads `useParams()` needs a matched route. Set
+  `parameters: { tariboy: { route: { path, pattern } } }` on the story.
+  `MemoryRouter` is global, so other components need nothing.
+- `AgentNameContext` and `AgentStatusContext` come from their source modules.
+  A story that needs them wraps its content in the provider.
+- Radix `open` and `defaultOpen` render overlay content in the story.
+  `defaultOpen` works on Dialog, AlertDialog, Sheet, DropdownMenu and
+  Collapsible. `ContextMenu` has no `open`: open it with a real `contextmenu`
+  event from a mount effect.
+- Overlays need real content behind them, or the backdrop covers an empty
+  canvas.
+- Small components need a size. Input and Textarea need a labelled field
+  320 to 460px wide. Badge needs a flex row. A vertical `Separator` needs an
+  explicit height. `ScrollArea` needs a fixed height with content that
+  overflows.
+- `Switch` uses `defaultChecked`. `checked` without `onCheckedChange` makes
+  Radix warn.
+- `CommandList` is `max-h-64`: keep a palette to about 5 items. `CommandEmpty`
+  renders with `shouldFilter={false}`.
+- Many components that look self-fetching have injection seams.
+  `ShellScriptEditor` takes `load` and `save`. `FileBrowser` takes a
+  `FileBrowserApi`. `TuiScreen` takes a `controller`. `PathAutocomplete` is
+  controlled. Read the props type first. Two seams are missing. They are
+  requests to the developer, not changes of the design: `UpdateBanner` needs an
+  exported context or a snapshot prop, and `IterationAuditLog` needs an
+  optional `events` prop.
+- A component that takes its color from data needs that data, or the story
+  shows the wrong color. `.agent-header` reads `--agent-hue`, and without it
+  the strip is pink.
+- `Button variant="destructive"` is soft (`bg-destructive/10
+  text-destructive`) on purpose.
+- Drive a state that has no prop through the DOM. `.click()` opens Radix
+  Dialog, AlertDialog, Sheet and Collapsible. Radix `Select` needs a
+  `pointerdown` PointerEvent. Inputs take the native value setter and a
+  bubbling `input` event.
+- Two components cannot have a meaningful static story. `UpdateBanner` renders
+  only after a Tauri update snapshot. `CustomerQuestionNotifications` is
+  headless, and it never goes into a story because it opens a tasks websocket.
+  `IterationAuditLog` shows only "No events." without a daemon.
+- A page story without a daemon shows the genuine empty or error state. That
+  is real content, not a placeholder.
+- `Separator`, `SheetFooter`, `AlertDialogMedia`, `DropdownMenuLabel`,
+  `DropdownMenuSeparator` and `AlertDialogContent size="sm"` are not used in
+  the app. Their stories are plausible compositions. Re-ground them when real
+  usage appears.
+- Typing into a field that your own click revealed needs two timer ticks
+  (about 120 ms for the click, 260 ms for the typing).
+- A host without an emoji font shows emoji in component source (the
+  `ProxyCallRow` markers) as empty boxes in a `story:shot` screenshot. This is
+  a screenshot artifact, not a bug of the component.
+- Open product findings, not changed by this work: `FileBrowser` uses `prose`
+  classes without `@tailwindcss/typography`, and the `--agent-hue` fallback of
+  `.agent-header` is pink, not neutral.
+
 ## WebView storage
 
 `ui/src/lib/storage.ts` owns all access to `localStorage` and `sessionStorage`
