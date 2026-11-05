@@ -206,7 +206,7 @@ Done when: the fixture test passes, the guard test passed before its deletion, `
 ### Task 7: oxlint override and the color policy test
 
 **Files:**
-- Modify: `ui/.oxlintrc.json` (the override of spec section 3.1, final configuration), `ui/src/test/lintPolicy.test.ts` (expected overrides `[testOverride, viewLayerOverride]`, test name "overrides rules only for test files and the view layer"), `docs/docs/development.mdx` (line 625 paragraph: two override kinds), the stories, mockups and fixtures that violate a rule
+- Modify: `ui/.oxlintrc.json` (the override of spec section 3.1, final configuration), `ui/src/test/lintPolicy.test.ts` (expected overrides `[testOverride, viewLayerOverride]`, test name "overrides rules only for test files and the view layer"), `docs/docs/development.mdx` (line 625 paragraph: two override kinds), `docs/docs/architecture/web-ui.mdx` (view-layer rules name their checks), the stories, mockups and fixtures that violate a rule
 - Rename: `ui/src/components/AgentRow.tsx` → `ui/src/components/AgentRow.view.tsx` (and its importers)
 - Create: `ui/src/test/viewLintPolicy.test.ts`
 
