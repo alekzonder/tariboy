@@ -28,6 +28,31 @@ const testOverride = {
   files: ["**/*.test.{ts,tsx}", "**/*.pw.ts", "src/test/**", "tests/**"],
   rules: { "max-lines": "off", "max-lines-per-function": "off" },
 };
+// Spec 3.1: view files, stories, mockups and fixtures get no data access.
+const viewLayerOverride = {
+  files: ["src/**/*.view.tsx", "src/**/*.stories.tsx", "src/mockups/**", "src/fixtures/**"],
+  rules: {
+    "no-restricted-imports": [
+      "error",
+      {
+        paths: [{ name: "@tanstack/react-query", message: "view layer: no data fetching" }],
+        patterns: [
+          {
+            group: ["**/lib/api", "**/lib/api/*", "@tanstack/react-query/*"],
+            message: "view layer: props in, JSX out; types from @/types",
+          },
+        ],
+      },
+    ],
+    "no-restricted-globals": ["error", { name: "fetch", message: "view layer: no network calls" }],
+    "no-restricted-properties": [
+      "error",
+      { object: "window", property: "fetch" },
+      { object: "globalThis", property: "fetch" },
+      { object: "self", property: "fetch" },
+    ],
+  },
+};
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -50,9 +75,9 @@ it("turns on the complexity and size thresholds as errors", () => {
     expect(config.rules[rule]).toEqual(setting);
 });
 
-it("overrides rules only for test files", () => {
+it("overrides rules only for test files and the view layer", () => {
   const overrides = (config.overrides ?? []).filter((override) => override.rules);
-  expect(overrides).toEqual([testOverride]);
+  expect(overrides).toEqual([testOverride, viewLayerOverride]);
 });
 
 it("suppresses only with an oxlint comment that names the rule and a reason", () => {

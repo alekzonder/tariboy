@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { withSurface } from "@/storybook/decorators";
 import { NOW, minutesAgo } from "@/fixtures/time";
-import { AgentRow } from "./AgentRow";
+import { AgentRow } from "./AgentRow.view";
 
 // AgentRow is a sidebar row: at rest it has no background of its own (only a
 // hover), so every cell sits on the sidebar surface it is designed against.

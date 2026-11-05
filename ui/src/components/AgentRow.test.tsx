@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { AgentState } from "@/lib/agentState";
-import { AgentRow } from "./AgentRow";
+import { AgentRow } from "./AgentRow.view";
 
 const now = new Date("2026-10-30T12:30:00Z");
 

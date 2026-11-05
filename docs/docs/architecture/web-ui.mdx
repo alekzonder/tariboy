@@ -1436,7 +1436,7 @@ its area, name, version, parser, and fallback value. Other modules call
 test `ui/src/test/webStoragePolicy.test.ts` fails when production code under
 `ui/src` or `ui/store` uses `localStorage`, `sessionStorage`, or
 `window.dispatchEvent` directly. It scans the sources because the lint policy
-allows no per-file oxlint overrides. Tests and fixtures still seed raw values,
+has no rule for it. Tests and fixtures still seed raw values,
 so they detect a change of a stored format.
 
 Storage access is best effort. A missing value, a value the parser rejects,

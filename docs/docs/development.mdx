@@ -692,7 +692,19 @@ A warning therefore fails `make frontend-check` in the same way as an error.
 The configuration turns on the complete `correctness` category, adds
 selected rules from other categories, and turns on the
 [complexity and size thresholds](#frontend-complexity-thresholds). It has
-one kind of rule override: the test override. The next section describes it.
+two kinds of rule override: the test override, which the next section
+describes, and the view-layer override. The view-layer override applies to
+`src/**/*.view.tsx`, `src/**/*.stories.tsx`, `src/mockups/**` and
+`src/fixtures/**`. It forbids every import from `@/lib/api` (also
+`import type` and `export … from`, and the relative path), every import from
+`@tanstack/react-query`, and `fetch`, `window.fetch`, `globalThis.fetch` and
+`self.fetch`. Types come from `@/types`. oxlint has no rule for colors, so
+`ui/src/test/viewLintPolicy.test.ts` searches the `.ts` and `.tsx` files of
+the same globs for hex colors and Tailwind palette classes (`bg-red-500`,
+`border-[#fff]`, `var(--color-zinc-950)`), and fails with a list of
+`file:line: match`. Use semantic tokens (`bg-card`, `text-muted-foreground`).
+The test also runs oxlint on files that break each rule, so a rename of a glob
+or an oxlint update cannot turn the override off unnoticed.
 
 Fix the code before you suppress a diagnostic. If a suppression is necessary,
 put an oxlint comment on the line before the diagnostic. The comment names the
@@ -705,7 +717,7 @@ rule and gives the reason after `--`:
 A generated file can use one file-level `/* oxlint-disable RULE -- reason */`
 comment. Do not use `eslint-disable` comments. `ui/src/test/lintPolicy.test.ts`
 fails on an `eslint-disable` comment, on an oxlint comment without a rule or a
-reason, and on a rule override of another kind. Turn off a `correctness` rule
+reason, and on a rule override of a third kind. Turn off a `correctness` rule
 for the complete project only when the rule does not apply to the project, and
 write the reason in this guide.
 

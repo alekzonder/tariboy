@@ -5,7 +5,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { AgentRow } from "@/components/AgentRow";
+import { AgentRow } from "@/components/AgentRow.view";
 import { deriveAgentState, type AgentNeeds } from "@/lib/agentState";
 import { TOUR_ANCHORS } from "@/lib/onboarding/tour";
 import { cn } from "@/lib/utils";
