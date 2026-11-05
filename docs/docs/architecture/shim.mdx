@@ -119,6 +119,17 @@ unreadable status becomes unknown failure (`-1`), never success. Timeout and
 explicit termination reasons still take precedence. The status file is not in
 the support-bundle allowlist.
 
+A second hidden mode, `tariboy-shim __script-run -- ARGV`, owns one script
+run. The daemon starts it as the leader of a new process group, with the run
+log as stdout and stderr and the locked run state file as fd 3. The wrapper
+sets close-on-exec on fd 3, so the script cannot hold the lock. It catches
+`SIGTERM`, `SIGINT`, and `SIGHUP` and does not act on them. A signal to the
+group ends the script, and the wrapper still records how the script ended. It
+runs ARGV with stdin from `/dev/null`, waits for it, and writes `exit_code`,
+`signal`, or `start_error` as JSON to the state file. Then it exits and the
+lock is released. The wrapper does not depend on the daemon, so a run outlives
+a daemon restart. See [Restart handoff](/docs/architecture/state-model#restart-handoff).
+
 The tmux session wraps the harness's native interactive command, not its batch
 renderer. In particular, interactive Codex agents run the top-level Codex TUI
 with stdin attached, while non-interactive Codex iterations continue to use

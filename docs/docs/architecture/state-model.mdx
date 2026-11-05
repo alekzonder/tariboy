@@ -742,6 +742,31 @@ same restart, so harness retries reconnect after the short listener outage.
 If the old shim is no longer reachable, adoption is the component that
 terminally classifies the stale row as `harness_error`.
 
+Script runs follow the same handoff. The daemon starts each run as
+`tariboy-shim __script-run -- ARGV`. This wrapper leads the run's process
+group, and its pid is `script_runs.pid`. The daemon creates the state file
+`agents/NAME/scripts/RUN.state` next to the run log, takes an exclusive
+`flock` on it, and passes it to the wrapper as fd 3. The lock stays with the
+wrapper until it exits. When the script ends, the wrapper writes its result to
+the file as JSON: `exit_code`, `signal`, or `start_error`. The supervisor
+decides how a run ended from this file, not from `wait`. A held lock means the
+run is alive. A free lock with a result means the run ended with that result.
+A free lock without a result, or no file, means the process is lost. The pid
+takes no part, so a reused pid never looks like a live run. Later daemon
+versions read this file, so its fields are added but never renamed.
+
+`daemonctl.Restart` creates the marker file `daemon-handoff` in the runtime
+directory before it stops the daemon, and removes it when the stop fails.
+`tariboy update` and `tariboy daemon restart` use `daemonctl.Restart`.
+`tariboy daemon stop` creates no marker. A daemon that stops with the marker
+leaves its script runs `running`. Without the marker, the stop sends `SIGTERM`
+to each run's group, `SIGKILL` after two seconds, and records `interrupted`.
+The next daemon removes the marker at start. Before it recovers stale runs, it
+adopts each `running` run whose wrapper is alive or has written a result. Its
+timeout counts from `started_at`, and a pending cancellation request is applied
+again. Recovery records every other `running` run as `interrupted`, or as
+`cancelled` after a cancellation request.
+
 :::danger[This is why test daemons must be isolated]
 Two daemons pointed at the same base dir share the same DB and loop managers and
 will double-run each other's agents — double-executed iterations and reaped
