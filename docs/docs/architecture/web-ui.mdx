@@ -1046,11 +1046,23 @@ generates it from the committed snapshot
 for the workflow after an API change.
 
 Each schema is a top-level type with the Go type's name, such as `AgentRow`
-or `TaskDetail`. A domain module re-exports the types that its callers need,
-for example `export type { AgentRow, AgentView } from "../api-types.generated"`,
-and components import them from `@/lib/api`. `Comment` and `Event` would
-shadow DOM globals, so `tasks.ts` re-exports them as `TaskComment` and
-`TaskEvent`. Where the spec has a plain
+or `TaskDetail`. The directory `ui/src/types/` holds the types. It has one
+file for each domain, such as `agents.ts` and `tasks.ts`. A domain file
+re-exports the types of that domain from the generated file and holds the
+hand-written types listed below. `ui/src/types/index.ts` re-exports every
+domain file with `export type * from "./<domain>"`.
+
+Components, stories, fixtures and new code import types from `@/types`, or
+from `@/types/<domain>`. A file in `ui/src/types/` has types only and no
+runtime code, so a story can import a response type without loading the API
+client. `ui/src/test/typesOnly.test.ts` fails when a file there compiles to
+JavaScript. A domain module in `ui/src/lib/api/` re-exports the types of its
+domain from `@/types/<domain>`, so older imports from `@/lib/api` still work.
+The API client types (`ApiError`, `ApiClient`, `ApiTarget`, `Transport`) and
+the narrowing functions stay in `ui/src/lib/api/`.
+
+`Comment` and `Event` would shadow DOM globals, so `types/tasks.ts`
+re-exports them as `TaskComment` and `TaskEvent`. Where the spec has a plain
 string and the UI needs a union, the module narrows it at one place, such as
 `taskPriority(task)`.
 
@@ -1344,7 +1356,8 @@ An idiomatic example:
   the path of the PNG, `ui/.story-shots/<story-id>.<theme>.<width>.png`. Check
   each changed story in `light` and `dark`, at the smallest supported width
   (360 px) and at 1024 px. The story id is the title and the story name in
-  kebab case, joined by `--`: `mockups-home--width360`. All ids are in
+  kebab case, joined by `--`: `mockups-home--width-360` (Storybook puts a hyphen before the digits of the
+  export name `Width360`). All ids are in
   `storybook-static/index.json`.
 - Build stories from the fixture factories:
   `agentRow({ name: "builder", state: "running" })`. Take dates from `NOW` and
@@ -1368,6 +1381,120 @@ An idiomatic example:
   3. Give the branch and `handoff.md` to the developer through the lead's
      queue. The developer opens the pull request.
 - Propose a new prop in `handoff.md`. Do not add it to a container.
+
+### Roles
+
+Each path has one owner. A designer change touches only the designer column.
+A developer change that breaks a story fixes the story in the same commit.
+
+| Paths | Designer | Developer |
+| --- | --- | --- |
+| `ui/src/index.css`, `ui/src/components/ui/*.tsx` | Owns colors, radii, density, shadows and the `cva()` variants | Changes only accessibility and behavior, after agreement with the designer |
+| `ui/src/**/*.view.tsx` | Owns markup and styles. Proposes a new prop in `handoff.md` | Owns the props type. Connects the view to data in a container |
+| Other `ui/src/components/**/*.tsx` and `ui/src/pages/**/*.tsx` | Does not change them. Copies the markup into a local view part of a mockup | Owns data hooks, `@/lib/api`, react-query, router hooks, state and handlers |
+| `ui/src/mockups/<name>/` | Builds the mockup stories and the local view parts | Moves the change into the real component or page |
+| `ui/src/**/*.stories.tsx` | Writes and changes them | Changes a story only when a props change breaks it, and tells the designer on the task of the change |
+| `ui/src/fixtures/<domain>.ts` | Writes and changes them | Keeps them typed against `@/types` |
+| `ui/src/mockups/<name>/handoff.md` | Writes it | Reads it, answers the open questions, and implements it |
+| `ui/src/types/` | Reads it | Owns it |
+| `ui/.storybook/`, `ui/src/storybook/`, `ui/vite.storybook.config.ts`, `ui/scripts/story-shot.mjs` | Proposes a new decorator | Owns the configuration and the decorators |
+
+A view file is a file named `*.view.tsx`. A container is every other file
+under `ui/src/components/` and `ui/src/pages/`. `viewLintPolicy.test.ts` and
+`npm run lint` keep data access out of view files.
+
+The developer follows these rules:
+
+- Own the props type of every view file. A change of a props type changes the
+  stories in the same commit, and `npx tsc -b` fails until they compile.
+- Keep data hooks, `@/lib/api`, react-query, router hooks, state and handlers
+  in containers and pages. A view takes props and callbacks and returns JSX.
+- Import types from `@/types` in new code.
+- Move a component to the view layer one component at a time. Split data and
+  markup, rename the markup file to `*.view.tsx`, and add or move its story.
+- Change the primitives in `ui/src/components/ui/` only for accessibility and
+  behavior, and tell the designer.
+- To implement a handoff, open the pull request from the designer's branch.
+  Write the answer to each open question under it in `handoff.md`, add the
+  first line `Implemented in #<PR>`, and keep the final type in the view file.
+  If the handoff asks to split a component, split it and move the local view
+  part of the mockup into the new view file.
+- When a props change breaks a story, fix the story in the same commit and
+  tell the designer on the task of the change.
+- Keep the Storybook setup and its checks (`ui-storybook`,
+  `make designer-check`) green.
+
+After the implementation, the mockup stays while it compiles. The developer
+deletes the mockup directory, `handoff.md` included, when the story of the real
+page or component shows the same states. Git history keeps the handoff.
+
+### Fixtures
+
+- A fixture file `ui/src/fixtures/<domain>.ts` is typed with `@/types` and is
+  a complete response value, as the rule in [API types](#api-types) says.
+- Each file exports a factory `<entity>(over: Partial<T> = {}): T` with
+  complete defaults, such as `agentRow`, `taskItem`, `imageSummary`,
+  `operation` and `metricsReport`. A story writes only the fields that matter.
+- Each domain also exports a set of edge states: `empty`, `one`, `many` (50
+  items) and `longText` (long names and texts, for truncation and wrapping),
+  such as `agentRows.many` and `taskItems.longText`.
+- All dates come from `NOW` in `ui/src/fixtures/time.ts`, or from `minutesAgo()`
+  and `hoursAgo()`, which count back from it. A story passes `NOW` as `now` to
+  a component that takes one, so "5 min ago" is the same on each run and in
+  each screenshot.
+- A value that only one story uses stays in that story file.
+- `ui/src/test/fixtures/apiFixtures.ts` re-exports the factories that stories
+  use, so tests keep their imports. A fixture never imports that file, because
+  it is test code.
+
+### Handoff format
+
+A `handoff.md` has these sections, in this order. It is in the language of the
+designer's request, and the interface texts in it are in English.
+
+1. `# Handoff: <page or component>`, then one line with the date, the key of
+   the design task and the story ids, such as `mockups-home--width-1024`.
+2. `## What changed`: each visible change with the story that shows it.
+3. `## New props`: a table with the columns Component, Prop, Type, Meaning and
+   Source of data. The type uses `@/types` names or a narrow type such as
+   `Pick<AgentRow, "name" | "state">`. The source names the API call or the
+   state, or says "unknown". The designer only proposes a prop. The developer
+   owns the final type.
+4. `## Changed and removed props`: the same table for a prop whose type or
+   meaning changes, and for a removed prop.
+5. `## States`: each state with its story id (empty, loading, error, long
+   text, many items).
+6. `## Behavior`: what happens on click, keyboard, hover and focus. Name a
+   change of behavior as a change.
+7. `## Texts`: every interface text that the stories do not show, such as API
+   errors, toasts, `aria-label` values and tooltips.
+8. `## Accessibility`: labels, focus order, focus return after a dialog
+   closes, how an error is announced, and the contrast of new token pairs.
+9. `## Layout at widths`: the layout at each supported width, at least at 360
+   px, each with the story or the `story:shot` width that shows it.
+10. `## Tokens and styles`: new or changed tokens in `ui/src/index.css` and
+    changed `cva()` variants. List every affected story.
+11. `## Acceptance criteria`: numbered criteria that the developer and the
+    reviewer check one by one.
+12. `## Open questions`: questions for the developer.
+
+The reference example is `ui/src/mockups/home/handoff.md`.
+
+### Safety
+
+Storybook never reaches a daemon, so a story is safe to open.
+
+- Storybook reads `ui/vite.storybook.config.ts`, which has no `/api` proxy.
+- A story that needs a host registry sets `parameters.tariboy = { daemon: true }`.
+  The `withDaemon` decorator then uses one host on `http://storybook.invalid`,
+  a name that never resolves.
+- Never import `CustomerQuestionNotifications` in a story or a mockup. It
+  opens a tasks WebSocket. `storybookSafety.test.ts` fails on it.
+- `storyNetwork.test.tsx` fails when a story requests any URL outside
+  `storybook.invalid`.
+
+[Development](/docs/development#storybook) describes the four layers and the
+tests that pin them.
 
 ### Component notes
 
