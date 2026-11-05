@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { ApiError, type Task, type TaskMetrics } from "@/lib/api";
 import { apiWrapper, fakeApi } from "@/test/api";
 import { taskItem, taskMetrics } from "@/test/fixtures/apiFixtures";
+import { hoursAgo } from "@/fixtures/time";
 import { TaskMetricsSection } from "./TaskMetricsSection";
 
 type Answer = TaskMetrics | Error | (() => Promise<TaskMetrics>);
@@ -91,8 +92,8 @@ describe("TaskMetricsSection", () => {
     );
     expect(field("Rejected advances")).toHaveTextContent("1");
     expect(field("Questions to customer")).toHaveTextContent("3");
-    expect(field("Started")).toHaveTextContent(new Date("2026-10-30T09:00:00Z").toLocaleString());
-    expect(field("Completed")).toHaveTextContent(new Date("2026-10-31T09:00:00Z").toLocaleString());
+    expect(field("Started")).toHaveTextContent(new Date(hoursAgo(48)).toLocaleString());
+    expect(field("Completed")).toHaveTextContent(new Date(hoursAgo(24)).toLocaleString());
   });
 
   it("says Not done yet for the lead time of an open task", async () => {
