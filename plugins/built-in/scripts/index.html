@@ -104,16 +104,39 @@ that reports that code as <code>111</code>; the definition then shows the wrappe
 Schedules created before this change were rewritten the same way when the
 daemon was upgraded.</p>
 <h2 id="restart-and-lifecycle"><a class="blume-heading-anchor" href="#restart-and-lifecycle">Restart and lifecycle</a></h2>
-<p>Pending runs remain claimable after restart. A run that was already running is
-recorded as <code>interrupted</code> and is not blindly repeated, because the command may
-have completed an external side effect before the daemon lost process state.
-Recovery publishes that interrupted result, so a recurring definition stops
-after it exactly as it does after any other published result; an interrupted
-one-shot becomes completed as well. Both are resumed explicitly with <code>rerun</code>.</p>
+<p>Pending runs remain claimable after restart.</p>
+<p>A run that is running keeps running when the daemon is restarted with
+<code>tariboy update</code> or <code>tariboy daemon restart</code>. The run’s process does not
+belong to the daemon. The daemon starts it through a small wrapper,
+<code>tariboy-shim __script-run</code>, that writes the exit code of the command to a
+state file next to the run log. The new daemon finds the run, waits for its
+end, and publishes <code>script.result</code> with the original exit code and status
+<code>succeeded</code> or <code>failed</code>. The log continues in the same file. The timeout
+counts from the original start of the run, and <code>cancel</code> works as before. A run
+that was <code>cancelling</code> before the restart is stopped by the new daemon and
+becomes <code>cancelled</code>.</p>
+<p>In these cases the run becomes <code>interrupted</code>:</p>
+<ul>
+<li><code>tariboy daemon stop</code> stops the daemon. A plain stop ends every running run
+with <code>SIGTERM</code>, and <code>SIGKILL</code> two seconds later.</li>
+<li>The run’s process is gone without an exit code at the next daemon start, for
+example after a host reboot.</li>
+<li>The run was started by a daemon version without the wrapper.</li>
+</ul>
+<p>The new daemon publishes these results when it starts. An interrupted run is
+not repeated, because the command may have completed an external side effect
+before it stopped. A recurring definition stops after the interrupted result,
+as it does after any other published result. An interrupted one-shot becomes
+completed as well. You resume both with <code>rerun</code>.</p>
+<p>If the daemon stops without the stop sequence, for example after a crash, the
+run continues. The next daemon finds it and publishes its real exit code. A
+restart from the Desktop app is a plain stop and start, so its runs become
+<code>interrupted</code>.</p>
 <p>Cancellation is durable and idempotent. A running attempt is shown as
 <code>cancelling</code> until its process group actually exits, and it continues to occupy
 the script’s active slot during that window. A daemon restart preserves the
-request and recovers that attempt as <code>cancelled</code>, not <code>interrupted</code>.</p>
+request. If the process is gone at the restart, the attempt becomes
+<code>cancelled</code>, not <code>interrupted</code>.</p>
 <p>Removing an active definition, or one whose cancelled process has not exited
 yet, returns <code>409 script_active</code>; cancel it first and wait for its run to become
 terminal.

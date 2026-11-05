@@ -476,6 +476,11 @@ for the detailed scheduler and watchdog behavior.</p>
 <td>Inspect agent/iteration state and audit; never start a second daemon against the same base directory.</td>
 </tr>
 <tr>
+<td>Daemon restart during a script run</td>
+<td><code>tariboy update</code> and <code>tariboy daemon restart</code> leave the run running, and the replacement daemon publishes its original exit code. <code>tariboy daemon stop</code>, or a process lost at restart, records <code>interrupted</code>.</td>
+<td>Inspect the run with <code>script runs</code> and its log; rerun an interrupted run explicitly.</td>
+</tr>
+<tr>
 <td>Harness timeout or error</td>
 <td>The shim records a terminal outcome; loop policy may restart or stop future work. Open letters render again.</td>
 <td>Review result, shim logs, audit, and agent loop policy.</td>

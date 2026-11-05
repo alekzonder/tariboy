@@ -739,6 +739,7 @@ flowchart LR
 | Condition | Automatic behavior | Evidence or operator action |
 | --- | --- | --- |
 | Daemon restart during a live shim | Replacement daemon adopts persisted running iterations and proxy handoff leases. It reaps a tmux session only when no live iteration owns it. | Inspect agent/iteration state and audit; never start a second daemon against the same base directory. |
+| Daemon restart during a script run | `tariboy update` and `tariboy daemon restart` leave the run running, and the replacement daemon publishes its original exit code. `tariboy daemon stop`, or a process lost at restart, records `interrupted`. | Inspect the run with `script runs` and its log; rerun an interrupted run explicitly. |
 | Harness timeout or error | The shim records a terminal outcome; loop policy may restart or stop future work. Open letters render again. | Review result, shim logs, audit, and agent loop policy. |
 | Plugin failure | The host health-checks and restarts enabled plugins; open letters to a plugin are delivered again. | Inspect plugin status/logs; never place upstream AI credentials in plugin configuration. |
 | Model-price refresh failure | The proxy keeps the last valid runtime generation, or built-in fallbacks when none has loaded. The next daily check retries. | Inspect `pricing_catalog_error` daemon logs/events; fields are bounded to source, generation time, model count, and a stable error class. |
@@ -1260,6 +1261,16 @@ The loop is driven three ways, all requiring the agent to be **enabled**:
 - **Message** — a letter sent to the agent nudges the loop to start an
   iteration now (only while the agent's inbox holds open letters).
 
+A message iteration can end with an error (`harness_error`, or a launch that
+failed). Open letters then stay open. If the agent still has open letters and
+`on_error` is not `stop`, the loop starts a new message iteration after a
+delay. The first delay is 30 seconds. Each further error doubles the delay, up
+to 10 minutes. An iteration that does not fail resets the delay to 30 seconds.
+Each iteration shows a letter again and counts one more attempt. The prompt
+shows a letter at most five times. The next iteration marks it as a dead
+letter. With a lasting failure, this happens about 15.5 minutes after the
+first attempt. A new letter does not shorten a delay that is already running.
+
 Loop policy is per-agent: `interval`, `timeout` (soft), `hard-timeout`,
 `on_timeout` and `on_error` (e.g. `restart`). An iteration ends when it signals
 completion, exits, or reaches an enforced deadline. A `timeout` or
@@ -1741,7 +1752,7 @@ facade over these parts:
 | Part | Owns |
 | --- | --- |
 | Agent runtimes (`runtimes.go`) | The in-memory registry: running engines, tools servers bound before an engine starts, iterations being adopted, a Restart pending after adoption, and stale-kill markers. It also holds each agent's lifecycle gate and handoff lock. |
-| Script supervisor (`scripts.go`) | Durable script runs: claim, start as the agent, cancel, and record the result. |
+| Script supervisor (`scripts.go`) | Durable script runs: claim, start as the agent through the `tariboy-shim __script-run` wrapper, cancel, time out, and record the result from the run's state file. At start it adopts the runs that a restart handed over (see [Restart handoff](/docs/architecture/state-model#restart-handoff)). |
 | Tools facade (`tools_facade.go`) | The per-agent tools socket API. It reaches the manager only through narrow interfaces, so the API does not depend on a loop engine. |
 | Image activation (`image_activation.go`) | Pending image activation, the Reprovision swap, the skill bridge, and crash recovery of an interrupted swap. |
 | Iteration watcher (`iteration_watcher.go`) | The one polling loop that waits for `result.json`. It resyncs the hard deadline, enforces the soft deadline and the done grace with at most one Kill, and, for adoption, probes the shim. For a shim the runner launched, it also ends the wait when the reaped shim process left no `result.json`, which the runner records as `harness_error`. The runner and adoption both use it. |
@@ -2395,6 +2406,20 @@ private logs directory. It then reports the exit to the outer shim with the
 to the harness window, and the supervisor removes it from the harness
 environment. The report is best-effort and bounded to one second.
 
+The socket path belongs to the agent, not to one iteration. A supervisor can
+outlive its shim: the shim writes `result.json` and exits, and the daemon
+starts the next iteration on the same socket. The old supervisor then reports
+to the new shim. For this reason, each shim run creates a random token of 16
+bytes and gives it to its own harness window in
+`TARIBOY_SHIM_SUPERVISOR_TOKEN`, next to the socket path. The supervisor
+removes the token from the harness environment and sends it with
+`harness_started` and `harness_exited`. The shim accepts a report only with its
+own token. It rejects any other report with an error and writes
+`WARN ignore harness_exited from another supervisor` (or `harness_started`) to
+`shim.log`. A supervisor from an older shim build sends no token, so the new
+shim rejects its reports. The shim then ends its wait with the `has-session`
+fallback.
+
 The outer shim waits for the first of three events: the supervisor's exit
 report, its own cancellation, or a fallback `tmux has-session` check every ten
 seconds that finds the session gone. The fallback covers a session killed from
@@ -2412,6 +2437,17 @@ writing `result.json`. A non-zero harness status is preserved; a missing, malfor
 unreadable status becomes unknown failure (`-1`), never success. Timeout and
 explicit termination reasons still take precedence. The status file is not in
 the support-bundle allowlist.
+
+A second hidden mode, `tariboy-shim __script-run -- ARGV`, owns one script
+run. The daemon starts it as the leader of a new process group, with the run
+log as stdout and stderr and the locked run state file as fd 3. The wrapper
+sets close-on-exec on fd 3, so the script cannot hold the lock. It catches
+`SIGTERM`, `SIGINT`, and `SIGHUP` and does not act on them. A signal to the
+group ends the script, and the wrapper still records how the script ended. It
+runs ARGV with stdin from `/dev/null`, waits for it, and writes `exit_code`,
+`signal`, or `start_error` as JSON to the state file. Then it exits and the
+lock is released. The wrapper does not depend on the daemon, so a run outlives
+a daemon restart. See [Restart handoff](/docs/architecture/state-model#restart-handoff).
 
 The tmux session wraps the harness's native interactive command, not its batch
 renderer. In particular, interactive Codex agents run the top-level Codex TUI
@@ -2811,9 +2847,15 @@ form is a name without a number.
 
 The choice happens at read time and changes no row. The SQL condition is
 `assessment.IsLatest`. It checks each row against the other rows of its
-object through `idx_assessments_iteration` or `idx_assessments_task`. On a
-test database with 10,000 assessments, `assessment ls` takes about 10 ms.
-The assessment step of a metrics report over 1,000 tasks takes about 250 ms.
+object. An iteration row uses `idx_assessments_iteration_created`
+(`iteration_id`, `created_at`). A task row uses
+`idx_assessments_task_iteration_created` (`task_key`, `iteration_id`,
+`created_at`). The check reads only the rows of the object from the
+`created_at` of the row on, and it skips the row itself. The same two indexes
+serve the `--iteration` and `--task` filters of `assessment ls` and the task
+filter of the metrics report. On a test database with 10,000 assessments,
+`assessment ls` takes about 4 to 9 ms. A metrics report over 1,000 tasks
+takes about 155 ms.
 
 The axes and the violations reference `assessments(seq)` with
 `ON DELETE CASCADE`. The tables have no foreign key to `iterations`, `tasks`
@@ -3108,7 +3150,12 @@ every `running` source run as `interrupted`. See
 ## Image assignment state
 
 User Store registrations belong to each daemon's SQLite database and persist
-only their unique name and source. Git clones live under
+their unique name and source. The `image_stores` row also holds the automatic
+build policy (`auto_interval_minutes`, `auto_images`, `auto_last_run_at`) and,
+since migration `0078`, `auto_results`: a JSON array with the last automatic
+build attempt of each selected image (`image`, `selector`, `at`,
+`image_version`, `error`). A cycle replaces the entry of the image it built,
+and `store auto` drops the entries of deselected images. Git clones live under
 `<base-dir>/stores/<name>/`; local absolute sources stay in place. Image names,
 versions, and diagnostics are read from `images/` on disk for every view, never
 stored as a second inventory. Store refresh and build preparation are
@@ -3228,6 +3275,31 @@ The AI-proxy endpoint and active per-iteration leases are carried through the
 same restart, so harness retries reconnect after the short listener outage.
 If the old shim is no longer reachable, adoption is the component that
 terminally classifies the stale row as `harness_error`.
+
+Script runs follow the same handoff. The daemon starts each run as
+`tariboy-shim __script-run -- ARGV`. This wrapper leads the run's process
+group, and its pid is `script_runs.pid`. The daemon creates the state file
+`agents/NAME/scripts/RUN.state` next to the run log, takes an exclusive
+`flock` on it, and passes it to the wrapper as fd 3. The lock stays with the
+wrapper until it exits. When the script ends, the wrapper writes its result to
+the file as JSON: `exit_code`, `signal`, or `start_error`. The supervisor
+decides how a run ended from this file, not from `wait`. A held lock means the
+run is alive. A free lock with a result means the run ended with that result.
+A free lock without a result, or no file, means the process is lost. The pid
+takes no part, so a reused pid never looks like a live run. Later daemon
+versions read this file, so its fields are added but never renamed.
+
+`daemonctl.Restart` creates the marker file `daemon-handoff` in the runtime
+directory before it stops the daemon, and removes it when the stop fails.
+`tariboy update` and `tariboy daemon restart` use `daemonctl.Restart`.
+`tariboy daemon stop` creates no marker. A daemon that stops with the marker
+leaves its script runs `running`. Without the marker, the stop sends `SIGTERM`
+to each run's group, `SIGKILL` after two seconds, and records `interrupted`.
+The next daemon removes the marker at start. Before it recovers stale runs, it
+adopts each `running` run whose wrapper is alive or has written a result. Its
+timeout counts from `started_at`, and a pending cancellation request is applied
+again. Recovery records every other `running` run as `interrupted`, or as
+`cancelled` after a cancellation request.
 
 :::danger[This is why test daemons must be isolated]
 Two daemons pointed at the same base dir share the same DB and loop managers and
@@ -6471,7 +6543,9 @@ smoke contracts. Its
 committed OpenAPI snapshot; see [Go control plane and plugins](#go-control-plane-and-plugins). The
 frontend target runs the UI format check, the generated API types check, UI
 typecheck, lint with the complexity and size thresholds, the unused-code check, unit tests,
-which fail when Vitest finishes fewer test files than it found, branding, the bundle budget, and the documentation checks. Before checking, `backend-check` runs `go mod download`
+which fail when Vitest finishes fewer test files than it found, branding, the bundle budget, and the documentation checks. The documentation
+step restores the last build from a host cache when no input of the site
+changed; see [Documentation build cache](#documentation-build-cache). Before checking, `backend-check` runs `go mod download`
 for the module and for `tools.mod`. `frontend-check` uses
 `scripts/npm-ci-locked.sh` for locked installs under `ui/`, `ui/tools/api-types/`
 and `docs/`.
@@ -6557,7 +6631,33 @@ they can use all memory and disk. The fast checks therefore limit themselves:
   `GOFLAGS`, unless `GOFLAGS` already sets `-p`, sets the vitest worker count
   through `TARIBOY_VITEST_MAX_WORKERS`, and passes `--jobs N` to
   `desktop-rust-check`. Without `TARIBOY_AGENT` or `CHECK_JOBS`, nothing
-  changes. Set `CHECK_JOBS=N` yourself to override the default.
+  changes. Set `CHECK_JOBS=N` yourself to override the default. Vitest uses
+  at least two workers. If `TARIBOY_VITEST_MAX_WORKERS` is a number below 2,
+  Vitest uses two workers and prints
+  `ui-test: TARIBOY_VITEST_MAX_WORKERS=N is below 2; using 2 workers, ...` on
+  stderr. One `vmThreads` worker runs all test files in one VM context, and
+  the run fails. An empty value or a value that is not a number gives four
+  workers.
+- **Memory gate.** With two workers, `ui-test` uses about 1.4 GB of memory at
+  its peak. Before
+  that step, `frontend-check` runs `scripts/ui-test-memory-gate.sh`. The
+  script reads `MemAvailable` from `/proc/meminfo`. If the value is 1700 MB
+  or more, the script prints nothing and `ui-test` starts at once. If the
+  value is lower, the script prints
+  `memory gate: waiting for MemAvailable >= 1700 MB before ui-test (now N MB, limit 600s)`
+  and reads the value again every 5 seconds. It prints a progress line once
+  a minute. When the value reaches the threshold, it prints a line with the
+  wait time and `ui-test` starts. After 600 seconds the script stops waiting.
+  It prints `... is still below 1700 MB after 600s; running ui-test anyway`
+  and `ui-test` runs. The step is never skipped: if memory then runs out,
+  `ui-test` fails with its diagnostics, and the warning line above it gives
+  the cause. `TARIBOY_UI_TEST_MIN_MEM_MB` changes the threshold in MB, and
+  `0` turns the wait off. `TARIBOY_UI_TEST_MEM_WAIT_TIMEOUT` changes the
+  limit in seconds. A host without `MemAvailable` in `/proc/meminfo`, such
+  as macOS, prints one line, `... has no MemAvailable, not waiting for
+  memory`, and does not wait. The wait happens while the run holds the check
+  slot, so other runs wait for the slot for that time too. A direct
+  `cd ui && npm test` does not wait.
 - **Temporary files.** A top-level run creates `$TMPDIR/tbc.XXXXXX` (or
   `/tmp/tbc.XXXXXX`) and gives every step `TMPDIR=<run dir>/t`. Test homes,
   `t.TempDir()` directories, Go build files and npm temporary files go there,
@@ -6580,11 +6680,13 @@ manual changes inside `node_modules` or changes to npm configuration, such as
 `.npmrc` or install flags. Those changes are outside the fingerprint.
 Deleting `node_modules` also forces installation on the next run.
 
-Three scripts stay outside `full-check` deliberately and are run by hand:
+Four scripts stay outside `full-check` deliberately and are run by hand:
 `scripts/product-alpha-e2e.sh` and `scripts/remote-provision-smoke.sh` require a
 disposable SSH host (the first also requires explicit consent to destroying its
-data), and `scripts/check-alpha-artifacts.sh` is a release gate that takes a
-release directory as its argument. The Rust host tests and clippy are outside
+data), `scripts/check-alpha-artifacts.sh` is a release gate that takes a
+release directory as its argument, and
+`scripts/desktop-build-script-relocation-check.sh` checks the desktop build
+script against a shared cache; see [Rust desktop host](#rust-desktop-host). The Rust host tests and clippy are outside
 both targets as well; see [Rust desktop host](#rust-desktop-host).
 
 The individual targets remain callable on their own, so running `make vet` or
@@ -6811,8 +6913,9 @@ cd ui
 npm ci
 ```
 
-`make check` then covers `npm run fmt:check`, `npm run api-types:check`, `npx tsc -b`, `npm run lint`, `npm run knip`,
-`npm test`, `npm run branding:check`, and `npm run bundle:budget`. `make full-check` adds `npm run test:tasks-browser`
+`make check` then covers `npm run fmt:check`, `npm run api-types:check`, `npx tsc -b --checkers 1`, `npm run lint`,
+`npm run knip`, `npm test`, `npm run branding:check`, and `npm run bundle:budget`. The type check uses one checker
+thread, because the default parallel checkers use about 0.4 GB more memory on a shared host. `make full-check` adds `npm run test:tasks-browser`
 and `npm run test:images-browser`, and builds the desktop bundle through its
 desktop step. Run any of them directly under `ui/` while iterating:
 
@@ -6982,8 +7085,15 @@ message names both numbers, for example
 run prints `ui-test: vitest finished 303 of 303 test files`. The check does not
 use the Vitest summary, because a Vitest worker that runs out of heap can stop
 the run with exit code 0 and no summary. To prevent that, `ui/vite.config.ts`
-sets `vmMemoryLimit` to 60% of the heap limit of a Node.js thread. Vitest then
-restarts a `vmThreads` worker before its heap is full. `npm run test:watch`
+sets `vmMemoryLimit` to 336 MiB. Vitest then restarts a `vmThreads` worker
+before its heap is full. The limit is absolute and does not depend on the heap
+limit of Node.js. A share of the heap limit let each worker keep more than
+1 GB of test files on a host with a large heap. With 336 MiB, the peak of
+`npm test` is about the number of workers × 336 MiB + 0.6 to 0.9 GB. Each
+restart loads `jsdom`, the setup files and the shared modules again and takes
+about 0.8 s. With 336 MiB, a run with 4 workers restarts them 19 times and
+takes about 16 s longer than a run without restarts. A larger limit restarts
+fewer workers, but uses more memory. `npm run test:watch`
 runs Vitest without the wrapper and without the check.
 
 `npm run knip` runs [Knip](https://knip.dev) from `ui/knip.json`. The
@@ -7118,6 +7228,20 @@ directory, `~/.cache/tariboy/desktop-check-target`, which
 `TARIBOY_CARGO_CHECK_DIR` changes. The first run with an empty target directory
 takes several minutes; later runs are incremental. A worktree without
 `desktop/dist` compiles against an empty stub frontend.
+
+Because the target directory is shared, cargo can reuse a build script that
+another worktree compiled, after that worktree is removed. So
+`desktop/src-tauri/build.rs` must not compile a worktree path into itself: it
+reads `CARGO_MANIFEST_DIR` with `std::env::var` at run time, not with `env!`.
+Run `scripts/desktop-build-script-relocation-check.sh [REV]` by hand when you
+change `build.rs`. It exports `REV` (default `HEAD`) into two temporary trees
+with a temporary `TARIBOY_CARGO_CHECK_DIR`, and runs `desktop-rust-check` in the
+first tree, then in the second tree after the first is removed. Then it changes
+`internal/version/version.go` in the second tree and checks that the build
+script emits the new `TARIBOY_VERSION`. It does not touch the live target
+directory. It compiles the crate from scratch, so it takes several minutes and
+several gigabytes of disk under `TMPDIR`, which it removes on exit. It holds the
+same host check slot as `make check`.
 
 Neither entry point runs the Rust tests or clippy. Run them yourself when
 changing `desktop/src-tauri`:
@@ -7364,10 +7488,12 @@ cd docs
 npm ci
 ```
 
-The `docs` step of `make check` then runs `npm run doctor`, `npm run build`, and
-the GitHub Pages URL contract on every pass, so documentation is validated
-whenever navigation, MDX, links, or contributor instructions change. Run the
-build commands and contract directly when iterating on a docs-only change:
+The `docs` step of `make check` then runs `scripts/docs-build-cached.sh` and
+the GitHub Pages URL contract on every pass. The script runs `npm run doctor`
+and `npm run build` when an input of the site changed since the last build on
+this host. Otherwise it restores `docs/dist` from a cache. The contract always
+runs. Run the build commands and contract directly when iterating on a
+docs-only change:
 
 ```bash
 cd docs
@@ -7375,6 +7501,43 @@ npm run doctor
 npm run build
 ../scripts/docs-build-contract-test.sh
 ```
+
+### Documentation build cache
+
+`scripts/docs-build-cached.sh` keeps the output of successful builds in a
+cache directory that all worktrees of the host share. The cache key is a
+SHA-256 hash of these inputs:
+
+- Every file and symbolic link under `docs/`, by its relative path and its
+  content. The key does not include `docs/node_modules`, `docs/dist`, and
+  `docs/.blume`. It includes `package.json`, `package-lock.json` (and thus the
+  Blume version), `blume.config.ts`, `docs/superpowers/`, and files that git
+  does not track.
+- The output of `node --version` and `npm --version`.
+- The content of the script itself.
+
+A build reads no other files that change its output. `npm run doctor` reads
+the same inputs, so a cache hit skips it too. If `blume.config.ts` contains
+`lastModified`, Blume reads the git history. The script then always builds,
+stores nothing, and prints `docs: lastModified is set, cache disabled`.
+
+On a cache hit, the script replaces `docs/dist` with the stored copy and prints
+`docs: cache hit KEY, doctor and build skipped`. On a miss, it runs
+`npm run doctor` and `npm run build`. If both succeed, it stores `docs/dist`
+under the key. A failed doctor or build fails the step and stores nothing.
+
+The cache directory is `$TARIBOY_DOCS_CACHE_DIR`. Its default is
+`${XDG_CACHE_HOME:-$HOME/.cache}/tariboy/docs-build`. Each entry is about
+13 MB, and the script keeps the 8 newest entries. If the script cannot write
+to the directory, the build still passes with a warning.
+
+Use `TARIBOY_DOCS_REBUILD=1 make check` (or `make frontend-check`) to build
+the site and replace the cache entry. Use it after manual changes inside
+`docs/node_modules` or after changes to the npm configuration, because the key
+does not include them. In CI, each runner starts with an empty cache, so the
+step always builds. `make docs` does not use the cache.
+`scripts/docs-build-cache-test.sh`, part of `smoke-contract-test`, is the
+contract of the cache.
 
 Publish the production build to GitHub Pages with:
 
@@ -7879,6 +8042,75 @@ retried at the next interval; missed cycles are not replayed, so a daemon
 restart can delay a due cycle by up to one interval. Saving a policy restarts
 the interval from that moment.
 
+An automatic build uses only the content of a commit. A manual **Build** and
+`tariboy image build STORE/IMAGE` still build from the Store directory as it
+is. For each automatic build the daemon:
+
+1. Checks that the Store root is the root of a Git repository: it has its own
+   `.git` entry, and `git rev-parse --show-toplevel` returns the Store root. A
+   plain directory or a directory inside another repository fails with
+   `store_not_git`.
+2. Exports the `HEAD` commit with `git archive` into a new owner-only directory
+   under `<base-dir>/image-build/`. Ignored and untracked files of the working
+   copy, for example an old `images/NAME/.agents/` or `__pycache__/`, do not
+   enter the image. Uncommitted changes do not enter it either. The working
+   copy is not changed. `git archive` applies the `export-ignore` and
+   `export-subst` attributes of `.gitattributes`; submodule content and Git LFS
+   objects are not exported.
+3. Fails the build when the commit has a symbolic link, an `extends` layer, a
+   `skills[].dir` or a `prompts[].file` that points outside the commit.
+4. Installs every `skills-lock.json` in the export, in the order described
+   below for Store builds.
+5. Compares each installation directory's `.agents/skills/` with the locks
+   installed there, a later lock replacing an earlier entry of the same skill.
+   Each locked skill must be installed, the hash of its files must equal the
+   lock's `computedHash`, and no other skill may be there. The hash is the one
+   the skills installer writes: sha256 over each file's relative path followed
+   by its content, with files ordered like JavaScript `localeCompare` and
+   `.git` and `node_modules` skipped.
+6. Builds and publishes the image from the export, then removes the export,
+   also after a failure.
+
+A failure publishes nothing: neither the version tag nor `latest` moves. Every
+error starts with `Store NAME image IMAGE:` and names the cause, for example:
+
+```text
+Store dev image basic: skills-lock.json images/basic/skills-lock.json: skill cli-text: installed content sha256:AAA does not match computedHash BBB
+Store dev image basic: skills-lock.json images/basic/skills-lock.json: skill extra: is installed but not in skills-lock.json
+Store dev image basic: Store root /srv/dev is not the root of a Git repository
+```
+
+A lock mismatch has the code `skills_lock_mismatch`, a Store without its own
+Git repository `store_not_git`, and a path outside the commit `bad_store`.
+The daemon log line `Store automatic build` carries the error, and
+`tariboy store show NAME` and `GET /api/stores/NAME` return the last attempt of
+each selected image in `auto.results`:
+
+```json
+{"image": "basic", "selector": "dev/basic", "at": "2026-11-03T21:00:00.000000000Z", "image_version": "1.4.0", "error": ""}
+```
+
+A success records an empty `error`, so an earlier error disappears. Deselecting
+an image removes its entry. A Store refresh failure is only logged, because no
+image is selected for a build at that point.
+
+The provenance of an automatically built image (`tariboy image provenance
+REF`) records `git_commit`, the full SHA of the exported commit, and
+`lock_digest`. `lock_digest` is `sha256:` followed by the hex sha256 of one
+line per installed `skills-lock.json`, in installation order: the Store root's
+lock, then the lock of each `extends` layer in layer order, or the image's own
+lock. Each line is `<path from the Store root>`, a NUL byte, the hex sha256 of
+the file's bytes, and a newline. Without any lock the value is the sha256 of an
+empty string. `repository_id` stays empty, and `source_cwd` names the image
+directory in the Store working copy. Because every automatic build installs
+its skills into a fresh export, the installer downloads remote skills on every
+automatic build; without network access the build fails and nothing is
+published.
+
+The automatic path is selected by the operation initiator `auto`, which only
+the cycle sets. An API client that calls `POST /api/images/build` with a Store
+selector and `initiator: auto` also gets a build from the commit.
+
 The registration's name and source are persisted in the daemon database
 together with this policy (interval, selected images, and the last cycle time).
 Viewing a Store still reads the current disk inventory and `image_version` values;
@@ -8123,8 +8355,10 @@ Tariboy assembles the layers in a temporary owner-only directory under
    same path is replaced; other files remain.
 2. If the copied layer contains `skills-lock.json`, a Store build runs
    `npx skills experimental_install` in the assembly directory and then removes
-   the lock. A later layer's install replaces a skill of the same name
-   installed by an earlier one.
+   the lock. The installer skips a skill whose `SKILL.md` is already in
+   `.agents/skills/`, so a skill of the same name installed by an earlier
+   layer stays. An automatic build then refuses the image with
+   `skills_lock_mismatch` when the later lock pins other content.
 3. Each layer's `./` prompt files are copied to
    `./.tariboy-extends/<layer>/<path>`, so equal prompt paths from different
    images stay separate files. The reserved `.tariboy-extends` directory must
@@ -9883,17 +10117,43 @@ daemon was upgraded.
 
 ## Restart and lifecycle
 
-Pending runs remain claimable after restart. A run that was already running is
-recorded as `interrupted` and is not blindly repeated, because the command may
-have completed an external side effect before the daemon lost process state.
-Recovery publishes that interrupted result, so a recurring definition stops
-after it exactly as it does after any other published result; an interrupted
-one-shot becomes completed as well. Both are resumed explicitly with `rerun`.
+Pending runs remain claimable after restart.
+
+A run that is running keeps running when the daemon is restarted with
+`tariboy update` or `tariboy daemon restart`. The run's process does not
+belong to the daemon. The daemon starts it through a small wrapper,
+`tariboy-shim __script-run`, that writes the exit code of the command to a
+state file next to the run log. The new daemon finds the run, waits for its
+end, and publishes `script.result` with the original exit code and status
+`succeeded` or `failed`. The log continues in the same file. The timeout
+counts from the original start of the run, and `cancel` works as before. A run
+that was `cancelling` before the restart is stopped by the new daemon and
+becomes `cancelled`.
+
+In these cases the run becomes `interrupted`:
+
+- `tariboy daemon stop` stops the daemon. A plain stop ends every running run
+  with `SIGTERM`, and `SIGKILL` two seconds later.
+- The run's process is gone without an exit code at the next daemon start, for
+  example after a host reboot.
+- The run was started by a daemon version without the wrapper.
+
+The new daemon publishes these results when it starts. An interrupted run is
+not repeated, because the command may have completed an external side effect
+before it stopped. A recurring definition stops after the interrupted result,
+as it does after any other published result. An interrupted one-shot becomes
+completed as well. You resume both with `rerun`.
+
+If the daemon stops without the stop sequence, for example after a crash, the
+run continues. The next daemon finds it and publishes its real exit code. A
+restart from the Desktop app is a plain stop and start, so its runs become
+`interrupted`.
 
 Cancellation is durable and idempotent. A running attempt is shown as
 `cancelling` until its process group actually exits, and it continues to occupy
 the script's active slot during that window. A daemon restart preserves the
-request and recovers that attempt as `cancelled`, not `interrupted`.
+request. If the process is gone at the restart, the attempt becomes
+`cancelled`, not `interrupted`.
 
 Removing an active definition, or one whose cancelled process has not exited
 yet, returns `409 script_active`; cancel it first and wait for its run to become
@@ -10255,13 +10515,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.108.0` alpha on an Apple Silicon Mac.
+This path is for the `0.109.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.108.0_aarch64.dmg`;
+- a verified `Tariboy_0.109.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -12213,7 +12473,7 @@ runs the routine.
 
 ## Alpha signing and Gatekeeper
 
-`0.108.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.109.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -12327,7 +12587,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.108.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.109.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 

@@ -30,6 +30,16 @@ The loop is driven three ways, all requiring the agent to be **enabled**:
 - **Message** — a letter sent to the agent nudges the loop to start an
   iteration now (only while the agent's inbox holds open letters).
 
+A message iteration can end with an error (`harness_error`, or a launch that
+failed). Open letters then stay open. If the agent still has open letters and
+`on_error` is not `stop`, the loop starts a new message iteration after a
+delay. The first delay is 30 seconds. Each further error doubles the delay, up
+to 10 minutes. An iteration that does not fail resets the delay to 30 seconds.
+Each iteration shows a letter again and counts one more attempt. The prompt
+shows a letter at most five times. The next iteration marks it as a dead
+letter. With a lasting failure, this happens about 15.5 minutes after the
+first attempt. A new letter does not shorten a delay that is already running.
+
 Loop policy is per-agent: `interval`, `timeout` (soft), `hard-timeout`,
 `on_timeout` and `on_error` (e.g. `restart`). An iteration ends when it signals
 completion, exits, or reaches an enforced deadline. A `timeout` or
@@ -511,7 +521,7 @@ facade over these parts:
 | Part | Owns |
 | --- | --- |
 | Agent runtimes (`runtimes.go`) | The in-memory registry: running engines, tools servers bound before an engine starts, iterations being adopted, a Restart pending after adoption, and stale-kill markers. It also holds each agent's lifecycle gate and handoff lock. |
-| Script supervisor (`scripts.go`) | Durable script runs: claim, start as the agent, cancel, and record the result. |
+| Script supervisor (`scripts.go`) | Durable script runs: claim, start as the agent through the `tariboy-shim __script-run` wrapper, cancel, time out, and record the result from the run's state file. At start it adopts the runs that a restart handed over (see [Restart handoff](/docs/architecture/state-model#restart-handoff)). |
 | Tools facade (`tools_facade.go`) | The per-agent tools socket API. It reaches the manager only through narrow interfaces, so the API does not depend on a loop engine. |
 | Image activation (`image_activation.go`) | Pending image activation, the Reprovision swap, the skill bridge, and crash recovery of an interrupted swap. |
 | Iteration watcher (`iteration_watcher.go`) | The one polling loop that waits for `result.json`. It resyncs the hard deadline, enforces the soft deadline and the done grace with at most one Kill, and, for adoption, probes the shim. For a shim the runner launched, it also ends the wait when the reaped shim process left no `result.json`, which the runner records as `harness_error`. The runner and adoption both use it. |

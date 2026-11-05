@@ -295,9 +295,15 @@ compares the names as strings, then the numbers as numbers. Thus
 form is a name without a number.</p>
 <p>The choice happens at read time and changes no row. The SQL condition is
 <code>assessment.IsLatest</code>. It checks each row against the other rows of its
-object through <code>idx_assessments_iteration</code> or <code>idx_assessments_task</code>. On a
-test database with 10,000 assessments, <code>assessment ls</code> takes about 10 ms.
-The assessment step of a metrics report over 1,000 tasks takes about 250 ms.</p>
+object. An iteration row uses <code>idx_assessments_iteration_created</code>
+(<code>iteration_id</code>, <code>created_at</code>). A task row uses
+<code>idx_assessments_task_iteration_created</code> (<code>task_key</code>, <code>iteration_id</code>,
+<code>created_at</code>). The check reads only the rows of the object from the
+<code>created_at</code> of the row on, and it skips the row itself. The same two indexes
+serve the <code>--iteration</code> and <code>--task</code> filters of <code>assessment ls</code> and the task
+filter of the metrics report. On a test database with 10,000 assessments,
+<code>assessment ls</code> takes about 4 to 9 ms. A metrics report over 1,000 tasks
+takes about 155 ms.</p>
 <p>The axes and the violations reference <code>assessments(seq)</code> with
 <code>ON DELETE CASCADE</code>. The tables have no foreign key to <code>iterations</code>, <code>tasks</code>
 or <code>agents</code>. An assessment stays after iteration retention deletes its
@@ -559,7 +565,12 @@ every <code>running</code> source run as <code>interrupted</code>. See
 <a href="/tariboy/docs/task-workflows#sources">Task workflows</a>.</p>
 <h2 id="image-assignment-state"><a class="blume-heading-anchor" href="#image-assignment-state">Image assignment state</a></h2>
 <p>User Store registrations belong to each daemon’s SQLite database and persist
-only their unique name and source. Git clones live under
+their unique name and source. The <code>image_stores</code> row also holds the automatic
+build policy (<code>auto_interval_minutes</code>, <code>auto_images</code>, <code>auto_last_run_at</code>) and,
+since migration <code>0078</code>, <code>auto_results</code>: a JSON array with the last automatic
+build attempt of each selected image (<code>image</code>, <code>selector</code>, <code>at</code>,
+<code>image_version</code>, <code>error</code>). A cycle replaces the entry of the image it built,
+and <code>store auto</code> drops the entries of deselected images. Git clones live under
 <code>&lt;base-dir&gt;/stores/&lt;name&gt;/</code>; local absolute sources stay in place. Image names,
 versions, and diagnostics are read from <code>images/</code> on disk for every view, never
 stored as a second inventory. Store refresh and build preparation are
@@ -668,6 +679,29 @@ the productive or <code>--idle</code> declaration recorded with the completion f
 same restart, so harness retries reconnect after the short listener outage.
 If the old shim is no longer reachable, adoption is the component that
 terminally classifies the stale row as <code>harness_error</code>.</p>
+<p>Script runs follow the same handoff. The daemon starts each run as
+<code>tariboy-shim __script-run -- ARGV</code>. This wrapper leads the run’s process
+group, and its pid is <code>script_runs.pid</code>. The daemon creates the state file
+<code>agents/NAME/scripts/RUN.state</code> next to the run log, takes an exclusive
+<code>flock</code> on it, and passes it to the wrapper as fd 3. The lock stays with the
+wrapper until it exits. When the script ends, the wrapper writes its result to
+the file as JSON: <code>exit_code</code>, <code>signal</code>, or <code>start_error</code>. The supervisor
+decides how a run ended from this file, not from <code>wait</code>. A held lock means the
+run is alive. A free lock with a result means the run ended with that result.
+A free lock without a result, or no file, means the process is lost. The pid
+takes no part, so a reused pid never looks like a live run. Later daemon
+versions read this file, so its fields are added but never renamed.</p>
+<p><code>daemonctl.Restart</code> creates the marker file <code>daemon-handoff</code> in the runtime
+directory before it stops the daemon, and removes it when the stop fails.
+<code>tariboy update</code> and <code>tariboy daemon restart</code> use <code>daemonctl.Restart</code>.
+<code>tariboy daemon stop</code> creates no marker. A daemon that stops with the marker
+leaves its script runs <code>running</code>. Without the marker, the stop sends <code>SIGTERM</code>
+to each run’s group, <code>SIGKILL</code> after two seconds, and records <code>interrupted</code>.
+The next daemon removes the marker at start. Before it recovers stale runs, it
+adopts each <code>running</code> run whose wrapper is alive or has written a result. Its
+timeout counts from <code>started_at</code>, and a pending cancellation request is applied
+again. Recovery records every other <code>running</code> run as <code>interrupted</code>, or as
+<code>cancelled</code> after a cancellation request.</p>
 <aside class="not-prose my-5 flex flex-row items-start gap-2 rounded-blume border px-4 py-3 font-sans text-muted-foreground text-sm leading-6 [&amp;_a]:underline [&amp;_a]:decoration-current/50 [&amp;_code]:font-mono border-red-500/25 bg-red-500/10"><span class="mt-0.5 shrink-0 text-red-600 dark:text-red-400"><svg aria-hidden="true" height="16" viewBox="0 0 24 24" width="16" xmlns="http://www.w3.org/2000/svg"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m15 9l-6 6m0-6l6 6"/></g></svg></span><div class="flex-1 [&amp;&gt;*]:mt-2! [&amp;&gt;*]:mb-0! [&amp;&gt;:first-child]:mt-0!"><p class="font-semibold text-foreground">This is why test daemons must be isolated</p><p>Two daemons pointed at the same base dir share the same DB and loop managers and
 will double-run each other’s agents — double-executed iterations and reaped
 sessions. Always isolate a test daemon with its own base dir, runtime dir, and

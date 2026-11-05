@@ -177,7 +177,9 @@ smoke contracts. Its
 committed OpenAPI snapshot; see [Go control plane and plugins](#go-control-plane-and-plugins). The
 frontend target runs the UI format check, the generated API types check, UI
 typecheck, lint with the complexity and size thresholds, the unused-code check, unit tests,
-which fail when Vitest finishes fewer test files than it found, branding, the bundle budget, and the documentation checks. Before checking, `backend-check` runs `go mod download`
+which fail when Vitest finishes fewer test files than it found, branding, the bundle budget, and the documentation checks. The documentation
+step restores the last build from a host cache when no input of the site
+changed; see [Documentation build cache](#documentation-build-cache). Before checking, `backend-check` runs `go mod download`
 for the module and for `tools.mod`. `frontend-check` uses
 `scripts/npm-ci-locked.sh` for locked installs under `ui/`, `ui/tools/api-types/`
 and `docs/`.
@@ -263,7 +265,33 @@ they can use all memory and disk. The fast checks therefore limit themselves:
   `GOFLAGS`, unless `GOFLAGS` already sets `-p`, sets the vitest worker count
   through `TARIBOY_VITEST_MAX_WORKERS`, and passes `--jobs N` to
   `desktop-rust-check`. Without `TARIBOY_AGENT` or `CHECK_JOBS`, nothing
-  changes. Set `CHECK_JOBS=N` yourself to override the default.
+  changes. Set `CHECK_JOBS=N` yourself to override the default. Vitest uses
+  at least two workers. If `TARIBOY_VITEST_MAX_WORKERS` is a number below 2,
+  Vitest uses two workers and prints
+  `ui-test: TARIBOY_VITEST_MAX_WORKERS=N is below 2; using 2 workers, ...` on
+  stderr. One `vmThreads` worker runs all test files in one VM context, and
+  the run fails. An empty value or a value that is not a number gives four
+  workers.
+- **Memory gate.** With two workers, `ui-test` uses about 1.4 GB of memory at
+  its peak. Before
+  that step, `frontend-check` runs `scripts/ui-test-memory-gate.sh`. The
+  script reads `MemAvailable` from `/proc/meminfo`. If the value is 1700 MB
+  or more, the script prints nothing and `ui-test` starts at once. If the
+  value is lower, the script prints
+  `memory gate: waiting for MemAvailable >= 1700 MB before ui-test (now N MB, limit 600s)`
+  and reads the value again every 5 seconds. It prints a progress line once
+  a minute. When the value reaches the threshold, it prints a line with the
+  wait time and `ui-test` starts. After 600 seconds the script stops waiting.
+  It prints `... is still below 1700 MB after 600s; running ui-test anyway`
+  and `ui-test` runs. The step is never skipped: if memory then runs out,
+  `ui-test` fails with its diagnostics, and the warning line above it gives
+  the cause. `TARIBOY_UI_TEST_MIN_MEM_MB` changes the threshold in MB, and
+  `0` turns the wait off. `TARIBOY_UI_TEST_MEM_WAIT_TIMEOUT` changes the
+  limit in seconds. A host without `MemAvailable` in `/proc/meminfo`, such
+  as macOS, prints one line, `... has no MemAvailable, not waiting for
+  memory`, and does not wait. The wait happens while the run holds the check
+  slot, so other runs wait for the slot for that time too. A direct
+  `cd ui && npm test` does not wait.
 - **Temporary files.** A top-level run creates `$TMPDIR/tbc.XXXXXX` (or
   `/tmp/tbc.XXXXXX`) and gives every step `TMPDIR=<run dir>/t`. Test homes,
   `t.TempDir()` directories, Go build files and npm temporary files go there,
@@ -286,11 +314,13 @@ manual changes inside `node_modules` or changes to npm configuration, such as
 `.npmrc` or install flags. Those changes are outside the fingerprint.
 Deleting `node_modules` also forces installation on the next run.
 
-Three scripts stay outside `full-check` deliberately and are run by hand:
+Four scripts stay outside `full-check` deliberately and are run by hand:
 `scripts/product-alpha-e2e.sh` and `scripts/remote-provision-smoke.sh` require a
 disposable SSH host (the first also requires explicit consent to destroying its
-data), and `scripts/check-alpha-artifacts.sh` is a release gate that takes a
-release directory as its argument. The Rust host tests and clippy are outside
+data), `scripts/check-alpha-artifacts.sh` is a release gate that takes a
+release directory as its argument, and
+`scripts/desktop-build-script-relocation-check.sh` checks the desktop build
+script against a shared cache; see [Rust desktop host](#rust-desktop-host). The Rust host tests and clippy are outside
 both targets as well; see [Rust desktop host](#rust-desktop-host).
 
 The individual targets remain callable on their own, so running `make vet` or
@@ -517,8 +547,9 @@ cd ui
 npm ci
 ```
 
-`make check` then covers `npm run fmt:check`, `npm run api-types:check`, `npx tsc -b`, `npm run lint`, `npm run knip`,
-`npm test`, `npm run branding:check`, and `npm run bundle:budget`. `make full-check` adds `npm run test:tasks-browser`
+`make check` then covers `npm run fmt:check`, `npm run api-types:check`, `npx tsc -b --checkers 1`, `npm run lint`,
+`npm run knip`, `npm test`, `npm run branding:check`, and `npm run bundle:budget`. The type check uses one checker
+thread, because the default parallel checkers use about 0.4 GB more memory on a shared host. `make full-check` adds `npm run test:tasks-browser`
 and `npm run test:images-browser`, and builds the desktop bundle through its
 desktop step. Run any of them directly under `ui/` while iterating:
 
@@ -688,8 +719,15 @@ message names both numbers, for example
 run prints `ui-test: vitest finished 303 of 303 test files`. The check does not
 use the Vitest summary, because a Vitest worker that runs out of heap can stop
 the run with exit code 0 and no summary. To prevent that, `ui/vite.config.ts`
-sets `vmMemoryLimit` to 60% of the heap limit of a Node.js thread. Vitest then
-restarts a `vmThreads` worker before its heap is full. `npm run test:watch`
+sets `vmMemoryLimit` to 336 MiB. Vitest then restarts a `vmThreads` worker
+before its heap is full. The limit is absolute and does not depend on the heap
+limit of Node.js. A share of the heap limit let each worker keep more than
+1 GB of test files on a host with a large heap. With 336 MiB, the peak of
+`npm test` is about the number of workers × 336 MiB + 0.6 to 0.9 GB. Each
+restart loads `jsdom`, the setup files and the shared modules again and takes
+about 0.8 s. With 336 MiB, a run with 4 workers restarts them 19 times and
+takes about 16 s longer than a run without restarts. A larger limit restarts
+fewer workers, but uses more memory. `npm run test:watch`
 runs Vitest without the wrapper and without the check.
 
 `npm run knip` runs [Knip](https://knip.dev) from `ui/knip.json`. The
@@ -824,6 +862,20 @@ directory, `~/.cache/tariboy/desktop-check-target`, which
 `TARIBOY_CARGO_CHECK_DIR` changes. The first run with an empty target directory
 takes several minutes; later runs are incremental. A worktree without
 `desktop/dist` compiles against an empty stub frontend.
+
+Because the target directory is shared, cargo can reuse a build script that
+another worktree compiled, after that worktree is removed. So
+`desktop/src-tauri/build.rs` must not compile a worktree path into itself: it
+reads `CARGO_MANIFEST_DIR` with `std::env::var` at run time, not with `env!`.
+Run `scripts/desktop-build-script-relocation-check.sh [REV]` by hand when you
+change `build.rs`. It exports `REV` (default `HEAD`) into two temporary trees
+with a temporary `TARIBOY_CARGO_CHECK_DIR`, and runs `desktop-rust-check` in the
+first tree, then in the second tree after the first is removed. Then it changes
+`internal/version/version.go` in the second tree and checks that the build
+script emits the new `TARIBOY_VERSION`. It does not touch the live target
+directory. It compiles the crate from scratch, so it takes several minutes and
+several gigabytes of disk under `TMPDIR`, which it removes on exit. It holds the
+same host check slot as `make check`.
 
 Neither entry point runs the Rust tests or clippy. Run them yourself when
 changing `desktop/src-tauri`:
@@ -1070,10 +1122,12 @@ cd docs
 npm ci
 ```
 
-The `docs` step of `make check` then runs `npm run doctor`, `npm run build`, and
-the GitHub Pages URL contract on every pass, so documentation is validated
-whenever navigation, MDX, links, or contributor instructions change. Run the
-build commands and contract directly when iterating on a docs-only change:
+The `docs` step of `make check` then runs `scripts/docs-build-cached.sh` and
+the GitHub Pages URL contract on every pass. The script runs `npm run doctor`
+and `npm run build` when an input of the site changed since the last build on
+this host. Otherwise it restores `docs/dist` from a cache. The contract always
+runs. Run the build commands and contract directly when iterating on a
+docs-only change:
 
 ```bash
 cd docs
@@ -1081,6 +1135,43 @@ npm run doctor
 npm run build
 ../scripts/docs-build-contract-test.sh
 ```
+
+### Documentation build cache
+
+`scripts/docs-build-cached.sh` keeps the output of successful builds in a
+cache directory that all worktrees of the host share. The cache key is a
+SHA-256 hash of these inputs:
+
+- Every file and symbolic link under `docs/`, by its relative path and its
+  content. The key does not include `docs/node_modules`, `docs/dist`, and
+  `docs/.blume`. It includes `package.json`, `package-lock.json` (and thus the
+  Blume version), `blume.config.ts`, `docs/superpowers/`, and files that git
+  does not track.
+- The output of `node --version` and `npm --version`.
+- The content of the script itself.
+
+A build reads no other files that change its output. `npm run doctor` reads
+the same inputs, so a cache hit skips it too. If `blume.config.ts` contains
+`lastModified`, Blume reads the git history. The script then always builds,
+stores nothing, and prints `docs: lastModified is set, cache disabled`.
+
+On a cache hit, the script replaces `docs/dist` with the stored copy and prints
+`docs: cache hit KEY, doctor and build skipped`. On a miss, it runs
+`npm run doctor` and `npm run build`. If both succeed, it stores `docs/dist`
+under the key. A failed doctor or build fails the step and stores nothing.
+
+The cache directory is `$TARIBOY_DOCS_CACHE_DIR`. Its default is
+`${XDG_CACHE_HOME:-$HOME/.cache}/tariboy/docs-build`. Each entry is about
+13 MB, and the script keeps the 8 newest entries. If the script cannot write
+to the directory, the build still passes with a warning.
+
+Use `TARIBOY_DOCS_REBUILD=1 make check` (or `make frontend-check`) to build
+the site and replace the cache entry. Use it after manual changes inside
+`docs/node_modules` or after changes to the npm configuration, because the key
+does not include them. In CI, each runner starts with an empty cache, so the
+step always builds. `make docs` does not use the cache.
+`scripts/docs-build-cache-test.sh`, part of `smoke-contract-test`, is the
+contract of the cache.
 
 Publish the production build to GitHub Pages with:
 

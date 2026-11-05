@@ -313,9 +313,15 @@ form is a name without a number.
 
 The choice happens at read time and changes no row. The SQL condition is
 `assessment.IsLatest`. It checks each row against the other rows of its
-object through `idx_assessments_iteration` or `idx_assessments_task`. On a
-test database with 10,000 assessments, `assessment ls` takes about 10 ms.
-The assessment step of a metrics report over 1,000 tasks takes about 250 ms.
+object. An iteration row uses `idx_assessments_iteration_created`
+(`iteration_id`, `created_at`). A task row uses
+`idx_assessments_task_iteration_created` (`task_key`, `iteration_id`,
+`created_at`). The check reads only the rows of the object from the
+`created_at` of the row on, and it skips the row itself. The same two indexes
+serve the `--iteration` and `--task` filters of `assessment ls` and the task
+filter of the metrics report. On a test database with 10,000 assessments,
+`assessment ls` takes about 4 to 9 ms. A metrics report over 1,000 tasks
+takes about 155 ms.
 
 The axes and the violations reference `assessments(seq)` with
 `ON DELETE CASCADE`. The tables have no foreign key to `iterations`, `tasks`
@@ -610,7 +616,12 @@ every `running` source run as `interrupted`. See
 ## Image assignment state
 
 User Store registrations belong to each daemon's SQLite database and persist
-only their unique name and source. Git clones live under
+their unique name and source. The `image_stores` row also holds the automatic
+build policy (`auto_interval_minutes`, `auto_images`, `auto_last_run_at`) and,
+since migration `0078`, `auto_results`: a JSON array with the last automatic
+build attempt of each selected image (`image`, `selector`, `at`,
+`image_version`, `error`). A cycle replaces the entry of the image it built,
+and `store auto` drops the entries of deselected images. Git clones live under
 `<base-dir>/stores/<name>/`; local absolute sources stay in place. Image names,
 versions, and diagnostics are read from `images/` on disk for every view, never
 stored as a second inventory. Store refresh and build preparation are
@@ -730,6 +741,31 @@ The AI-proxy endpoint and active per-iteration leases are carried through the
 same restart, so harness retries reconnect after the short listener outage.
 If the old shim is no longer reachable, adoption is the component that
 terminally classifies the stale row as `harness_error`.
+
+Script runs follow the same handoff. The daemon starts each run as
+`tariboy-shim __script-run -- ARGV`. This wrapper leads the run's process
+group, and its pid is `script_runs.pid`. The daemon creates the state file
+`agents/NAME/scripts/RUN.state` next to the run log, takes an exclusive
+`flock` on it, and passes it to the wrapper as fd 3. The lock stays with the
+wrapper until it exits. When the script ends, the wrapper writes its result to
+the file as JSON: `exit_code`, `signal`, or `start_error`. The supervisor
+decides how a run ended from this file, not from `wait`. A held lock means the
+run is alive. A free lock with a result means the run ended with that result.
+A free lock without a result, or no file, means the process is lost. The pid
+takes no part, so a reused pid never looks like a live run. Later daemon
+versions read this file, so its fields are added but never renamed.
+
+`daemonctl.Restart` creates the marker file `daemon-handoff` in the runtime
+directory before it stops the daemon, and removes it when the stop fails.
+`tariboy update` and `tariboy daemon restart` use `daemonctl.Restart`.
+`tariboy daemon stop` creates no marker. A daemon that stops with the marker
+leaves its script runs `running`. Without the marker, the stop sends `SIGTERM`
+to each run's group, `SIGKILL` after two seconds, and records `interrupted`.
+The next daemon removes the marker at start. Before it recovers stale runs, it
+adopts each `running` run whose wrapper is alive or has written a result. Its
+timeout counts from `started_at`, and a pending cancellation request is applied
+again. Recovery records every other `running` run as `interrupted`, or as
+`cancelled` after a cancellation request.
 
 :::danger[This is why test daemons must be isolated]
 Two daemons pointed at the same base dir share the same DB and loop managers and

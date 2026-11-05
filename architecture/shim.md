@@ -87,6 +87,20 @@ private logs directory. It then reports the exit to the outer shim with the
 to the harness window, and the supervisor removes it from the harness
 environment. The report is best-effort and bounded to one second.
 
+The socket path belongs to the agent, not to one iteration. A supervisor can
+outlive its shim: the shim writes `result.json` and exits, and the daemon
+starts the next iteration on the same socket. The old supervisor then reports
+to the new shim. For this reason, each shim run creates a random token of 16
+bytes and gives it to its own harness window in
+`TARIBOY_SHIM_SUPERVISOR_TOKEN`, next to the socket path. The supervisor
+removes the token from the harness environment and sends it with
+`harness_started` and `harness_exited`. The shim accepts a report only with its
+own token. It rejects any other report with an error and writes
+`WARN ignore harness_exited from another supervisor` (or `harness_started`) to
+`shim.log`. A supervisor from an older shim build sends no token, so the new
+shim rejects its reports. The shim then ends its wait with the `has-session`
+fallback.
+
 The outer shim waits for the first of three events: the supervisor's exit
 report, its own cancellation, or a fallback `tmux has-session` check every ten
 seconds that finds the session gone. The fallback covers a session killed from
@@ -104,6 +118,17 @@ writing `result.json`. A non-zero harness status is preserved; a missing, malfor
 unreadable status becomes unknown failure (`-1`), never success. Timeout and
 explicit termination reasons still take precedence. The status file is not in
 the support-bundle allowlist.
+
+A second hidden mode, `tariboy-shim __script-run -- ARGV`, owns one script
+run. The daemon starts it as the leader of a new process group, with the run
+log as stdout and stderr and the locked run state file as fd 3. The wrapper
+sets close-on-exec on fd 3, so the script cannot hold the lock. It catches
+`SIGTERM`, `SIGINT`, and `SIGHUP` and does not act on them. A signal to the
+group ends the script, and the wrapper still records how the script ended. It
+runs ARGV with stdin from `/dev/null`, waits for it, and writes `exit_code`,
+`signal`, or `start_error` as JSON to the state file. Then it exits and the
+lock is released. The wrapper does not depend on the daemon, so a run outlives
+a daemon restart. See [Restart handoff](/docs/architecture/state-model#restart-handoff).
 
 The tmux session wraps the harness's native interactive command, not its batch
 renderer. In particular, interactive Codex agents run the top-level Codex TUI

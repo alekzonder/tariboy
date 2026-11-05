@@ -291,6 +291,75 @@ retried at the next interval; missed cycles are not replayed, so a daemon
 restart can delay a due cycle by up to one interval. Saving a policy restarts
 the interval from that moment.
 
+An automatic build uses only the content of a commit. A manual **Build** and
+`tariboy image build STORE/IMAGE` still build from the Store directory as it
+is. For each automatic build the daemon:
+
+1. Checks that the Store root is the root of a Git repository: it has its own
+   `.git` entry, and `git rev-parse --show-toplevel` returns the Store root. A
+   plain directory or a directory inside another repository fails with
+   `store_not_git`.
+2. Exports the `HEAD` commit with `git archive` into a new owner-only directory
+   under `<base-dir>/image-build/`. Ignored and untracked files of the working
+   copy, for example an old `images/NAME/.agents/` or `__pycache__/`, do not
+   enter the image. Uncommitted changes do not enter it either. The working
+   copy is not changed. `git archive` applies the `export-ignore` and
+   `export-subst` attributes of `.gitattributes`; submodule content and Git LFS
+   objects are not exported.
+3. Fails the build when the commit has a symbolic link, an `extends` layer, a
+   `skills[].dir` or a `prompts[].file` that points outside the commit.
+4. Installs every `skills-lock.json` in the export, in the order described
+   below for Store builds.
+5. Compares each installation directory's `.agents/skills/` with the locks
+   installed there, a later lock replacing an earlier entry of the same skill.
+   Each locked skill must be installed, the hash of its files must equal the
+   lock's `computedHash`, and no other skill may be there. The hash is the one
+   the skills installer writes: sha256 over each file's relative path followed
+   by its content, with files ordered like JavaScript `localeCompare` and
+   `.git` and `node_modules` skipped.
+6. Builds and publishes the image from the export, then removes the export,
+   also after a failure.
+
+A failure publishes nothing: neither the version tag nor `latest` moves. Every
+error starts with `Store NAME image IMAGE:` and names the cause, for example:
+
+```text
+Store dev image basic: skills-lock.json images/basic/skills-lock.json: skill cli-text: installed content sha256:AAA does not match computedHash BBB
+Store dev image basic: skills-lock.json images/basic/skills-lock.json: skill extra: is installed but not in skills-lock.json
+Store dev image basic: Store root /srv/dev is not the root of a Git repository
+```
+
+A lock mismatch has the code `skills_lock_mismatch`, a Store without its own
+Git repository `store_not_git`, and a path outside the commit `bad_store`.
+The daemon log line `Store automatic build` carries the error, and
+`tariboy store show NAME` and `GET /api/stores/NAME` return the last attempt of
+each selected image in `auto.results`:
+
+```json
+{"image": "basic", "selector": "dev/basic", "at": "2026-11-03T21:00:00.000000000Z", "image_version": "1.4.0", "error": ""}
+```
+
+A success records an empty `error`, so an earlier error disappears. Deselecting
+an image removes its entry. A Store refresh failure is only logged, because no
+image is selected for a build at that point.
+
+The provenance of an automatically built image (`tariboy image provenance
+REF`) records `git_commit`, the full SHA of the exported commit, and
+`lock_digest`. `lock_digest` is `sha256:` followed by the hex sha256 of one
+line per installed `skills-lock.json`, in installation order: the Store root's
+lock, then the lock of each `extends` layer in layer order, or the image's own
+lock. Each line is `<path from the Store root>`, a NUL byte, the hex sha256 of
+the file's bytes, and a newline. Without any lock the value is the sha256 of an
+empty string. `repository_id` stays empty, and `source_cwd` names the image
+directory in the Store working copy. Because every automatic build installs
+its skills into a fresh export, the installer downloads remote skills on every
+automatic build; without network access the build fails and nothing is
+published.
+
+The automatic path is selected by the operation initiator `auto`, which only
+the cycle sets. An API client that calls `POST /api/images/build` with a Store
+selector and `initiator: auto` also gets a build from the commit.
+
 The registration's name and source are persisted in the daemon database
 together with this policy (interval, selected images, and the last cycle time).
 Viewing a Store still reads the current disk inventory and `image_version` values;
@@ -535,8 +604,10 @@ Tariboy assembles the layers in a temporary owner-only directory under
    same path is replaced; other files remain.
 2. If the copied layer contains `skills-lock.json`, a Store build runs
    `npx skills experimental_install` in the assembly directory and then removes
-   the lock. A later layer's install replaces a skill of the same name
-   installed by an earlier one.
+   the lock. The installer skips a skill whose `SKILL.md` is already in
+   `.agents/skills/`, so a skill of the same name installed by an earlier
+   layer stays. An automatic build then refuses the image with
+   `skills_lock_mismatch` when the later lock pins other content.
 3. Each layer's `./` prompt files are copied to
    `./.tariboy-extends/<layer>/<path>`, so equal prompt paths from different
    images stay separate files. The reserved `.tariboy-extends` directory must

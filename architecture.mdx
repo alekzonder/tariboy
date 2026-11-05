@@ -382,6 +382,7 @@ flowchart LR
 | Condition | Automatic behavior | Evidence or operator action |
 | --- | --- | --- |
 | Daemon restart during a live shim | Replacement daemon adopts persisted running iterations and proxy handoff leases. It reaps a tmux session only when no live iteration owns it. | Inspect agent/iteration state and audit; never start a second daemon against the same base directory. |
+| Daemon restart during a script run | `tariboy update` and `tariboy daemon restart` leave the run running, and the replacement daemon publishes its original exit code. `tariboy daemon stop`, or a process lost at restart, records `interrupted`. | Inspect the run with `script runs` and its log; rerun an interrupted run explicitly. |
 | Harness timeout or error | The shim records a terminal outcome; loop policy may restart or stop future work. Open letters render again. | Review result, shim logs, audit, and agent loop policy. |
 | Plugin failure | The host health-checks and restarts enabled plugins; open letters to a plugin are delivered again. | Inspect plugin status/logs; never place upstream AI credentials in plugin configuration. |
 | Model-price refresh failure | The proxy keeps the last valid runtime generation, or built-in fallbacks when none has loaded. The next daily check retries. | Inspect `pricing_catalog_error` daemon logs/events; fields are bounded to source, generation time, model count, and a stable error class. |

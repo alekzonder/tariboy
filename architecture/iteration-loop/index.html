@@ -29,6 +29,15 @@ an iteration at each occurrence, with the trigger <code>schedule</code>. See
 <li><strong>Message</strong> — a letter sent to the agent nudges the loop to start an
 iteration now (only while the agent’s inbox holds open letters).</li>
 </ul>
+<p>A message iteration can end with an error (<code>harness_error</code>, or a launch that
+failed). Open letters then stay open. If the agent still has open letters and
+<code>on_error</code> is not <code>stop</code>, the loop starts a new message iteration after a
+delay. The first delay is 30 seconds. Each further error doubles the delay, up
+to 10 minutes. An iteration that does not fail resets the delay to 30 seconds.
+Each iteration shows a letter again and counts one more attempt. The prompt
+shows a letter at most five times. The next iteration marks it as a dead
+letter. With a lasting failure, this happens about 15.5 minutes after the
+first attempt. A new letter does not shorten a delay that is already running.</p>
 <p>Loop policy is per-agent: <code>interval</code>, <code>timeout</code> (soft), <code>hard-timeout</code>,
 <code>on_timeout</code> and <code>on_error</code> (e.g. <code>restart</code>). An iteration ends when it signals
 completion, exits, or reaches an enforced deadline. A <code>timeout</code> or
@@ -526,7 +535,7 @@ facade over these parts:</p>
 </tr>
 <tr>
 <td>Script supervisor (<code>scripts.go</code>)</td>
-<td>Durable script runs: claim, start as the agent, cancel, and record the result.</td>
+<td>Durable script runs: claim, start as the agent through the <code>tariboy-shim __script-run</code> wrapper, cancel, time out, and record the result from the run’s state file. At start it adopts the runs that a restart handed over (see <a href="/tariboy/docs/architecture/state-model#restart-handoff">Restart handoff</a>).</td>
 </tr>
 <tr>
 <td>Tools facade (<code>tools_facade.go</code>)</td>
