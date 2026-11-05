@@ -11,4 +11,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { "@": path.resolve(__dirname, "src") } },
   server: { fs: { allow: fsAllow } },
+  // Drops the implicit same-origin host "This daemon (local)" (lib/aggregate.ts).
+  // Its empty base URL would send /api requests to the Storybook origin.
+  define: { "import.meta.env.VITE_TARIBOY_NO_LOCAL_HOST": '"1"' },
 });

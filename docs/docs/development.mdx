@@ -634,12 +634,16 @@ build takes about 10 seconds and its peak resident memory is about 0.86 GB
 (`/usr/bin/time -v`). If the peak grows above 1.5 GB, set
 `NODE_OPTIONS=--max-old-space-size=1536` in the step command.
 
-Storybook never reaches a daemon. Three layers keep it that way:
+Storybook never reaches a daemon. Four layers keep it that way:
 
 1. Storybook reads `ui/vite.storybook.config.ts`, not `ui/vite.config.ts`.
    The app config proxies `/api` to `127.0.0.1:9990`. The Storybook file has
    the same plugins and alias and no `server.proxy`. `ui/.storybook/main.ts`
-   has no `viteFinal` and no addons.
+   has no `viteFinal` and no addons. The Storybook file also defines
+   `VITE_TARIBOY_NO_LOCAL_HOST` as `"1"`. `fetchAllAgents`
+   (`ui/src/lib/aggregate.ts`) then leaves out the implicit host "This daemon
+   (local)", whose empty base URL would send `/api/agents` to the page origin.
+   The app never sets the variable, so it still lists that host.
 2. The `withDaemon` decorator (`ui/src/storybook/decorators.tsx`) writes a
    host registry with one host, `http://storybook.invalid`, into the
    `tariboy_daemons` and `tariboy_active_daemon` keys. The `.invalid` name
@@ -649,12 +653,16 @@ Storybook never reaches a daemon. Three layers keep it that way:
    imports `CustomerQuestionNotifications`, because that component opens the
    tasks WebSocket.
 
+4. `ui/src/test/storyNetwork.test.tsx` mounts every story of
+   `src/**/*.stories.tsx` in jsdom with portable stories and
+   `.storybook/preview.tsx`. It replaces `fetch` and `WebSocket`, records each
+   URL, and fails on any URL that is not on `storybook.invalid`. So a relative
+   `/api` path and `127.0.0.1:9990` both fail it. A new story joins the check
+   by itself. The test does not see `XMLHttpRequest`, `EventSource` or
+   `<img src>`.
+
 `ui/src/test/storybookConfig.test.ts` and
-`ui/src/test/storybookDecorators.test.tsx` pin layers 1 and 2. The tests check
-the config and the decorators, not future stories. A new story that gets its
-data in another way must pass a manual network check: open it with Playwright
-and `page.on("request")`, and make sure that no request goes to
-`127.0.0.1:9990` or to a relative `/api` path.
+`ui/src/test/storybookDecorators.test.tsx` pin layers 1 and 2.
 
 `npm run fmt` formats `ui/src`, `ui/store`, `ui/tests`, and `ui/.storybook`
 in place with [oxfmt](https://oxc.rs/docs/guide/usage/formatter) and
