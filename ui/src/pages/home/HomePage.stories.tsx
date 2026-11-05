@@ -34,6 +34,10 @@ export const Empty: Story = {
   args: { ...base, running: agentLinks.empty, recent: agentLinks.empty, needsYouCount: 0 },
 };
 
+export const LongText: Story = {
+  args: { ...base, running: agentLinks.longText, recent: agentLinks.longText },
+};
+
 export const TodayError: Story = {
   args: { ...base, totals: null, todayError: "request timed out" },
 };
