@@ -18,6 +18,13 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) >= 3 && os.Args[1] == shim.ScriptRunMode && os.Args[2] == "--" {
+		if err := shim.RunScript(os.Args[3:]); err != nil {
+			fmt.Fprintln(os.Stderr, "tariboy-shim script run:", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	fs := flag.NewFlagSet("tariboy-shim", flag.ExitOnError)
 	iterDir := fs.String("iteration-dir", "", "iteration directory (holds logs/, result.json, shim.sock)")

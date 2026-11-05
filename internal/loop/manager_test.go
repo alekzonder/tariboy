@@ -345,7 +345,7 @@ func TestScriptSupervisorRecoveryAndCancel(t *testing.T) {
 	if set, err := st.SetRunPID("worker", stale.ID, 1234); err != nil || !set {
 		t.Fatalf("pid set=%v err=%v", set, err)
 	}
-	if err := st.RecoverRunning(); err != nil {
+	if err := st.RecoverRunning(nil); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := st.GetRun("worker", stale.ID); got.Status != script.RunInterrupted {
@@ -741,7 +741,7 @@ func newManager(t *testing.T, r IterationRunner) (*Manager, *agent.Store, string
 	buildBasic(t, imgStore)
 	m := NewManager(ManagerConfig{
 		AgentsDir: filepath.Join(base, "agents"), RuntimeDir: testutil.ShortDir(t),
-		ShimBin: "/opt/tariboy-shim", ImgStore: imgStore, Store: as,
+		ShimBin: os.Args[0], ImgStore: imgStore, Store: as,
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Clock: time.Now,
 		Mail:          mail.New(s, time.Now, agentStoreDirectory{as}),
 		RunnerFactory: func(agent.Agent) IterationRunner { return r },
@@ -3546,7 +3546,11 @@ func TestStartScriptSourcesAgentShellScripts(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.scripts.startScript(context.Background(), agent.Agent{Name: "worker", Cwd: workdir}, r)
-	m.wg.Wait()
+	// The run outlives the manager's goroutines, so wait for its output.
+	testutil.WaitFor(5*time.Second, func() bool {
+		got, _ := os.ReadFile(out)
+		return string(got) == "g agent"
+	})
 	got, err := os.ReadFile(out)
 	if err != nil || string(got) != "g agent" {
 		t.Fatalf("script saw %q (err %v), want %q", got, err, "g agent")

@@ -88,7 +88,11 @@ type ManagerConfig struct {
 	Scripts             *script.Store
 	ScriptResults       ScriptResultNotifier
 	ScriptTimeout       time.Duration
-	Emit                func(events.Event)
+	// ScriptHandoff tells, when the manager stops, whether the next daemon
+	// takes over the script runs. Then they keep running; otherwise, and when
+	// nil, the stop interrupts them.
+	ScriptHandoff func() bool
+	Emit               func(events.Event)
 	Proxy               ProxyBinder
 	Groups              GroupProvisioner
 
@@ -441,8 +445,17 @@ func (m *Manager) StartAll(ctx context.Context) error {
 	shimRefreshFailed := m.refreshShims(agents)
 
 	if m.cfg.Scripts != nil {
-		if err := m.cfg.Scripts.RecoverRunning(); err != nil {
+		adopted, err := m.scripts.adoptRunningScripts()
+		if err != nil {
+			return fmt.Errorf("adopt scripts: %w", err)
+		}
+		if err := m.cfg.Scripts.RecoverRunning(func(r script.Run) bool { return adopted[r.Agent+"/"+r.ID] }); err != nil {
 			return fmt.Errorf("recover scripts: %w", err)
+		}
+		// The results of the runs lost at the restart go out now, not on the
+		// publisher's next tick.
+		if m.cfg.ScriptResults != nil {
+			m.cfg.ScriptResults.Wake()
 		}
 		m.scripts.startScriptSupervisor(cctx)
 	}

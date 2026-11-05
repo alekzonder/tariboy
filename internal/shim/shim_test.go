@@ -36,6 +36,12 @@ func TestMain(m *testing.M) {
 		}
 		os.Exit(0)
 	}
+	if len(os.Args) >= 3 && os.Args[1] == ScriptRunMode && os.Args[2] == "--" {
+		if RunScript(os.Args[3:]) != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 	// Harnesses, fake tmux and the supervisor inherit this environment; keep
 	// live TARIBOY_* variables and the user's HOME out of them.
 	cleanup, err := testutil.IsolateEnv()
