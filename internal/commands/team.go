@@ -35,6 +35,23 @@ func rewriteTeamComposeRefs(input []byte, refs map[string]string) ([]byte, error
 
 func registryError(code string, err error) error { return api.UserError{Code: code, Msg: err.Error()} }
 
+// parseTeamCompose parses and validates the compose YAML of a team import. It
+// refuses the sections compose up does not apply yet, so an import never
+// applies part of a file.
+func parseTeamCompose(raw []byte) (compose.File, error) {
+	file, err := compose.Parse(raw)
+	if err == nil {
+		err = file.Validate()
+	}
+	if err == nil {
+		err = file.UnappliedSections()
+	}
+	if err != nil {
+		return compose.File{}, registryError("bad_compose", err)
+	}
+	return file, nil
+}
+
 func teamCompose() registry.Command {
 	return registry.WithResult[TeamCompose](registry.Command{Path: "team.compose", Summary: "Render a group as tariboy-compose.yaml", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/groups/{name}/compose"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		name := p.String("name")
@@ -78,12 +95,9 @@ func teamCompose() registry.Command {
 
 func teamApplyYAML() registry.Command {
 	return registry.Command{Path: "team.import.yaml.apply-internal", Summary: "Apply validated team compose YAML", Args: []registry.Arg{{Name: "yaml", Type: registry.String, Required: true}}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
-		file, err := compose.Parse([]byte(p.String("yaml")))
+		file, err := parseTeamCompose([]byte(p.String("yaml")))
 		if err != nil {
-			return nil, registryError("bad_compose", err)
-		}
-		if err := file.Validate(); err != nil {
-			return nil, registryError("bad_compose", err)
+			return nil, err
 		}
 		for _, spec := range file.Agents {
 			ref, err := image.ParseRef(spec.Image)
@@ -138,12 +152,9 @@ func teamApplyYAML() registry.Command {
 func teamImportYAML() registry.Command {
 	return registry.WithResult[TeamImportPlan](registry.Command{Path: "team.import.yaml", Summary: "Preview pasted tariboy-compose.yaml", Args: []registry.Arg{{Name: "yaml", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/team-imports/preview-yaml"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		raw := []byte(p.String("yaml"))
-		file, err := compose.Parse(raw)
-		if err == nil {
-			err = file.Validate()
-		}
+		file, err := parseTeamCompose(raw)
 		if err != nil {
-			return nil, registryError("bad_compose", err)
+			return nil, err
 		}
 		if len(file.Groups) != 1 {
 			return nil, api.UserError{Code: "bad_compose", Msg: "team import requires exactly one group"}
@@ -162,12 +173,9 @@ func teamImportYAML() registry.Command {
 }
 
 func planTeamImport(c *registry.Ctx, preview teamportable.Preview) (TeamImportPlan, error) {
-	file, err := compose.Parse(preview.ComposeYAML)
-	if err == nil {
-		err = file.Validate()
-	}
+	file, err := parseTeamCompose(preview.ComposeYAML)
 	if err != nil {
-		return TeamImportPlan{}, registryError("bad_compose", err)
+		return TeamImportPlan{}, err
 	}
 	agentPlans := make([]TeamImportEntryPlan, 0, len(file.Agents))
 	for name, spec := range file.Agents {
@@ -296,12 +304,8 @@ func resolveTeamImportCompose(p registry.Request, preview *teamportable.Preview,
 		editedYAML = operation.ComposeYAML
 	}
 	if editedYAML != "" {
-		file, parseErr := compose.Parse([]byte(editedYAML))
-		if parseErr == nil {
-			parseErr = file.Validate()
-		}
-		if parseErr != nil {
-			return nil, registryError("bad_compose", parseErr)
+		if _, err := parseTeamCompose([]byte(editedYAML)); err != nil {
+			return nil, err
 		}
 		preview.ComposeYAML = []byte(editedYAML)
 	}

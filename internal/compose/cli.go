@@ -122,6 +122,12 @@ func Run(ctx context.Context, call Caller, o Options, out, errOut io.Writer) int
 		fmt.Fprintf(errOut, "compose: %v\n", err)
 		return 1
 	}
+	if verb == "up" || verb == "build" {
+		if err := f.UnappliedSections(); err != nil {
+			fmt.Fprintf(errOut, "compose %s: %v\n", verb, err)
+			return 1
+		}
+	}
 	r := NewRunner(call, workdir, out)
 
 	// Auto-start the daemon before applying the file (default on). --no-start or
@@ -133,7 +139,11 @@ func Run(ctx context.Context, call Caller, o Options, out, errOut io.Writer) int
 		}
 	}
 
-	var runErr error
+	// The daemon must be inside the file's tariboy range before any change.
+	runErr := checkDaemonVersion(call, f, file)
+	if runErr != nil {
+		return reportRunError(verb, runErr, errOut)
+	}
 	switch verb {
 	case "up":
 		runErr = r.Up(f)
@@ -157,13 +167,18 @@ func Run(ctx context.Context, call Caller, o Options, out, errOut io.Writer) int
 		fmt.Fprintf(errOut, "compose: unknown verb %q\n", verb)
 		return 2
 	}
-	if runErr != nil {
-		if client.IsDaemonDown(runErr) {
-			fmt.Fprintln(errOut, "tariboyd is not running (start it with: tariboyd)")
-			return 2
-		}
-		fmt.Fprintf(errOut, "compose %s: %v\n", verb, runErr)
-		return 1
+	return reportRunError(verb, runErr, errOut)
+}
+
+// reportRunError prints the error of a verb and returns its exit code.
+func reportRunError(verb string, err error, errOut io.Writer) int {
+	if err == nil {
+		return 0
 	}
-	return 0
+	if client.IsDaemonDown(err) {
+		fmt.Fprintln(errOut, "tariboyd is not running (start it with: tariboyd)")
+		return 2
+	}
+	fmt.Fprintf(errOut, "compose %s: %v\n", verb, err)
+	return 1
 }
