@@ -29,7 +29,7 @@ func TestDetailListsWorkflowSources(t *testing.T) {
 	defer db.Close()
 	writeWorkflow(t, source, "a", "schema_version: 1\nname: a\nworkflow_version: 1.2.3\n")
 	writeWorkflow(t, source, "b", "schema_version: 1\nbogus: true\n")
-	if _, err := catalog.Add(context.Background(), "team", source); err != nil {
+	if _, err := catalog.Add(context.Background(), "team", source, ""); err != nil {
 		t.Fatal(err)
 	}
 	detail, err := catalog.Detail(context.Background(), "team")
@@ -51,7 +51,7 @@ func TestDetailWithoutWorkflowsDirectoryHasEmptyList(t *testing.T) {
 	base, source := t.TempDir(), t.TempDir()
 	catalog, db := openCatalog(t, base)
 	defer db.Close()
-	if _, err := catalog.Add(context.Background(), "team", source); err != nil {
+	if _, err := catalog.Add(context.Background(), "team", source, ""); err != nil {
 		t.Fatal(err)
 	}
 	detail, err := catalog.Detail(context.Background(), "team")
@@ -72,7 +72,7 @@ func TestPrepareWorkflowBuild(t *testing.T) {
 	catalog, db := openCatalog(t, base)
 	defer db.Close()
 	dir := writeWorkflow(t, source, "a", "schema_version: 1\n")
-	if _, err := catalog.Add(context.Background(), "team", source); err != nil {
+	if _, err := catalog.Add(context.Background(), "team", source, ""); err != nil {
 		t.Fatal(err)
 	}
 	prepared, release, err := catalog.PrepareWorkflowBuild("team/a")

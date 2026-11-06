@@ -274,7 +274,11 @@ An existing agent converges in place:
   running keeps its old values, and the next iteration uses the new ones.
 
 Model, effort, and plugins are applied only when compose creates an agent; `up`
-does not change them on an existing agent.
+does not change them on an existing agent. The daemon can change the plugins of
+an existing agent with `agent plugins` and the ref of a Git Store with
+`store ref` (see [Plugins](/docs/plugins#plugins-of-an-existing-agent) and
+[Images](/docs/images#the-ref-of-a-git-store)), but compose does not use these
+commands yet.
 
 ### Entities that are in use
 

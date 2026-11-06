@@ -87,7 +87,7 @@ func TestCatalogPersistsAndRereadsLocalInventory(t *testing.T) {
 	}
 
 	catalog, db := openCatalog(t, base)
-	got, err := catalog.Add(context.Background(), "team", source)
+	got, err := catalog.Add(context.Background(), "team", source, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestCatalogDetailReportsLatestImageVersionAndComparisonStatus(t *testing.T)
 
 	catalog, db := openCatalog(t, base)
 	defer db.Close()
-	if _, err := catalog.Add(context.Background(), "team", source); err != nil {
+	if _, err := catalog.Add(context.Background(), "team", source, ""); err != nil {
 		t.Fatal(err)
 	}
 	detail, err := catalog.Detail(context.Background(), "team")
@@ -203,7 +203,7 @@ func TestCatalogDetailReportsLatestPathInspectionError(t *testing.T) {
 
 	catalog, db := openCatalog(t, base)
 	defer db.Close()
-	if _, err := catalog.Add(context.Background(), "team", source); err != nil {
+	if _, err := catalog.Add(context.Background(), "team", source, ""); err != nil {
 		t.Fatal(err)
 	}
 	detail, err := catalog.Detail(context.Background(), "team")
@@ -221,7 +221,7 @@ func TestCatalogDetailIgnoresCorruptBuiltArtifactForAnotherImage(t *testing.T) {
 	plantBrokenLatest(t, filepath.Join(base, "images"), "unrelated", "latest")
 	catalog, db := openCatalog(t, base)
 	defer db.Close()
-	if _, err := catalog.Add(context.Background(), "team", source); err != nil {
+	if _, err := catalog.Add(context.Background(), "team", source, ""); err != nil {
 		t.Fatal(err)
 	}
 	detail, err := catalog.Detail(context.Background(), "team")
@@ -261,7 +261,7 @@ func TestCatalogClonesRefreshesAndSafelyRemovesGitStore(t *testing.T) {
 
 	catalog, db := openCatalog(t, base)
 	defer db.Close()
-	registered, err := catalog.Add(ctx, "team", remoteURL)
+	registered, err := catalog.Add(ctx, "team", remoteURL, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +333,7 @@ func TestCatalogRefreshKeepsLocalGitStoreChanges(t *testing.T) {
 
 	catalog, db := openCatalog(t, t.TempDir())
 	defer db.Close()
-	if _, err := catalog.Add(ctx, "local", local); err != nil {
+	if _, err := catalog.Add(ctx, "local", local, ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := catalog.Refresh(ctx, "local"); err != nil {
@@ -354,15 +354,15 @@ func TestCatalogRejectsUnsafeSourcesAndDuplicateNames(t *testing.T) {
 		{"password", "ssh://git:secret@store.example/team.git"},
 		{"scheme", "http://store.example/team.git"},
 	} {
-		if _, err := catalog.Add(context.Background(), test.name, test.source); err == nil {
+		if _, err := catalog.Add(context.Background(), test.name, test.source, ""); err == nil {
 			t.Fatalf("Add(%q, %q) accepted", test.name, test.source)
 		}
 	}
 	source := t.TempDir()
-	if _, err := catalog.Add(context.Background(), "team", source); err != nil {
+	if _, err := catalog.Add(context.Background(), "team", source, ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := catalog.Add(context.Background(), "team", source); err == nil {
+	if _, err := catalog.Add(context.Background(), "team", source, ""); err == nil {
 		t.Fatal("duplicate Store name accepted")
 	}
 }

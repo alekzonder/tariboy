@@ -206,10 +206,13 @@ sources at `images/<image_name>/Tariboyfile.yaml`.
 
 ```bash
 tariboy store add team git@github.com:company/agent-images.git
+tariboy store add pinned git@github.com:company/agent-images.git --ref v1.4.0
 tariboy store add local /srv/company-images
 tariboy store list
 tariboy store show team
 tariboy store refresh team
+tariboy store ref team release
+tariboy store ref team ""
 tariboy store auto team --interval 60 --image reviewer --image writer
 tariboy store auto team --interval 0
 tariboy image build team/reviewer
@@ -222,6 +225,36 @@ running as `agent` with defaults, `team` lives at
 `/home/agent/.tariboy/stores/team/`, and its reviewer source is
 `/home/agent/.tariboy/stores/team/images/reviewer/Tariboyfile.yaml`.
 `TARIBOY_BASE_DIR` or the daemon's `--base-dir` changes that root.
+
+### The ref of a Git Store
+
+A ref is a branch, a tag or a commit of a Git Store. `store add --ref REF`
+checks the managed clone out at that ref. `store ref NAME REF` changes the ref
+of a registered Git Store, and `store ref NAME ""` returns it to the default
+branch of the remote. Without a ref, the Store follows the default branch, as
+before. Only a Git Store takes a ref. A local Store is your own checkout, so
+`--ref` on a local Store returns `bad_store` (HTTP 400). Switch its branch in
+that directory instead.
+
+Tariboy looks for the ref in this order:
+
+1. A branch of the remote.
+2. A tag.
+3. A commit id of 7 to 40 hex digits.
+
+The daemon fetches the remote and finds the commit of the ref before it
+changes the tree. If no branch, tag or commit matches, the request returns
+`store_ref_not_found` (HTTP 400). The tree and the stored ref then stay as they
+were. `store add` with an unknown ref registers nothing. A ref that holds a
+space, starts with `-`, holds `..` or is longer than 255 characters returns
+`bad_store_ref` (HTTP 400) before Git runs.
+
+`store list`, `store show` and the other Store commands return `ref` and
+`commit`. `ref` is `""` for the default branch. `commit` is the full id of the
+checked-out commit, and `""` for a local Store without Git. A refresh follows
+the ref: a branch moves to its newest commit, a tag is read again because
+someone can move it, and a commit stays the same. The automatic build calls
+the same refresh, so it builds images from the commit of the ref.
 
 ### The default Store
 
@@ -374,10 +407,13 @@ when the source is versioned. A missing `images/` directory shows an empty
 list. An invalid source reports its own error and disables its Build action
 while valid sibling images remain available.
 
-**Refresh** of a managed clone makes it match its upstream exactly: it runs
-`git fetch --prune`, `git reset --hard @{upstream}` and `git clean -fd`, so
-local edits, local commits and untracked files in `<base-dir>/stores/<name>/`
-are discarded on every refresh; files ignored by `.gitignore` are kept. A local
+**Refresh** of a managed clone makes it match the remote exactly. It runs
+`git fetch --prune --force --tags origin`, finds the commit of the Store's ref
+(the default branch when the ref is empty), then runs
+`git checkout --force --detach COMMIT` and `git clean -fd`. Local edits, local
+commits and untracked files in `<base-dir>/stores/<name>/` are discarded on
+every refresh. Files ignored by `.gitignore` are kept. The managed clone stays
+on a detached HEAD (a checkout of a commit without a local branch). A local
 Git checkout root, including a Git worktree, is refreshed with
 `git pull --ff-only` and its local edits are never reset or stashed. A local
 directory without its own `.git` entry is simply reread; Tariboy does not pull

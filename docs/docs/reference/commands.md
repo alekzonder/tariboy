@@ -68,6 +68,7 @@ tariboy has four command surfaces:
 | `tariboy agent model NAME` | Get or set the agent model (omit value to read); applies next iteration |
 | `tariboy agent notes get NAME` | Read the agent notes |
 | `tariboy agent notes set NAME` | Get or set the agent notes (omit value to read, empty to clear) |
+| `tariboy agent plugins NAME` | Get or replace the agent plugin list (omit value to read); applies from the next iteration |
 | `tariboy agent ps` | List agents |
 | `tariboy agent pull NAME PATH` | Read a base64 file from an agent's cwd (used by 'cp') |
 | `tariboy agent reprovision NAME` | Re-unpack an agent's image tree in place and restart its loop, keeping its data |
@@ -207,6 +208,7 @@ tariboy has four command surfaces:
 | `tariboy store add NAME SOURCE` | Register a local or Git Store |
 | `tariboy store auto NAME` | Set a Store's automatic refresh and build policy |
 | `tariboy store list` | List registered Stores |
+| `tariboy store ref NAME REF` | Check a Git Store out at a branch, tag or commit |
 | `tariboy store refresh NAME` | Refresh a Store |
 | `tariboy store remove NAME` | Remove a Store registration |
 | `tariboy store show NAME` | Show a Store and its images |

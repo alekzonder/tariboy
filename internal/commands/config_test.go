@@ -179,6 +179,7 @@ func TestConfigCommandsRegistered(t *testing.T) {
 		"agent.effort":             "POST /api/agents/{name}/effort",
 		"agent.interactive":        "POST /api/agents/{name}/interactive",
 		"agent.env":                "POST /api/agents/{name}/env",
+		"agent.plugins":            "POST /api/agents/{name}/plugins",
 		"agent.harness":            "POST /api/agents/{name}/harness",
 		"agent.messages.batch":     "POST /api/agents/{name}/messages/batch",
 		"agent.messages.max-queue": "POST /api/agents/{name}/messages/max-queue",

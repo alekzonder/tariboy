@@ -14,6 +14,10 @@ func storeCatalog(c *registry.Ctx) *stores.Catalog { return stores.New(c.Store, 
 
 func storeError(err error) error {
 	switch {
+	case errors.Is(err, stores.ErrBadRef):
+		return api.UserError{Code: "bad_store_ref", Msg: err.Error(), Status: http.StatusBadRequest}
+	case errors.Is(err, stores.ErrRefNotFound):
+		return api.UserError{Code: "store_ref_not_found", Msg: err.Error(), Status: http.StatusBadRequest}
 	case errors.Is(err, stores.ErrInvalid), errors.Is(err, stores.ErrUnsafe):
 		return api.UserError{Code: "bad_store", Msg: err.Error(), Status: http.StatusBadRequest}
 	case errors.Is(err, stores.ErrExists):
@@ -35,8 +39,9 @@ func storeAdd() registry.Command {
 	return registry.WithResult[StoreView](registry.Command{Path: "store.add", Summary: "Register a local or Git Store", Args: []registry.Arg{
 		{Name: "name", Type: registry.String, Required: true, Help: "Store name"},
 		{Name: "source", Type: registry.String, Required: true, Help: "absolute local directory or Git source"},
+		{Name: "ref", Flag: "ref", Type: registry.String, Help: "branch, tag or commit to check out; Git Stores only"},
 	}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/stores"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
-		store, err := storeCatalog(c).Add(p.Ctx, p.String("name"), p.String("source"))
+		store, err := storeCatalog(c).Add(p.Ctx, p.String("name"), p.String("source"), p.String("ref"))
 		if err != nil {
 			return nil, storeError(err)
 		}
@@ -81,6 +86,19 @@ func storeAuto() registry.Command {
 		{Name: "image", Flag: "image", Type: registry.String, Repeatable: true, Help: "Store image selected for automatic builds"},
 	}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/stores/{name}/auto"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		detail, err := storeCatalog(c).SetAuto(p.Ctx, p.String("name"), p.IntOr("interval", 0), p.Strings("image"))
+		if err != nil {
+			return nil, storeError(err)
+		}
+		return storeDetail(detail), nil
+	}})
+}
+
+func storeRef() registry.Command {
+	return registry.WithResult[StoreDetail](registry.Command{Path: "store.ref", Summary: "Check a Git Store out at a branch, tag or commit", Args: []registry.Arg{
+		{Name: "name", Type: registry.String, Required: true, Help: "Store name"},
+		{Name: "ref", Type: registry.String, Required: true, Help: `branch, tag or commit; "" follows the default branch`},
+	}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/stores/{name}/ref"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+		detail, err := storeCatalog(c).SetRef(p.Ctx, p.String("name"), p.String("ref"))
 		if err != nil {
 			return nil, storeError(err)
 		}

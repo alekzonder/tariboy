@@ -7,8 +7,10 @@ import "github.com/alekzonder/tariboy/internal/stores"
 // The stores package types are copied under a Store prefix, so their component
 // names cannot collide with another domain's.
 
-// StoreView is a registered Store: its name, the source it was added from and
-// the local directory it is read from (store.add, store.list).
+// StoreView is a registered Store: its name, the source it was added from, the
+// local directory it is read from, the ref a Git Store is checked out at ("" is
+// the default branch) and the checked-out commit ("" without Git) (store.add,
+// store.list).
 type StoreView stores.Store
 
 // StoreImageView is one image of a Store and the state of its local build.
@@ -32,11 +34,13 @@ type StoreAutoBuild struct {
 type StoreAutoResult stores.AutoResult
 
 // StoreDetail is a Store with its images, workflows and automatic build policy
-// (store.show, store.refresh, store.auto).
+// (store.show, store.refresh, store.auto, store.ref).
 type StoreDetail struct {
 	Name      string              `json:"name"`
 	Source    string              `json:"source"`
 	Path      string              `json:"path"`
+	Ref       string              `json:"ref"`
+	Commit    string              `json:"commit"`
 	Images    []StoreImageView    `json:"images"`
 	Workflows []StoreWorkflowView `json:"workflows"`
 	Auto      StoreAutoBuild      `json:"auto"`
@@ -49,7 +53,7 @@ type StoreRemoveResult struct {
 
 func storeDetail(d stores.Detail) StoreDetail {
 	return StoreDetail{
-		Name: d.Name, Source: d.Source, Path: d.Path,
+		Name: d.Name, Source: d.Source, Path: d.Path, Ref: d.Ref, Commit: d.Commit,
 		Images:    convertSlice(d.Images, func(i stores.StoreImage) StoreImageView { return StoreImageView(i) }),
 		Workflows: convertSlice(d.Workflows, func(w stores.StoreWorkflow) StoreWorkflowView { return StoreWorkflowView(w) }),
 		Auto: StoreAutoBuild{

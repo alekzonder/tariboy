@@ -198,6 +198,7 @@ func agentLoopTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
 		{"POST", "/api/agents/{name}/harness", "/api/agents/alpha/harness", map[string]any{"value": "codex"}},
 		{"POST", "/api/agents/{name}/interactive", "/api/agents/alpha/interactive", map[string]any{"value": false}},
 		{"POST", "/api/agents/{name}/env", "/api/agents/alpha/env", map[string]any{"value": map[string]any{"MODE": "test"}}},
+		{"POST", "/api/agents/{name}/plugins", "/api/agents/alpha/plugins", map[string]any{}},
 		{"GET", "/api/agents/{name}/alias", "/api/agents/alpha/alias", nil},
 		{"POST", "/api/agents/{name}/alias", "/api/agents/alpha/alias", map[string]any{"value": "A"}},
 		{"GET", "/api/agents/{name}/notes", "/api/agents/alpha/notes", nil},

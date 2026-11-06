@@ -170,14 +170,16 @@ func (m *Manager) activateCurrentImage(ag *agent.Agent, l agentdir.Layout, curre
 			return activatedImage{}, err
 		}
 	}
-	if recoveredSwap {
-		if err := agentdir.WriteShims(l, *ag); err != nil {
+	// Shims follow the agent's plugin list, which agent.plugins can change
+	// between iterations; WriteShims leaves unchanged files alone.
+	if err := agentdir.WriteShims(l, *ag); err != nil {
+		if recoveredSwap {
 			if _, setErr := m.cfg.Store.SetPendingImageErrorIfEmpty(ag.Name, err.Error()); setErr != nil {
 				m.logger().Error("record pending image error", "agent", ag.Name, "cause", err, "err", setErr)
 				err = errors.Join(err, fmt.Errorf("record pending image error: %w", setErr))
 			}
-			return activatedImage{}, err
 		}
+		return activatedImage{}, err
 	}
 	return activatedImage{PromptTemplateSHA256: manifest.PromptTemplateSHA256, ImageVersion: manifest.ImageVersion, Skills: skills}, nil
 }

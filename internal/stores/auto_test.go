@@ -22,7 +22,7 @@ func outdatedStore(t *testing.T) (*Catalog, string) {
 	buildStoreImage(t, built, source, "beta", "beta", "latest", "1.0.0", "2026-01-01T00:00:00Z")
 	catalog, db := openCatalog(t, base)
 	t.Cleanup(func() { db.Close() })
-	if _, err := catalog.Add(context.Background(), "team", source); err != nil {
+	if _, err := catalog.Add(context.Background(), "team", source, ""); err != nil {
 		t.Fatal(err)
 	}
 	return catalog, source

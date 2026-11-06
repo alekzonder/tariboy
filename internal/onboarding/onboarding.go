@@ -172,7 +172,7 @@ func (s *Service) ensureStore(ctx context.Context) (stores.Store, bool) {
 	if key == StateRemoved {
 		return stores.Store{}, false
 	}
-	added, err := s.Catalog.Add(ctx, DefaultStoreName, s.source())
+	added, err := s.Catalog.Add(ctx, DefaultStoreName, s.source(), "")
 	if err != nil {
 		s.setKey(StateFailed)
 		s.fail(withToolHint(err, "git"))
