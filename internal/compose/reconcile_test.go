@@ -201,6 +201,9 @@ func (f *fakeCaller) Call(method, route string, body any) (json.RawMessage, erro
 	if err := f.fail[method+" "+route]; err != nil {
 		return nil, err
 	}
+	if raw, ok, err := f.agentSettingCall(method, route, body); ok {
+		return raw, err
+	}
 	switch {
 	case method == "GET" && route == "/api/agents":
 		rows := []map[string]any{}
@@ -280,6 +283,15 @@ func (f *fakeCaller) Call(method, route string, body any) (json.RawMessage, erro
 		f.agents[name] = map[string]any{"name": name, "state": "stopped",
 			"group": m["group"], "image": m["image"], "cwd": m["cwd"], "enabled": false, "harness": harness,
 			"env": env, "interactive": m["interactive"]}
+		for _, key := range []string{"model", "effort", "hard_timeout_s", "ai_stall_timeout_s", "user_prompt",
+			"messages_batch", "messages_max_queue", "alias", "notes", "color"} {
+			if v, ok := m[key]; ok {
+				f.agents[name][key] = v
+			}
+		}
+		// The daemon gives an agent on a schema-v2 image the plugins of the
+		// image and ignores the requested ones (resolveRunPlugins).
+		f.agents[name]["plugins"] = []string{"image-plugin"}
 		return mustJSON(map[string]any{"name": name}), nil
 	case method == "POST" && strings.HasSuffix(route, "/env"):
 		name := route[len("/api/agents/") : len(route)-len("/env")]
@@ -758,11 +770,10 @@ func TestUpAppliesBudgets(t *testing.T) {
 	}
 }
 
-// TestUpReportsDriftWithoutMutating pins that a field compose has no converge
-// route for (here model, which agent.ps does not expose) is never mutated by
-// Up: an existing agent whose group, image and harness already match gets no
-// create and no re-assign. Image and harness drift converge (see plan_test.go).
-func TestUpReportsDriftWithoutMutating(t *testing.T) {
+// TestUpConvergesModelWithoutRecreating pins that an existing agent whose
+// group, image and harness already match gets no create and no re-assign;
+// its model converges in place with agent.model.
+func TestUpConvergesModelWithoutRecreating(t *testing.T) {
 	fc := newFake()
 	fc.agents["scout"] = map[string]any{"name": "scout", "state": "running", "group": "research-team", "image": "analyst:latest", "harness": "claude", "model": "claude-sonnet"}
 	fc.agents["writer"] = map[string]any{"name": "writer", "state": "running", "group": "research-team", "image": "analyst:latest", "harness": "claude"}
@@ -779,8 +790,8 @@ func TestUpReportsDriftWithoutMutating(t *testing.T) {
 	if n := countCalls(fc, "POST /api/groups/research-team/assign"); n != 0 {
 		t.Fatalf("group already converged but reconciler issued %d assign calls", n)
 	}
-	if got := fmt.Sprint(fc.agents["scout"]["model"]); got != "claude-sonnet" {
-		t.Fatalf("reconciler mutated a non-group field: model=%q", got)
+	if got := fmt.Sprint(fc.agents["scout"]["model"]); got != "claude-opus-4-8" || countCalls(fc, "POST /api/agents/scout/model") != 1 {
+		t.Fatalf("model did not converge with one call: model=%q %v", got, fc.calls)
 	}
 }
 

@@ -130,13 +130,12 @@ func TestStatusReportsHarnessDrift(t *testing.T) {
 	}
 }
 
-// TestStatusDisclosesUncheckedFields pins that Status always prints a
-// one-line disclaimer noting model/plugins drift is not checked, so an
-// operator reading "ok"/"drift: N" is not misled into a full convergence
-// guarantee.
-func TestStatusDisclosesUncheckedFields(t *testing.T) {
+// TestStatusChecksModelAndPlugins pins that Status compares model, effort
+// and plugins and no longer ends with a disclaimer that it does not.
+func TestStatusChecksModelAndPlugins(t *testing.T) {
 	fc := newFake()
-	fc.agents["scout"] = map[string]any{"name": "scout", "state": "running", "group": "research-team"}
+	fc.agents["scout"] = map[string]any{"name": "scout", "state": "running", "group": "research-team", "image": "analyst:latest",
+		"harness": "claude", "env": map[string]any{"REGION": "eu"}, "model": "old", "effort": "high", "plugins": []string{"other"}}
 	var buf bytes.Buffer
 	r := NewRunner(fc, "", &buf)
 	f, _ := Parse([]byte(goodYAML))
@@ -144,8 +143,13 @@ func TestStatusDisclosesUncheckedFields(t *testing.T) {
 		t.Fatalf("status: %v", err)
 	}
 	out := buf.String()
-	if strings.Count(out, "note: model/plugins drift not checked") != 1 {
-		t.Fatalf("expected exactly one disclaimer line, got:\n%s", out)
+	for _, want := range []string{"model drift: have=old want=claude-opus-4-8", "plugins drift: have=[other] want=[chat]"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("status lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "effort drift") || strings.Contains(out, "not checked") {
+		t.Fatalf("status:\n%s", out)
 	}
 }
 

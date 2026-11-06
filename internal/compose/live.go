@@ -28,6 +28,40 @@ type liveAgent struct {
 	GoalDeliveryCooldownS    int               `json:"goal_delivery_cooldown_s"`
 	Interactive              bool              `json:"interactive"`
 	Env                      map[string]string `json:"env"`
+
+	// View, Secrets and Retention are read per agent of the file, after the
+	// list; agent.ps does not return them.
+	View      liveAgentView   `json:"-"`
+	Secrets   map[string]bool `json:"-"` // secret keys; the daemon never returns a value
+	Retention *liveRetention  `json:"-"` // read only when the file sets retention
+	// reprovisioned marks a row predicted after a re-provision, whose plugins
+	// compose cannot predict.
+	reprovisioned bool
+}
+
+// liveAgentView is the part of GET /api/agents/{name} (agent.inspect) the
+// reconciler reads besides the agent.ps row.
+type liveAgentView struct {
+	Model              string   `json:"model"`
+	Effort             string   `json:"effort"`
+	Plugins            []string `json:"plugins"`
+	HardTimeoutS       int      `json:"hard_timeout_s"`
+	AIStallTimeoutS    int      `json:"ai_stall_timeout_s"`
+	UserPrompt         string   `json:"user_prompt"`
+	MessagesBatch      int      `json:"messages_batch"`
+	MessagesMaxQueue   int      `json:"messages_max_queue"`
+	MailInstantSenders []string `json:"mail_instant_senders"` // nil when not set
+	Alias              string   `json:"alias"`
+	Notes              string   `json:"notes"`
+	Color              string   `json:"color"`
+	Schedule           string   `json:"schedule"`
+}
+
+// liveRetention is the agent's own retention override.
+type liveRetention struct {
+	KeepIterations int   `json:"keep_iterations"`
+	KeepDays       int   `json:"keep_days"`
+	MaxBytes       int64 `json:"max_bytes"`
 }
 
 // liveGroup is the part of a GET /api/groups row the reconciler reads.
@@ -63,15 +97,74 @@ func CheckAgentListContract(raw []byte) error {
 	if err := json.Unmarshal(raw, &typed); err != nil {
 		return fmt.Errorf("agent rows do not decode into the compose live view: %w", err)
 	}
-	fields := reflect.TypeFor[liveAgent]()
 	for _, row := range rows.Agents {
-		for i := range fields.NumField() {
-			tag, _, _ := strings.Cut(fields.Field(i).Tag.Get("json"), ",")
-			if _, ok := row[tag]; !ok {
-				return fmt.Errorf("agent row %s lacks field %q that compose reads", row["name"], tag)
-			}
+		if err := checkFields[liveAgent](row); err != nil {
+			return fmt.Errorf("agent row %s %w", row["name"], err)
 		}
 	}
+	return nil
+}
+
+// CheckAgentViewContract is CheckAgentListContract for one GET
+// /api/agents/{name} response; the daemon's agent.inspect test calls it.
+func CheckAgentViewContract(raw []byte) error {
+	var row map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &row); err != nil {
+		return err
+	}
+	var typed liveAgentView
+	if err := json.Unmarshal(raw, &typed); err != nil {
+		return fmt.Errorf("agent view does not decode into the compose live view: %w", err)
+	}
+	if err := checkFields[liveAgentView](row); err != nil {
+		return fmt.Errorf("agent view %w", err)
+	}
+	return nil
+}
+
+// checkFields reports the first JSON field of T that row lacks. Fields
+// without a JSON name are not read from the response.
+func checkFields[T any](row map[string]json.RawMessage) error {
+	fields := reflect.TypeFor[T]()
+	for i := range fields.NumField() {
+		tag, _, _ := strings.Cut(fields.Field(i).Tag.Get("json"), ",")
+		if tag == "" || tag == "-" {
+			continue
+		}
+		if _, ok := row[tag]; !ok {
+			return fmt.Errorf("lacks field %q that compose reads", tag)
+		}
+	}
+	return nil
+}
+
+// readAgentDetails reads what agent.ps does not return for an agent of the
+// file: its agent.inspect view, its secret keys and, when the file sets
+// retention, its retention override.
+func (r *Runner) readAgentDetails(name string, a AgentSpec, cur *liveAgent) error {
+	if err := r.get("/api/agents/"+name, &cur.View); err != nil {
+		return err
+	}
+	var secrets struct {
+		Keys []string `json:"keys"`
+	}
+	if err := r.get("/api/agents/"+name+"/secrets", &secrets); err != nil {
+		return fmt.Errorf("secrets: %w", err)
+	}
+	cur.Secrets = map[string]bool{}
+	for _, key := range secrets.Keys {
+		cur.Secrets[key] = true
+	}
+	if a.Retention == nil {
+		return nil
+	}
+	var retention struct {
+		Override liveRetention `json:"override"`
+	}
+	if err := r.get("/api/agents/"+name+"/retention", &retention); err != nil {
+		return fmt.Errorf("retention: %w", err)
+	}
+	cur.Retention = &retention.Override
 	return nil
 }
 
