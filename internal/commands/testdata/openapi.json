@@ -6258,6 +6258,10 @@
           "blocked": {
             "type": "boolean"
           },
+          "budget_usd": {
+            "description": "The AI spending limit in USD for the task and its subtree; 0 means no limit",
+            "type": "number"
+          },
           "category": {
             "enum": [
               "open",
@@ -6377,6 +6381,7 @@
           "assignee",
           "manual_block_reason",
           "blocked",
+          "budget_usd",
           "revision",
           "created_at",
           "started_at",
@@ -6657,6 +6662,33 @@
         "required": [
           "artifacts",
           "count"
+        ],
+        "type": "object"
+      },
+      "TaskBudget": {
+        "additionalProperties": false,
+        "properties": {
+          "budget_usd": {
+            "description": "The limit in USD; 0 means no limit",
+            "type": "number"
+          },
+          "exhausted": {
+            "description": "True when the limit is set and the spending reached it",
+            "type": "boolean"
+          },
+          "key": {
+            "type": "string"
+          },
+          "spent_usd": {
+            "description": "The AI spending of the task and its subtree in USD",
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "budget_usd",
+          "spent_usd",
+          "exhausted"
         ],
         "type": "object"
       },
@@ -26363,6 +26395,9 @@
                     "description": "Task assignee",
                     "type": "string"
                   },
+                  "budget_usd": {
+                    "type": "number"
+                  },
                   "description": {
                     "description": "Task description",
                     "type": "string"
@@ -26845,6 +26880,85 @@
           }
         },
         "summary": "Set a workflow task artifact"
+      }
+    },
+    "/api/tasks/{key}/budget": {
+      "get": {
+        "operationId": "tasks.budget",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "description": "Resource key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/TaskBudget"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Show the AI spending limit of a task and what its subtree spent"
       }
     },
     "/api/tasks/{key}/cancel": {

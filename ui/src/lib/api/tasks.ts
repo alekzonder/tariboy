@@ -7,6 +7,7 @@ import type {
   Task,
   TaskAgentPoolDeleted,
   TaskAgentPoolList,
+  TaskBudget,
   TaskCommentList,
   TaskDetail,
   TaskEventList,
@@ -83,6 +84,9 @@ export function tasksApi(t: Transport) {
     createTask: (input: CreateTaskInput) => t.post<Task>("/api/tasks", input),
     updateTask: (key: string, input: UpdateTaskInput) =>
       t.request<Task>("PATCH", taskPath(key), input),
+    /** The AI spending limit of a task and what the task and its subtree spent. */
+    getTaskBudget: (key: string, signal?: AbortSignal) =>
+      t.request<TaskBudget>("GET", `${taskPath(key)}/budget`, undefined, signal),
     claimTask: (key: string, revision: number) =>
       t.post<Task>(`${taskPath(key)}/claim`, { revision }),
     moveTask: (key: string, input: MoveTaskInput) => t.post<Task>(`${taskPath(key)}/move`, input),

@@ -31,6 +31,7 @@ export interface TaskDetailProps {
     assignee?: string;
     manual_block_reason?: string;
     priority: TaskPriority;
+    budget_usd?: number;
   }) => Promise<Task>;
   onComment: (body: string, idempotencyKey: string) => Promise<void>;
   onAddRelation: (targetKey: string, type: TaskRelationType) => Promise<void>;

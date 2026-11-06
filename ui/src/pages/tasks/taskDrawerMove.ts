@@ -22,6 +22,7 @@ export type TaskEdit = {
   assignee?: string;
   manual_block_reason?: string;
   priority: TaskPriority;
+  budget_usd?: number;
 };
 
 /**
@@ -48,9 +49,11 @@ export async function moveTaskToHost({
   onMoved?: (hostId: string) => void;
 }): Promise<Task> {
   const key = task.key;
-  const edited = (
-    ["title", "description", "pull_request", "status", "priority", "manual_block_reason"] as const
-  ).some((field) => input[field] !== undefined && input[field] !== (task[field] ?? ""));
+  const edited =
+    input.budget_usd !== undefined ||
+    (
+      ["title", "description", "pull_request", "status", "priority", "manual_block_reason"] as const
+    ).some((field) => input[field] !== undefined && input[field] !== (task[field] ?? ""));
   if (edited) await api.tasks.updateTask(key, { ...input, assignee: task.assignee });
   const hostId = remote.hostId!;
   // The source and the destination keep one client each for the whole move.

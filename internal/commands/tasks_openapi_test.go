@@ -35,6 +35,7 @@ func tasksTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
 	updated, updatedRev := newTask("Update me")
 	claimed, claimedRev := newTask("Claim me")
 	moved, movedRev := newTask("Move me")
+	budgeted, budgetedRev := newTask("Budget me")
 	completed, completedRev := newTask("Complete me")
 	related, relatedRev := newTask("Relate me")
 	target, _ := newTask("Target")
@@ -89,6 +90,8 @@ func tasksTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
 		{"GET", "/api/tasks/{key}", "/api/tasks/" + target, nil},
 		{"GET", "/api/tasks/{key}", "/api/tasks/" + unrelated, nil},
 		{"PATCH", "/api/tasks/{key}", "/api/tasks/" + updated, map[string]any{"title": "Updated", "revision": updatedRev}},
+		{"PATCH", "/api/tasks/{key}", "/api/tasks/" + budgeted, map[string]any{"budget_usd": 2.5, "revision": budgetedRev}},
+		{"GET", "/api/tasks/{key}/budget", "/api/tasks/" + claimed + "/budget", nil},
 		{"GET", "/api/tasks/{key}/export", "/api/tasks/" + target + "/export", nil},
 		{"POST", "/api/tasks/import", "/api/tasks/import", map[string]any{"bundle": bundle}},
 		{"POST", "/api/tasks/{key}/claim", "/api/tasks/" + claimed + "/claim", map[string]any{"revision": claimedRev}},

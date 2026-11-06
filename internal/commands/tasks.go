@@ -200,6 +200,10 @@ func TaskOperatorCommands() []registry.Command {
 				artifact, history, err := control.GetArtifact(ctx, actor, p.Trimmed("key"), p.Trimmed("name"))
 				return TaskArtifactHistory{Artifact: artifact, History: history}, err
 			}),
+		taskRoute("tasks.budget", "GET", "/api/tasks/{key}/budget", "Show the AI spending limit of a task and what its subtree spent",
+			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
+				return control.TaskBudget(ctx, actor, p.Trimmed("key"))
+			}),
 		taskRoute("tasks.workflow.get", "GET", "/api/tasks/{key}/workflow", "Show where a workflow task is and what it may do next",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
 				return control.GetWorkflow(ctx, actor, p.Trimmed("key"))
@@ -455,6 +459,7 @@ var taskResultTypes = map[string]func(registry.Command) registry.Command{
 	"tasks.artifacts.list":          registry.WithResult[TaskArtifactList],
 	"tasks.artifacts.get":           registry.WithResult[TaskArtifactHistory],
 	"tasks.workflow.get":            registry.WithResult[tasks.WorkflowView],
+	"tasks.budget":                  registry.WithResult[tasks.TaskBudget],
 	"tasks.workflow.requests.get":   registry.WithResult[tasks.TransitionRequest],
 	"tasks.workflow.requests.retry": registry.WithResult[tasks.TransitionRequest],
 	"tasks.workflow.runs.list":      registry.WithResult[TaskScriptRunList],
@@ -508,6 +513,8 @@ func taskWireArgs(method, route string) []registry.Arg {
 			arg.Type = registry.Bool
 		case tasks.KindStrings:
 			arg.Schema = stringOrStrings
+		case tasks.KindOptFloat:
+			arg.Schema = map[string]any{"type": "number"}
 		}
 		if field.Enum != nil {
 			arg.Schema = map[string]any{"type": "string", "enum": field.Enum}

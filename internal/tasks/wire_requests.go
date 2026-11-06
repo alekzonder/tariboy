@@ -130,22 +130,23 @@ func (r *CreateRequest) Input() CreateTaskInput {
 // UpdateRequest changes the supplied fields of a task. The operator client
 // and the agent socket read the revision when it is not given.
 type UpdateRequest struct {
-	Key               string  `json:"key" pos:"0" label:"task key" required:"cli"`
-	Title             *string `json:"title" flag:"title" raw:"true" help:"Task title"`
-	Description       *string `json:"description" flag:"description" raw:"true" help:"Task description"`
-	Status            *string `json:"status" flag:"status" raw:"true" enum:"open,in_progress,wait_customer,done,cancelled" help:"Task status"`
-	PullRequest       *string `json:"pull_request" flag:"pull-request" raw:"true" clear:"true" help:"Canonical pull request URL (empty clears it)"`
-	Assignee          *string `json:"assignee" flag:"assignee" raw:"true" help:"Task assignee"`
-	ManualBlockReason *string `json:"manual_block_reason" flag:"manual-block-reason" raw:"true" clear:"true" help:"Manual block reason"`
-	Priority          *string `json:"priority" flag:"priority" help:"Task priority"`
-	Revision          int64   `json:"revision" flag:"revision" required:"http" help:"Expected current revision"`
+	Key               string   `json:"key" pos:"0" label:"task key" required:"cli"`
+	Title             *string  `json:"title" flag:"title" raw:"true" help:"Task title"`
+	Description       *string  `json:"description" flag:"description" raw:"true" help:"Task description"`
+	Status            *string  `json:"status" flag:"status" raw:"true" enum:"open,in_progress,wait_customer,done,cancelled" help:"Task status"`
+	PullRequest       *string  `json:"pull_request" flag:"pull-request" raw:"true" clear:"true" help:"Canonical pull request URL (empty clears it)"`
+	Assignee          *string  `json:"assignee" flag:"assignee" raw:"true" help:"Task assignee"`
+	ManualBlockReason *string  `json:"manual_block_reason" flag:"manual-block-reason" raw:"true" clear:"true" help:"Manual block reason"`
+	Priority          *string  `json:"priority" flag:"priority" help:"Task priority"`
+	BudgetUSD         *float64 `json:"budget_usd" flag:"budget-usd" help:"AI spending limit in USD for the task and its subtree, customer only (0 removes it)"`
+	Revision          int64    `json:"revision" flag:"revision" required:"http" help:"Expected current revision"`
 }
 
 func (r *UpdateRequest) Input() UpdateTaskInput {
 	return UpdateTaskInput{
 		Title: r.Title, Description: r.Description, Status: r.Status, PullRequest: r.PullRequest,
 		Assignee: r.Assignee, ManualBlockReason: r.ManualBlockReason,
-		Priority: (*Priority)(r.Priority), Revision: r.Revision,
+		Priority: (*Priority)(r.Priority), BudgetUSD: r.BudgetUSD, Revision: r.Revision,
 	}
 }
 

@@ -282,6 +282,7 @@ function taskDetail(key: string, description: string): TaskDetail {
     assignee: "agent:alice",
     manual_block_reason: "",
     blocked: false,
+    budget_usd: 0,
     revision: 1,
     created_at: "2026-08-18T12:00:00Z",
     updated_at: "2026-08-18T12:00:00Z",

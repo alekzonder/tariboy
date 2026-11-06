@@ -34,7 +34,7 @@ func startOnboardingWorkers(t *testing.T, mode string) (*managerParts, *process)
 	if err != nil {
 		t.Fatal(err)
 	}
-	px, err := buildProxy(context.Background(), o, proc, c)
+	px, err := buildProxy(context.Background(), o, proc, c, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

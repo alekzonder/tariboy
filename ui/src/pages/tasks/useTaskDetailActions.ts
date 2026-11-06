@@ -31,6 +31,7 @@ export function useTaskDetailActions(
     assignee?: string;
     manual_block_reason?: string;
     priority: TaskPriority;
+    budget_usd?: number;
   }) => {
     if (!detail) throw new Error("Task is no longer selected");
     try {

@@ -129,6 +129,10 @@ USD; a USD budget cannot bound that provider's actual spend. See
 - Budgets constrain spend.
 - Agent USD budgets have independent calendar hour/day/ISO-week/month limits;
   zero is unlimited, and an exhausted request is rejected before upstream access.
+- A [task budget](/docs/tasks#task-budget) limits the USD spending of a task and
+  its subtree. Only the customer sets or raises it. An agent gets `forbidden`
+  when it sends `--budget-usd` or clears a budget block, so it cannot give
+  itself more money. A database fault in the check lets the request through.
 - Cursor CLI traffic has no price, so it never adds to USD budgets or limits.
   Do not rely on a budget to cap a Cursor agent's spend; see
   [AI proxy](/docs/architecture/ai-proxy#cursor-harness).

@@ -61,7 +61,7 @@ func TestAgentSocketKeys(t *testing.T) {
 		"ready":            "queue limit idempotency_key claim",
 		"show":             "key",
 		"create":           "queue parent_key title description pull_request assignee group priority idempotency_key",
-		"update":           "key title description status pull_request assignee manual_block_reason priority revision",
+		"update":           "key title description status pull_request assignee manual_block_reason priority budget_usd revision",
 		"assign":           "key assignee revision",
 		"comment":          "key body idempotency_key",
 		"ask":              "key principal body idempotency_key",
