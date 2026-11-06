@@ -254,49 +254,10 @@ func openCodeRoutes(cfg map[string]any, selected map[string][]string, metadata m
 			if hasTransportOverride(m.Options) || hasTransportOverride(readObject(configured, "options")) || hasTransportOverride(readObject(configured, "variants")) {
 				return nil, errors.New("OpenCode model transport overrides are unsupported")
 			}
-			family := ""
-			switch m.API.NPM {
-			case "@ai-sdk/openai", "@ai-sdk/openai-compatible":
-				family = "openai"
-			case "@ai-sdk/anthropic":
-				family = "anthropic"
-			default:
-				return nil, errors.New("OpenCode selected provider transport is unsupported")
+			route, err := openCodeModelRoute(id, options, m, env)
+			if err != nil {
+				return nil, err
 			}
-			base, _ := options["baseURL"].(string)
-			if base == "" {
-				base = m.API.URL
-			}
-			if base == "" && id == "openai" && m.API.NPM == "@ai-sdk/openai" {
-				base = openCodeEnv(env, "OPENAI_BASE_URL")
-				if base == "" {
-					base = "https://api.openai.com/v1"
-				}
-			}
-			if base == "" && id == "anthropic" && m.API.NPM == "@ai-sdk/anthropic" {
-				base = openCodeEnv(env, "ANTHROPIC_BASE_URL")
-				if base == "" {
-					base = "https://api.anthropic.com/v1"
-				}
-			}
-			if base == "" {
-				return nil, errors.New("OpenCode selected provider has no resolved upstream URL")
-			}
-			base = openCodeURLVariable.ReplaceAllStringFunc(base, func(field string) string {
-				key := field[2 : len(field)-1]
-				if value := openCodeEnv(env, key); value != "" || slices.Contains(env, key+"=") {
-					return value
-				}
-				return field
-			})
-			if openCodeURLVariable.MatchString(base) {
-				return nil, errors.New("OpenCode upstream URL contains unresolved environment variables")
-			}
-			// OpenCode normalizes the official Anthropic root before creating its SDK.
-			if family == "anthropic" && strings.TrimRight(base, "/") == "https://api.anthropic.com" {
-				base = "https://api.anthropic.com/v1"
-			}
-			route := aiproxy.ProviderRoute{BaseURL: base, Provider: family}
 			if prior, ok := routes[id]; ok && prior != route {
 				return nil, errors.New("OpenCode provider uses incompatible model transports")
 			}
@@ -305,6 +266,64 @@ func openCodeRoutes(cfg map[string]any, selected map[string][]string, metadata m
 	}
 	return routes, nil
 }
+
+// openCodeModelRoute resolves the proxy route of one selected model.
+func openCodeModelRoute(id string, options map[string]any, m openCodeModelMetadata, env []string) (aiproxy.ProviderRoute, error) {
+	family := ""
+	switch m.API.NPM {
+	case "@ai-sdk/openai", "@ai-sdk/openai-compatible":
+		family = "openai"
+	case "@ai-sdk/anthropic":
+		family = "anthropic"
+	default:
+		return aiproxy.ProviderRoute{}, errors.New("OpenCode selected provider transport is unsupported")
+	}
+	base, err := openCodeUpstreamURL(id, options, m, env)
+	if err != nil {
+		return aiproxy.ProviderRoute{}, err
+	}
+	// OpenCode normalizes the official Anthropic root before creating its SDK.
+	if family == "anthropic" && strings.TrimRight(base, "/") == "https://api.anthropic.com" {
+		base = "https://api.anthropic.com/v1"
+	}
+	return aiproxy.ProviderRoute{BaseURL: base, Provider: family}, nil
+}
+
+// openCodeUpstreamURL picks the upstream URL of a model, from the provider
+// options, the model metadata or the SDK default, and expands its variables.
+func openCodeUpstreamURL(id string, options map[string]any, m openCodeModelMetadata, env []string) (string, error) {
+	base, _ := options["baseURL"].(string)
+	if base == "" {
+		base = m.API.URL
+	}
+	if base == "" && id == "openai" && m.API.NPM == "@ai-sdk/openai" {
+		base = openCodeEnv(env, "OPENAI_BASE_URL")
+		if base == "" {
+			base = "https://api.openai.com/v1"
+		}
+	}
+	if base == "" && id == "anthropic" && m.API.NPM == "@ai-sdk/anthropic" {
+		base = openCodeEnv(env, "ANTHROPIC_BASE_URL")
+		if base == "" {
+			base = "https://api.anthropic.com/v1"
+		}
+	}
+	if base == "" {
+		return "", errors.New("OpenCode selected provider has no resolved upstream URL")
+	}
+	base = openCodeURLVariable.ReplaceAllStringFunc(base, func(field string) string {
+		key := field[2 : len(field)-1]
+		if value := openCodeEnv(env, key); value != "" || slices.Contains(env, key+"=") {
+			return value
+		}
+		return field
+	})
+	if openCodeURLVariable.MatchString(base) {
+		return "", errors.New("OpenCode upstream URL contains unresolved environment variables")
+	}
+	return base, nil
+}
+
 func hasTransportOverride(m map[string]any) bool {
 	for key, value := range m {
 		switch strings.ToLower(key) {
