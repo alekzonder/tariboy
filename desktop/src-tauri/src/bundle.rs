@@ -471,7 +471,7 @@ mod tests {
         std::fs::write(dir.join(INSTALLER_FILE), b"#!/bin/sh\n").unwrap();
         let remote = bundle.remote("Darwin", "arm64").unwrap();
         assert_eq!(remote.dir, dir);
-        assert_eq!(remote.files_for_upload().len(), 8);
+        assert_eq!(remote.files_for_upload().len(), 9);
         assert!(bundle
             .remote("Darwin", "x86_64")
             .unwrap_err()
@@ -496,7 +496,7 @@ mod tests {
                 .unwrap()
                 .files_for_upload()
                 .len(),
-            8
+            9
         );
         assert!(bundle
             .remote("Linux", "armv7l")
