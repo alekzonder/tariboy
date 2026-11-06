@@ -41,22 +41,8 @@ func Run(ctx context.Context, reg *registry.Registry, argv []string, call Caller
 	}
 
 	path, args, kind := resolveNode(reg, rest)
-	switch kind {
-	case "":
-		fmt.Fprintf(errOut, "unknown command: %s\n", strings.Join(rest, " "))
-		printClosest(reg, rest[0], errOut)
-		return 2
-	case "group":
-		// Bareword `help` mirrors root-level dispatch: `tariboy agent help`
-		// prints the group's help, same as `tariboy agent -h`.
-		if len(args) == 0 || hasHelpFlag(args) || args[0] == "help" {
-			printGroupHelp(reg, path, out)
-			return 0
-		}
-		// Unknown token under a valid group.
-		fmt.Fprintf(errOut, "unknown command: %s\n", strings.Join(rest, " "))
-		printGroupHelp(reg, path, errOut)
-		return 2
+	if kind != "command" {
+		return runNonCommand(reg, rest, path, args, kind, out, errOut)
 	}
 	// kind == "command": execute or print detail help.
 	cmd, _ := reg.Get(path)
@@ -72,70 +58,120 @@ func Run(ctx context.Context, reg *registry.Registry, argv []string, call Caller
 		printCommandHelp(cmd, errOut)
 		return 2
 	}
-	for _, name := range cmd.AbsPathArgs {
-		if path, ok := params[name].(string); ok && path != "" {
-			absolutePath, absErr := filepath.Abs(path)
-			if absErr != nil {
-				fmt.Fprintf(errOut, "%s: resolve --%s: %v\n", strings.ReplaceAll(cmd.Path, ".", " "), name, absErr)
-				return 1
-			}
-			params[name] = absolutePath
-		}
+	if !resolveAbsPathArgs(cmd, params, errOut) {
+		return 1
 	}
 
-	// Follow mode: a command with a follow flag set runs a CLI-local
-	// streaming/polling composite over the daemon socket, regardless of whether
-	// its non-follow path is remote (logs, channel tail).
-	if cmd.Follow != nil && cmd.FollowFlag != "" {
-		if f, _ := params[cmd.FollowFlag].(bool); f {
-			sock := ""
-			if local != nil {
-				sock = local.Socket
-			}
-			if sock == "" {
-				fmt.Fprintf(errOut, "%s: follow mode needs a daemon socket\n", strings.ReplaceAll(cmd.Path, ".", " "))
-				return 2
-			}
-			if err := cmd.Follow(ctx, sock, params, out); err != nil {
-				return printCLIError(err, errOut)
-			}
-			return 0
-		}
+	if code, followed := runFollow(ctx, cmd, params, local, out, errOut); followed {
+		return code
 	}
 	// A Local command runs in this process and prints its own output; its
 	// result only feeds ExitCodeFrom. Without a local context its HTTP route,
 	// if any, still serves it.
 	if cmd.Local != nil && local != nil {
-		lc := *local
-		lc.Out, lc.ErrOut, lc.JSON = out, errOut, jsonOut
-		result, err := registry.CallLocal(&lc, ctx, cmd, params)
-		if err != nil {
-			return printCLIError(err, errOut)
-		}
-		raw, _ := json.Marshal(result)
-		return resultExitCode(cmd, raw)
+		return runLocal(ctx, cmd, params, local, jsonOut, out, errOut)
 	}
 	if cmd.HTTP == nil {
-		if local == nil {
-			fmt.Fprintf(errOut, "command %s is not available here\n", strings.ReplaceAll(cmd.Path, ".", " "))
-			return 2
-		}
-		result, err := registry.Call(local, ctx, cmd, params)
-		if err != nil {
-			return printCLIError(err, errOut)
-		}
-		raw, err := json.Marshal(result)
-		if err != nil {
-			fmt.Fprintf(errOut, "error: %v\n", err)
-			return 1
-		}
-		if jsonOut {
-			fmt.Fprintln(out, string(raw))
-		} else {
-			registry.PrintHuman(raw, out)
-		}
-		return resultExitCode(cmd, raw)
+		return runInProcess(ctx, cmd, params, local, jsonOut, out, errOut)
 	}
+	return runHTTP(cmd, params, call, jsonOut, out, errOut)
+}
+
+// runNonCommand answers an argv that resolved to a group or to nothing: the
+// group's help, or an unknown-command error.
+func runNonCommand(reg *registry.Registry, rest []string, path string, args []string, kind string, out, errOut io.Writer) int {
+	if kind == "" {
+		fmt.Fprintf(errOut, "unknown command: %s\n", strings.Join(rest, " "))
+		printClosest(reg, rest[0], errOut)
+		return 2
+	}
+	// Bareword `help` mirrors root-level dispatch: `tariboy agent help`
+	// prints the group's help, same as `tariboy agent -h`.
+	if len(args) == 0 || hasHelpFlag(args) || args[0] == "help" {
+		printGroupHelp(reg, path, out)
+		return 0
+	}
+	// Unknown token under a valid group.
+	fmt.Fprintf(errOut, "unknown command: %s\n", strings.Join(rest, " "))
+	printGroupHelp(reg, path, errOut)
+	return 2
+}
+
+// resolveAbsPathArgs makes the command's path arguments absolute against the
+// CLI's working directory. It reports a failure on errOut and returns false.
+func resolveAbsPathArgs(cmd registry.Command, params registry.Params, errOut io.Writer) bool {
+	for _, name := range cmd.AbsPathArgs {
+		if path, ok := params[name].(string); ok && path != "" {
+			absolutePath, absErr := filepath.Abs(path)
+			if absErr != nil {
+				fmt.Fprintf(errOut, "%s: resolve --%s: %v\n", strings.ReplaceAll(cmd.Path, ".", " "), name, absErr)
+				return false
+			}
+			params[name] = absolutePath
+		}
+	}
+	return true
+}
+
+// runFollow handles follow mode: a command with a follow flag set runs a
+// CLI-local streaming/polling composite over the daemon socket, regardless of
+// whether its non-follow path is remote (logs, channel tail). followed is false
+// when the command is not in follow mode and dispatch continues.
+func runFollow(ctx context.Context, cmd registry.Command, params registry.Params, local *registry.Ctx, out, errOut io.Writer) (code int, followed bool) {
+	if cmd.Follow == nil || cmd.FollowFlag == "" {
+		return 0, false
+	}
+	if f, _ := params[cmd.FollowFlag].(bool); !f {
+		return 0, false
+	}
+	sock := ""
+	if local != nil {
+		sock = local.Socket
+	}
+	if sock == "" {
+		fmt.Fprintf(errOut, "%s: follow mode needs a daemon socket\n", strings.ReplaceAll(cmd.Path, ".", " "))
+		return 2, true
+	}
+	if err := cmd.Follow(ctx, sock, params, out); err != nil {
+		return printCLIError(err, errOut), true
+	}
+	return 0, true
+}
+
+func runLocal(ctx context.Context, cmd registry.Command, params registry.Params, local *registry.Ctx, jsonOut bool, out, errOut io.Writer) int {
+	lc := *local
+	lc.Out, lc.ErrOut, lc.JSON = out, errOut, jsonOut
+	result, err := registry.CallLocal(&lc, ctx, cmd, params)
+	if err != nil {
+		return printCLIError(err, errOut)
+	}
+	raw, _ := json.Marshal(result)
+	return resultExitCode(cmd, raw)
+}
+
+// runInProcess runs a command without an HTTP route through its handler, which
+// needs a local context.
+func runInProcess(ctx context.Context, cmd registry.Command, params registry.Params, local *registry.Ctx, jsonOut bool, out, errOut io.Writer) int {
+	if local == nil {
+		fmt.Fprintf(errOut, "command %s is not available here\n", strings.ReplaceAll(cmd.Path, ".", " "))
+		return 2
+	}
+	result, err := registry.Call(local, ctx, cmd, params)
+	if err != nil {
+		return printCLIError(err, errOut)
+	}
+	raw, err := json.Marshal(result)
+	if err != nil {
+		fmt.Fprintf(errOut, "error: %v\n", err)
+		return 1
+	}
+	printResult(raw, jsonOut, out)
+	return resultExitCode(cmd, raw)
+}
+
+// runHTTP sends the command to the daemon: path values fill the route and the
+// remaining params form the query (GET, DELETE) or the body.
+func runHTTP(cmd registry.Command, params registry.Params, call Caller, jsonOut bool, out, errOut io.Writer) int {
 	route := cmd.HTTP.Path
 	for _, wc := range wildcardNames(cmd.HTTP.Path) {
 		v, ok := params[wc]
@@ -158,12 +194,16 @@ func Run(ctx context.Context, reg *registry.Registry, argv []string, call Caller
 	if err != nil {
 		return printCLIError(err, errOut)
 	}
+	printResult(raw, jsonOut, out)
+	return resultExitCode(cmd, raw)
+}
+
+func printResult(raw json.RawMessage, jsonOut bool, out io.Writer) {
 	if jsonOut {
 		fmt.Fprintln(out, string(raw))
 	} else {
 		registry.PrintHuman(raw, out)
 	}
-	return resultExitCode(cmd, raw)
 }
 
 // resultExitCode is the command's ExitCodeFrom applied to a successful
@@ -274,6 +314,18 @@ func resolveNode(reg *registry.Registry, argv []string) (path string, args []str
 
 func parseArgs(cmd registry.Command, args []string) (registry.Params, error) {
 	p := registry.Params{}
+	positional, err := parseFlags(cmd, args, p)
+	if err != nil {
+		return nil, err
+	}
+	if err := bindPositional(cmd, positional, p); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+// parseFlags stores every flag of args in p and returns the other tokens.
+func parseFlags(cmd registry.Command, args []string, p registry.Params) ([]string, error) {
 	positional := []string{}
 	i := 0
 	for i < len(args) {
@@ -299,42 +351,60 @@ func parseArgs(cmd registry.Command, args []string) (registry.Params, error) {
 		if !ok {
 			return nil, fmt.Errorf("unknown flag %s", a)
 		}
-		if arg.Type == registry.Bool {
-			if !hasVal {
-				// Space-separated form: `--archive true` / `--archive false` both
-				// consume the next token as the value; any other next token (a
-				// subcommand, a positional, another flag) leaves bare `--archive`
-				// meaning true and does not consume it.
-				if i+1 < len(args) && (args[i+1] == "true" || args[i+1] == "false") {
-					i++
-					val = args[i]
-				} else {
-					val = "true"
-				}
+		if !hasVal {
+			var err error
+			if val, i, err = nextFlagValue(arg, args, i); err != nil {
+				return nil, err
 			}
-		} else if !hasVal {
-			i++
-			if i >= len(args) {
-				return nil, fmt.Errorf("flag %s needs a value", a)
-			}
-			val = args[i]
 		}
 		v, err := convert(arg, val)
 		if err != nil {
 			return nil, err
 		}
-		if arg.Repeatable {
-			values, _ := p[arg.Name].([]string)
-			value, ok := v.(string)
-			if !ok {
-				return nil, fmt.Errorf("repeatable argument %s must be a string", arg.Name)
-			}
-			p[arg.Name] = append(values, value)
-		} else {
-			p[arg.Name] = v
+		if err := storeFlag(p, arg, v); err != nil {
+			return nil, err
 		}
 		i++
 	}
+	return positional, nil
+}
+
+// nextFlagValue reads the value of the flag at args[i], written without `=`,
+// and returns it with the index of the last token the flag used.
+func nextFlagValue(arg registry.Arg, args []string, i int) (string, int, error) {
+	if arg.Type == registry.Bool {
+		// Space-separated form: `--archive true` / `--archive false` both
+		// consume the next token as the value; any other next token (a
+		// subcommand, a positional, another flag) leaves bare `--archive`
+		// meaning true and does not consume it.
+		if i+1 < len(args) && (args[i+1] == "true" || args[i+1] == "false") {
+			return args[i+1], i + 1, nil
+		}
+		return "true", i, nil
+	}
+	if i+1 >= len(args) {
+		return "", i, fmt.Errorf("flag %s needs a value", args[i])
+	}
+	return args[i+1], i + 1, nil
+}
+
+func storeFlag(p registry.Params, arg registry.Arg, v any) error {
+	if !arg.Repeatable {
+		p[arg.Name] = v
+		return nil
+	}
+	values, _ := p[arg.Name].([]string)
+	value, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("repeatable argument %s must be a string", arg.Name)
+	}
+	p[arg.Name] = append(values, value)
+	return nil
+}
+
+// bindPositional fills the arguments flags left unset from the positional
+// tokens in declaration order, then applies required checks and defaults.
+func bindPositional(cmd registry.Command, positional []string, p registry.Params) error {
 	pi := 0
 	flagsOnly := false
 	for _, arg := range cmd.Args {
@@ -350,7 +420,7 @@ func parseArgs(cmd registry.Command, args []string) (registry.Params, error) {
 		if pi < len(positional) && !flagsOnly {
 			v, err := convert(arg, positional[pi])
 			if err != nil {
-				return nil, err
+				return err
 			}
 			p[arg.Name] = v
 			pi++
@@ -358,16 +428,16 @@ func parseArgs(cmd registry.Command, args []string) (registry.Params, error) {
 		}
 		flagsOnly = flagsOnly || arg.Rest
 		if arg.Required {
-			return nil, fmt.Errorf("missing required argument: %s", arg.Name)
+			return fmt.Errorf("missing required argument: %s", arg.Name)
 		}
 		if arg.Default != nil {
 			p[arg.Name] = arg.Default
 		}
 	}
 	if pi < len(positional) {
-		return nil, fmt.Errorf("unexpected argument: %s", positional[pi])
+		return fmt.Errorf("unexpected argument: %s", positional[pi])
 	}
-	return p, nil
+	return nil
 }
 
 func findArg(cmd registry.Command, flag string) (registry.Arg, bool) {

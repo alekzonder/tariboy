@@ -65,78 +65,107 @@ func Restore(r io.Reader, s *store.Store, agentsDir string, opts RestoreOptions)
 		return Manifest{}, fmt.Errorf("agent %q already exists (use --force to overwrite)", newName)
 	}
 
-	tx, err := s.DB.Begin()
-	if err != nil {
+	target := restoreTarget{agentsDir: agentsDir, oldName: oldName, newName: newName}
+	if err := restoreRows(s, meta.Tables, target, exists); err != nil {
 		return Manifest{}, err
 	}
+	// Files follow the commit, so a failed transaction unpacks nothing.
+	if err := unpackFiles(files, target); err != nil {
+		return Manifest{}, err
+	}
+	return meta.Manifest, nil
+}
+
+// restoreTarget names the agent an archive is restored into.
+type restoreTarget struct {
+	agentsDir string
+	oldName   string
+	newName   string
+}
+
+// restoreRows writes the archive's rows in one transaction: any failure before
+// the commit rolls back everything, including the deletes of an overwrite.
+func restoreRows(s *store.Store, tables map[string][]map[string]any, target restoreTarget, exists bool) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	if err := writeRestoreRows(tx, tables, target, exists); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+func writeRestoreRows(tx *sql.Tx, tables map[string][]map[string]any, target restoreTarget, exists bool) error {
 	if exists {
 		// Delete children-first (reverse table order) so an indirectly scoped
 		// table is cleared while its parent rows still exist. Generic +
 		// transactional so restore is idempotent.
 		for i := len(backupTables) - 1; i >= 0; i-- {
 			ts := backupTables[i]
-			if _, err := tx.Exec(`DELETE FROM `+ts.name+` WHERE `+ts.deleteWhere, newName); err != nil {
-				tx.Rollback()
-				return Manifest{}, err
+			if _, err := tx.Exec(`DELETE FROM `+ts.name+` WHERE `+ts.deleteWhere, target.newName); err != nil {
+				return err
 			}
 		}
 	}
-	idMaps, err := buildIDMaps(tx, meta.Tables, oldName, newName)
+	idMaps, err := buildIDMaps(tx, tables, target.oldName, target.newName)
 	if err != nil {
-		tx.Rollback()
-		return Manifest{}, err
+		return err
 	}
 	for _, ts := range backupTables {
-		recs := meta.Tables[ts.name]
-		if len(recs) == 0 {
-			continue
-		}
-		live, err := liveColumns(tx, ts.name)
-		if err != nil {
-			tx.Rollback()
-			return Manifest{}, err
-		}
-		for _, rec := range recs {
-			row := remapRow(rec, ts, oldName, newName, idMaps)
-			if ts.name == "script_runs" {
-				remapScriptRunLogPath(row, agentsDir, newName)
-			}
-			if ts.name == "script_result_outbox" {
-				remapScriptResultOutbox(row, rec, agentsDir, oldName, newName, idMaps)
-			}
-			if ts.name == "mail" {
-				// The live table numbers its rows; a letter the agent sent
-				// survives its removal and is not inserted twice.
-				delete(row, "seq")
-				var present int
-				if err := tx.QueryRow(`SELECT COUNT(*) FROM mail WHERE id = ?`, row["id"]).Scan(&present); err != nil {
-					tx.Rollback()
-					return Manifest{}, err
-				}
-				if present > 0 {
-					continue
-				}
-			}
-			for c := range row {
-				if !live[c] {
-					tx.Rollback()
-					return Manifest{}, fmt.Errorf("restore: archive column %q is not in table %s", c, ts.name)
-				}
-			}
-			if err := insertRow(tx, ts.name, row); err != nil {
-				tx.Rollback()
-				return Manifest{}, err
-			}
+		if err := restoreTable(tx, ts, tables[ts.name], target, idMaps); err != nil {
+			return err
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		return Manifest{}, err
-	}
+	return nil
+}
 
-	// Unpack files under the (possibly renamed) agent root.
-	root := agentdir.New(agentsDir, newName).Root
+func restoreTable(tx *sql.Tx, ts tableSpec, recs []map[string]any, target restoreTarget, idMaps map[string]map[string]string) error {
+	if len(recs) == 0 {
+		return nil
+	}
+	live, err := liveColumns(tx, ts.name)
+	if err != nil {
+		return err
+	}
+	for _, rec := range recs {
+		row := remapRow(rec, ts, target.oldName, target.newName, idMaps)
+		if ts.name == "script_runs" {
+			remapScriptRunLogPath(row, target.agentsDir, target.newName)
+		}
+		if ts.name == "script_result_outbox" {
+			remapScriptResultOutbox(row, rec, target.agentsDir, target.oldName, target.newName, idMaps)
+		}
+		if ts.name == "mail" {
+			// The live table numbers its rows; a letter the agent sent
+			// survives its removal and is not inserted twice.
+			delete(row, "seq")
+			var present int
+			if err := tx.QueryRow(`SELECT COUNT(*) FROM mail WHERE id = ?`, row["id"]).Scan(&present); err != nil {
+				return err
+			}
+			if present > 0 {
+				continue
+			}
+		}
+		for c := range row {
+			if !live[c] {
+				return fmt.Errorf("restore: archive column %q is not in table %s", c, ts.name)
+			}
+		}
+		if err := insertRow(tx, ts.name, row); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// unpackFiles writes the archive's files under the (possibly renamed) agent root.
+func unpackFiles(files map[string][]byte, target restoreTarget) error {
+	root := agentdir.New(target.agentsDir, target.newName).Root
 	if err := os.MkdirAll(root, 0o700); err != nil {
-		return Manifest{}, err
+		return err
 	}
 	names := make([]string, 0, len(files))
 	for name := range files {
@@ -144,16 +173,16 @@ func Restore(r io.Reader, s *store.Store, agentsDir string, opts RestoreOptions)
 	}
 	sort.Strings(names)
 	for _, rel := range names {
-		outRel := remapPath(rel, oldName, newName)
+		outRel := remapPath(rel, target.oldName, target.newName)
 		dest := filepath.Join(root, outRel)
 		if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
-			return Manifest{}, err
+			return err
 		}
 		if err := os.WriteFile(dest, files[rel], 0o600); err != nil {
-			return Manifest{}, err
+			return err
 		}
 	}
-	return meta.Manifest, nil
+	return nil
 }
 
 // readArchive parses the tar.gz, returning the meta and the files/ payloads

@@ -221,119 +221,147 @@ func saveImportOperation(service teamportable.Service, operation teamportable.Op
 }
 
 func teamImportArchiveApply() registry.Command {
-	return registry.WithResult[TeamImportApplyResult](registry.Command{Path: "team.import.archive.apply", Summary: "Build images and create a staged portable team", Args: []registry.Arg{{Name: "id", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/team-imports/{id}/apply"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
-		service := teamportable.Service{StagingRoot: filepath.Join(c.BaseDir, "team-imports")}
-		preview, err := service.Load(p.String("id"))
-		if err != nil {
-			return nil, registryError("import_not_found", err)
+	return registry.WithResult[TeamImportApplyResult](registry.Command{Path: "team.import.archive.apply", Summary: "Build images and create a staged portable team", Args: []registry.Arg{{Name: "id", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/team-imports/{id}/apply"}, Handler: teamImportArchiveApplyHandler})
+}
+
+func teamImportArchiveApplyHandler(c *registry.Ctx, p registry.Request) (any, error) {
+	service := teamportable.Service{StagingRoot: filepath.Join(c.BaseDir, "team-imports")}
+	preview, err := service.Load(p.String("id"))
+	if err != nil {
+		return nil, registryError("import_not_found", err)
+	}
+	operation, err := service.Operation(preview.ImportID)
+	if err != nil {
+		return nil, registryError("import_not_found", err)
+	}
+	resolvedRefs, err := resolveTeamImportCompose(p, &preview, operation)
+	if err != nil {
+		return nil, err
+	}
+	updateExisting := operation.UpdateExisting
+	if value, ok := p.OptBool("update_existing"); ok {
+		updateExisting = value
+	}
+	planned, planErr := planTeamImport(c, preview)
+	if planErr != nil {
+		return nil, planErr
+	}
+	if err := checkTeamImportConflicts(planned, updateExisting); err != nil {
+		return nil, err
+	}
+	operation.ComposeYAML = string(preview.ComposeYAML)
+	operation.ResolvedRefs = resolvedRefs
+	operation.UpdateExisting = updateExisting
+	operation.Status, operation.Error = "running", ""
+	if err := saveImportOperation(service, operation, "running"); err != nil {
+		return nil, err
+	}
+	if err := service.TouchLease(preview.ImportID); err != nil {
+		return nil, err
+	}
+	defer service.RemoveLease(preview.ImportID)
+	defer startImportLeaseHeartbeat(service, preview.ImportID, c.Log)()
+	result, err := registry.Call(c, p.Ctx, teamApplyYAML(), map[string]any{"yaml": string(preview.ComposeYAML)})
+	if err != nil {
+		operation.Status, operation.Error = "failed", err.Error()
+		if saveErr := saveImportOperation(service, operation, "failed"); saveErr != nil {
+			return nil, errors.Join(err, saveErr)
 		}
-		operation, err := service.Operation(preview.ImportID)
-		if err != nil {
-			return nil, registryError("import_not_found", err)
+		return nil, err
+	}
+	applied, ok := result.(TeamApplyResult)
+	if !ok {
+		return nil, fmt.Errorf("team import %s: unexpected apply result %T", preview.ImportID, result)
+	}
+	for _, item := range applied.Agents {
+		operation.Steps = append(operation.Steps, teamportable.OperationStep{Kind: "agent", Name: item.Name, Status: item.Status, Error: item.Error})
+	}
+	if applied.Complete {
+		operation.Status = "complete"
+	} else {
+		operation.Status = "failed"
+	}
+	if err := saveImportOperation(service, operation, operation.Status); err != nil {
+		return nil, err
+	}
+	return TeamImportApplyResult{TeamApplyResult: applied, ImportID: preview.ImportID, Operation: teamImportOperationFrom(operation)}, nil
+}
+
+// resolveTeamImportCompose sets the compose YAML of preview from the request,
+// or from the saved operation of a resume, with image refs rewritten. It
+// returns the refs of the saved operation merged with those of the request.
+func resolveTeamImportCompose(p registry.Request, preview *teamportable.Preview, operation teamportable.Operation) (map[string]string, error) {
+	editedYAML := p.String("yaml")
+	if editedYAML == "" {
+		editedYAML = operation.ComposeYAML
+	}
+	if editedYAML != "" {
+		file, parseErr := compose.Parse([]byte(editedYAML))
+		if parseErr == nil {
+			parseErr = file.Validate()
 		}
-		editedYAML := p.String("yaml")
-		if editedYAML == "" {
-			editedYAML = operation.ComposeYAML
+		if parseErr != nil {
+			return nil, registryError("bad_compose", parseErr)
 		}
-		if editedYAML != "" {
-			file, parseErr := compose.Parse([]byte(editedYAML))
-			if parseErr == nil {
-				parseErr = file.Validate()
-			}
-			if parseErr != nil {
-				return nil, registryError("bad_compose", parseErr)
-			}
-			preview.ComposeYAML = []byte(editedYAML)
-		}
-		resolvedRefs := map[string]string{}
-		for original, replacement := range operation.ResolvedRefs {
+		preview.ComposeYAML = []byte(editedYAML)
+	}
+	resolvedRefs := map[string]string{}
+	for original, replacement := range operation.ResolvedRefs {
+		resolvedRefs[original] = replacement
+	}
+	for original, value := range nestedMap(p.Params["refs"]) {
+		if replacement, ok := value.(string); ok && replacement != "" {
 			resolvedRefs[original] = replacement
 		}
-		for original, value := range nestedMap(p.Params["refs"]) {
-			if replacement, ok := value.(string); ok && replacement != "" {
-				resolvedRefs[original] = replacement
-			}
-		}
-		if len(resolvedRefs) > 0 {
-			preview.ComposeYAML, err = rewriteTeamComposeRefs(preview.ComposeYAML, resolvedRefs)
-			if err != nil {
-				return nil, registryError("bad_compose", err)
-			}
-		}
-		updateExisting := operation.UpdateExisting
-		if value, ok := p.OptBool("update_existing"); ok {
-			updateExisting = value
-		}
-		planned, planErr := planTeamImport(c, preview)
-		if planErr != nil {
-			return nil, planErr
-		}
-		for _, group := range planned.Groups {
-			if group.Conflict && !updateExisting {
-				return nil, api.UserError{Code: "team_conflict", Msg: "destination team exists; rename it in YAML or choose update existing"}
-			}
-		}
-		for _, candidate := range planned.Agents {
-			if candidate.Conflict {
-				return nil, api.UserError{Code: "agent_conflict", Msg: candidate.Name + ": " + candidate.Message}
-			}
-		}
-		operation.ComposeYAML = string(preview.ComposeYAML)
-		operation.ResolvedRefs = resolvedRefs
-		operation.UpdateExisting = updateExisting
-		operation.Status, operation.Error = "running", ""
-		if err := saveImportOperation(service, operation, "running"); err != nil {
-			return nil, err
-		}
-		if err := service.TouchLease(preview.ImportID); err != nil {
-			return nil, err
-		}
-		defer service.RemoveLease(preview.ImportID)
-		heartbeatLog := c.Log
-		if heartbeatLog == nil {
-			heartbeatLog = slog.Default()
-		}
-		heartbeatDone := make(chan struct{})
-		defer close(heartbeatDone)
-		go func() {
-			ticker := time.NewTicker(time.Minute)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ticker.C:
-					if err := service.TouchLease(preview.ImportID); err != nil {
-						heartbeatLog.Warn("team import: lease heartbeat failed", "import", preview.ImportID, "err", err)
-					}
-				case <-heartbeatDone:
-					return
-				}
-			}
-		}()
-		result, err := registry.Call(c, p.Ctx, teamApplyYAML(), map[string]any{"yaml": string(preview.ComposeYAML)})
+	}
+	if len(resolvedRefs) > 0 {
+		rewritten, err := rewriteTeamComposeRefs(preview.ComposeYAML, resolvedRefs)
 		if err != nil {
-			operation.Status, operation.Error = "failed", err.Error()
-			if saveErr := saveImportOperation(service, operation, "failed"); saveErr != nil {
-				return nil, errors.Join(err, saveErr)
+			return nil, registryError("bad_compose", err)
+		}
+		preview.ComposeYAML = rewritten
+	}
+	return resolvedRefs, nil
+}
+
+func checkTeamImportConflicts(planned TeamImportPlan, updateExisting bool) error {
+	for _, group := range planned.Groups {
+		if group.Conflict && !updateExisting {
+			return api.UserError{Code: "team_conflict", Msg: "destination team exists; rename it in YAML or choose update existing"}
+		}
+	}
+	for _, candidate := range planned.Agents {
+		if candidate.Conflict {
+			return api.UserError{Code: "agent_conflict", Msg: candidate.Name + ": " + candidate.Message}
+		}
+	}
+	return nil
+}
+
+// startImportLeaseHeartbeat keeps the import lease fresh, so a status request
+// does not take a long apply for an interrupted one, until the returned
+// function stops it.
+func startImportLeaseHeartbeat(service teamportable.Service, importID string, log *slog.Logger) (stop func()) {
+	heartbeatLog := log
+	if heartbeatLog == nil {
+		heartbeatLog = slog.Default()
+	}
+	heartbeatDone := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := service.TouchLease(importID); err != nil {
+					heartbeatLog.Warn("team import: lease heartbeat failed", "import", importID, "err", err)
+				}
+			case <-heartbeatDone:
+				return
 			}
-			return nil, err
 		}
-		applied, ok := result.(TeamApplyResult)
-		if !ok {
-			return nil, fmt.Errorf("team import %s: unexpected apply result %T", preview.ImportID, result)
-		}
-		for _, item := range applied.Agents {
-			operation.Steps = append(operation.Steps, teamportable.OperationStep{Kind: "agent", Name: item.Name, Status: item.Status, Error: item.Error})
-		}
-		if applied.Complete {
-			operation.Status = "complete"
-		} else {
-			operation.Status = "failed"
-		}
-		if err := saveImportOperation(service, operation, operation.Status); err != nil {
-			return nil, err
-		}
-		return TeamImportApplyResult{TeamApplyResult: applied, ImportID: preview.ImportID, Operation: teamImportOperationFrom(operation)}, nil
-	}})
+	}()
+	return func() { close(heartbeatDone) }
 }
 
 func teamImportArchiveStatus() registry.Command {

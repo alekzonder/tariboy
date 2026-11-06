@@ -87,126 +87,148 @@ func taskActivity() registry.Command {
 			{Name: "until", Flag: "until", Short: "u", Type: registry.String, Help: "RFC 3339 time (exclusive upper bound)"},
 			{Name: "agent", Flag: "agent", Short: "a", Type: registry.String, Help: "only this agent's work"},
 		},
-		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/task-activity"},
-		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
-			if c.Tasks == nil {
-				return nil, api.UserError{Status: http.StatusServiceUnavailable,
-					Code: "tasks_unavailable", Msg: "native Tasks service is unavailable"}
-			}
-			since, err := activityBound(p.String("since"))
-			if err != nil {
-				return nil, err
-			}
-			until, err := activityBound(p.String("until"))
-			if err != nil {
-				return nil, err
-			}
-			agentName := p.String("agent")
-
-			usage, err := aiproxy.NewStore(c.Store, nil).TaskUsage(aiproxy.UsageFilter{Agent: agentName, Since: since, Until: until})
-			if err != nil {
-				return nil, err
-			}
-			keys := []string{}
-			for _, u := range usage {
-				if !slices.Contains(keys, u.TaskKey) {
-					keys = append(keys, u.TaskKey)
-				}
-			}
-			activity, err := c.Tasks.TaskActivity(p.Ctx, tasks.CustomerActor(c.Tasks.CustomerLogin()),
-				tasks.ActivityFilter{Since: since, Until: until, Agent: agentName, Keys: keys})
-			if err != nil {
-				return nil, err
-			}
-
-			byKey := map[string]*TaskActivityRow{}
-			rows := make([]*TaskActivityRow, 0, len(activity))
-			for _, a := range activity {
-				status := a.Task.Status
-				if a.Task.WorkflowStatus != "" {
-					status = a.Task.WorkflowStatus
-				}
-				row := &TaskActivityRow{
-					Key: a.Task.Key, Title: a.Task.Title, Queue: a.Task.Queue, Status: status,
-					Category: a.Task.Category, Assignee: a.Task.Assignee, Completed: a.Completed,
-					Comments: a.Comments, Outcomes: a.Outcomes, EnteredStatuses: a.EnteredStatuses,
-					Agents: a.Agents, FirstAt: a.FirstAt, LastAt: a.LastAt,
-				}
-				byKey[row.Key] = row
-				rows = append(rows, row)
-			}
-			perAgent := map[string]*TaskActivityAgent{}
-			for _, u := range usage {
-				row := byKey[u.TaskKey]
-				if row == nil {
-					continue // deleted or not visible
-				}
-				// shortcut: an iteration that switched tasks counts once per task.
-				row.Iterations += u.Iterations
-				row.Requests += u.Requests
-				row.Tokens += u.Tokens
-				row.CostUSD = roundUSD(row.CostUSD + u.CostUSD)
-				if !slices.Contains(row.Agents, u.Agent) {
-					row.Agents = append(row.Agents, u.Agent)
-				}
-				if row.FirstAt == "" || u.FirstTS < row.FirstAt {
-					row.FirstAt = u.FirstTS
-				}
-				if u.LastTS > row.LastAt {
-					row.LastAt = u.LastTS
-				}
-				if perAgent[u.Agent] == nil {
-					perAgent[u.Agent] = &TaskActivityAgent{Agent: u.Agent}
-				}
-				a := perAgent[u.Agent]
-				a.Iterations += u.Iterations
-				a.Requests += u.Requests
-				a.CostUSD = roundUSD(a.CostUSD + u.CostUSD)
-			}
-			sort.SliceStable(rows, func(i, j int) bool {
-				if rows[i].LastAt != rows[j].LastAt {
-					return rows[i].LastAt > rows[j].LastAt
-				}
-				return rows[i].Key < rows[j].Key
-			})
-
-			report := TaskActivityReport{Since: since, Until: until, Agent: agentName, Tasks: []TaskActivityRow{}}
-			for _, row := range rows {
-				report.Totals.Tasks++
-				if row.Completed {
-					report.Totals.Completed++
-				}
-				report.Totals.Transitions += len(row.EnteredStatuses)
-				report.Totals.Comments += row.Comments
-				report.Totals.Iterations += row.Iterations
-				report.Totals.Requests += row.Requests
-				report.Totals.Tokens += row.Tokens
-				report.Totals.CostUSD = roundUSD(report.Totals.CostUSD + row.CostUSD)
-				for _, name := range row.Agents {
-					if perAgent[name] == nil {
-						perAgent[name] = &TaskActivityAgent{Agent: name}
-					}
-					perAgent[name].Tasks++
-					if row.Completed {
-						perAgent[name].Completed++
-					}
-				}
-				if len(report.Tasks) < maxActivityTasks {
-					report.Tasks = append(report.Tasks, *row)
-				} else {
-					report.Truncated = true
-				}
-			}
-			if agentName == "" {
-				report.Agents = []TaskActivityAgent{}
-				for _, a := range perAgent {
-					report.Agents = append(report.Agents, *a)
-				}
-				sort.Slice(report.Agents, func(i, j int) bool { return report.Agents[i].Agent < report.Agents[j].Agent })
-			}
-			return report, nil
-		},
+		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/task-activity"},
+		Handler: taskActivityHandler,
 	})
+}
+
+func taskActivityHandler(c *registry.Ctx, p registry.Request) (any, error) {
+	if c.Tasks == nil {
+		return nil, api.UserError{Status: http.StatusServiceUnavailable,
+			Code: "tasks_unavailable", Msg: "native Tasks service is unavailable"}
+	}
+	since, err := activityBound(p.String("since"))
+	if err != nil {
+		return nil, err
+	}
+	until, err := activityBound(p.String("until"))
+	if err != nil {
+		return nil, err
+	}
+	agentName := p.String("agent")
+
+	usage, err := aiproxy.NewStore(c.Store, nil).TaskUsage(aiproxy.UsageFilter{Agent: agentName, Since: since, Until: until})
+	if err != nil {
+		return nil, err
+	}
+	keys := []string{}
+	for _, u := range usage {
+		if !slices.Contains(keys, u.TaskKey) {
+			keys = append(keys, u.TaskKey)
+		}
+	}
+	activity, err := c.Tasks.TaskActivity(p.Ctx, tasks.CustomerActor(c.Tasks.CustomerLogin()),
+		tasks.ActivityFilter{Since: since, Until: until, Agent: agentName, Keys: keys})
+	if err != nil {
+		return nil, err
+	}
+
+	rows, byKey := taskActivityRows(activity)
+	perAgent := mergeTaskUsage(byKey, usage)
+	sort.SliceStable(rows, func(i, j int) bool {
+		if rows[i].LastAt != rows[j].LastAt {
+			return rows[i].LastAt > rows[j].LastAt
+		}
+		return rows[i].Key < rows[j].Key
+	})
+
+	report := TaskActivityReport{Since: since, Until: until, Agent: agentName, Tasks: []TaskActivityRow{}}
+	addTaskActivityRows(&report, rows, perAgent)
+	if agentName == "" {
+		report.Agents = []TaskActivityAgent{}
+		for _, a := range perAgent {
+			report.Agents = append(report.Agents, *a)
+		}
+		sort.Slice(report.Agents, func(i, j int) bool { return report.Agents[i].Agent < report.Agents[j].Agent })
+	}
+	return report, nil
+}
+
+// taskActivityRows returns one row per task with task events, in activity
+// order and by task key.
+func taskActivityRows(activity []tasks.TaskActivity) ([]*TaskActivityRow, map[string]*TaskActivityRow) {
+	byKey := map[string]*TaskActivityRow{}
+	rows := make([]*TaskActivityRow, 0, len(activity))
+	for _, a := range activity {
+		status := a.Task.Status
+		if a.Task.WorkflowStatus != "" {
+			status = a.Task.WorkflowStatus
+		}
+		row := &TaskActivityRow{
+			Key: a.Task.Key, Title: a.Task.Title, Queue: a.Task.Queue, Status: status,
+			Category: a.Task.Category, Assignee: a.Task.Assignee, Completed: a.Completed,
+			Comments: a.Comments, Outcomes: a.Outcomes, EnteredStatuses: a.EnteredStatuses,
+			Agents: a.Agents, FirstAt: a.FirstAt, LastAt: a.LastAt,
+		}
+		byKey[row.Key] = row
+		rows = append(rows, row)
+	}
+	return rows, byKey
+}
+
+// mergeTaskUsage adds the AI usage to the task rows and returns each agent's
+// usage on those tasks.
+func mergeTaskUsage(byKey map[string]*TaskActivityRow, usage []aiproxy.TaskUsageRow) map[string]*TaskActivityAgent {
+	perAgent := map[string]*TaskActivityAgent{}
+	for _, u := range usage {
+		row := byKey[u.TaskKey]
+		if row == nil {
+			continue // deleted or not visible
+		}
+		// shortcut: an iteration that switched tasks counts once per task.
+		row.Iterations += u.Iterations
+		row.Requests += u.Requests
+		row.Tokens += u.Tokens
+		row.CostUSD = roundUSD(row.CostUSD + u.CostUSD)
+		if !slices.Contains(row.Agents, u.Agent) {
+			row.Agents = append(row.Agents, u.Agent)
+		}
+		if row.FirstAt == "" || u.FirstTS < row.FirstAt {
+			row.FirstAt = u.FirstTS
+		}
+		if u.LastTS > row.LastAt {
+			row.LastAt = u.LastTS
+		}
+		if perAgent[u.Agent] == nil {
+			perAgent[u.Agent] = &TaskActivityAgent{Agent: u.Agent}
+		}
+		a := perAgent[u.Agent]
+		a.Iterations += u.Iterations
+		a.Requests += u.Requests
+		a.CostUSD = roundUSD(a.CostUSD + u.CostUSD)
+	}
+	return perAgent
+}
+
+// addTaskActivityRows adds the sorted rows to the totals and the agents' task
+// counts, and keeps the first maxActivityTasks of them in the report.
+func addTaskActivityRows(report *TaskActivityReport, rows []*TaskActivityRow, perAgent map[string]*TaskActivityAgent) {
+	for _, row := range rows {
+		report.Totals.Tasks++
+		if row.Completed {
+			report.Totals.Completed++
+		}
+		report.Totals.Transitions += len(row.EnteredStatuses)
+		report.Totals.Comments += row.Comments
+		report.Totals.Iterations += row.Iterations
+		report.Totals.Requests += row.Requests
+		report.Totals.Tokens += row.Tokens
+		report.Totals.CostUSD = roundUSD(report.Totals.CostUSD + row.CostUSD)
+		for _, name := range row.Agents {
+			if perAgent[name] == nil {
+				perAgent[name] = &TaskActivityAgent{Agent: name}
+			}
+			perAgent[name].Tasks++
+			if row.Completed {
+				perAgent[name].Completed++
+			}
+		}
+		if len(report.Tasks) < maxActivityTasks {
+			report.Tasks = append(report.Tasks, *row)
+		} else {
+			report.Truncated = true
+		}
+	}
 }
 
 // activityBound validates an optional RFC 3339 bound with any offset and

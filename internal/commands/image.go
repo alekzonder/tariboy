@@ -518,38 +518,12 @@ func v2ValidationWarnings(source *imagefile.V2, validated image.ValidationV2, pl
 		if strings.HasSuffix(filepath.ToSlash(entry.Source), "/loop/finish.md") {
 			hasFinish = true
 		}
-		for _, plugin := range source.Plugins {
-			needle := "/skills/" + plugin.Name + "/"
-			if strings.Contains(filepath.ToSlash(entry.Source), needle) || strings.HasPrefix(entry.Source, "$PLUGINS/"+plugin.Name+"/") {
-				staticForPlugin[plugin.Name] = true
-			}
-		}
-		if pluginStore != nil && strings.HasPrefix(entry.Source, "$PLUGINS/") {
-			parts := strings.Split(strings.TrimPrefix(entry.Source, "$PLUGINS/"), "/")
-			if len(parts) >= 3 {
-				if active, ok, err := pluginStore.ActiveVersion(parts[0]); err == nil && ok && active != parts[1] {
-					warnings = append(warnings, ImageDiagnostic{Path: fmt.Sprintf("prompts[%d]", i), Message: fmt.Sprintf("static plugin version %s/%s differs from active runtime version %s", parts[0], parts[1], active)})
-				}
-			}
+		markStaticPlugins(staticForPlugin, entry.Source, source.Plugins)
+		if warning, stale := staticPluginVersionWarning(i, entry.Source, pluginStore); stale {
+			warnings = append(warnings, warning)
 		}
 	}
-	skillIndex := make(map[string]int, len(validated.Skills))
-	skillNames := make([]string, 0, len(validated.Skills))
-	for i, skill := range validated.Skills {
-		skillIndex[skill.Name] = i
-		skillNames = append(skillNames, skill.Name)
-		if filepath.IsAbs(skill.Source) {
-			warnings = append(warnings, ImageDiagnostic{Path: fmt.Sprintf("skills[%d]", i), Message: "absolute skill path makes the original source host-bound"})
-		}
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		for _, duplicate := range agentskills.FindScopeDuplicates(skillNames, source.Dir, home) {
-			warnings = append(warnings, ImageDiagnostic{
-				Path:    fmt.Sprintf("skills[%d]", skillIndex[duplicate.Name]),
-				Message: fmt.Sprintf("skill %s is also visible in %s scope; native harness precedence applies", duplicate.Name, duplicate.Scope),
-			})
-		}
-	}
+	warnings = append(warnings, v2SkillWarnings(validated.Skills, source.Dir)...)
 	if !hasIdentity {
 		warnings = append(warnings, ImageDiagnostic{Path: "prompts", Message: "identity placeholder is omitted"})
 	}
@@ -559,6 +533,57 @@ func v2ValidationWarnings(source *imagefile.V2, validated image.ValidationV2, pl
 		}
 		if !staticForPlugin[plugin.Name] {
 			warnings = append(warnings, ImageDiagnostic{Path: "plugins", Message: fmt.Sprintf("plugin %s has no obvious static instruction layer", plugin.Name)})
+		}
+	}
+	return warnings
+}
+
+// markStaticPlugins records the plugins whose instructions a prompt file carries.
+func markStaticPlugins(staticForPlugin map[string]bool, entrySource string, sourcePlugins []imagefile.V2Plugin) {
+	for _, plugin := range sourcePlugins {
+		needle := "/skills/" + plugin.Name + "/"
+		if strings.Contains(filepath.ToSlash(entrySource), needle) || strings.HasPrefix(entrySource, "$PLUGINS/"+plugin.Name+"/") {
+			staticForPlugin[plugin.Name] = true
+		}
+	}
+}
+
+// staticPluginVersionWarning compares the version in a $PLUGINS prompt path
+// with the plugin's active version.
+func staticPluginVersionWarning(index int, entrySource string, pluginStore *plugins.Store) (ImageDiagnostic, bool) {
+	if pluginStore == nil || !strings.HasPrefix(entrySource, "$PLUGINS/") {
+		return ImageDiagnostic{}, false
+	}
+	parts := strings.Split(strings.TrimPrefix(entrySource, "$PLUGINS/"), "/")
+	if len(parts) < 3 {
+		return ImageDiagnostic{}, false
+	}
+	active, ok, err := pluginStore.ActiveVersion(parts[0])
+	if err != nil || !ok || active == parts[1] {
+		return ImageDiagnostic{}, false
+	}
+	return ImageDiagnostic{Path: fmt.Sprintf("prompts[%d]", index), Message: fmt.Sprintf("static plugin version %s/%s differs from active runtime version %s", parts[0], parts[1], active)}, true
+}
+
+// v2SkillWarnings reports host-bound skill paths, then the skills a harness
+// also sees in another scope.
+func v2SkillWarnings(skills []agentskills.Metadata, sourceDir string) []ImageDiagnostic {
+	warnings := []ImageDiagnostic{}
+	skillIndex := make(map[string]int, len(skills))
+	skillNames := make([]string, 0, len(skills))
+	for i, skill := range skills {
+		skillIndex[skill.Name] = i
+		skillNames = append(skillNames, skill.Name)
+		if filepath.IsAbs(skill.Source) {
+			warnings = append(warnings, ImageDiagnostic{Path: fmt.Sprintf("skills[%d]", i), Message: "absolute skill path makes the original source host-bound"})
+		}
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		for _, duplicate := range agentskills.FindScopeDuplicates(skillNames, sourceDir, home) {
+			warnings = append(warnings, ImageDiagnostic{
+				Path:    fmt.Sprintf("skills[%d]", skillIndex[duplicate.Name]),
+				Message: fmt.Sprintf("skill %s is also visible in %s scope; native harness precedence applies", duplicate.Name, duplicate.Scope),
+			})
 		}
 	}
 	return warnings
