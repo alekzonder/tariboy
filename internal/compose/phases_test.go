@@ -411,3 +411,39 @@ func TestStatusAndDryRunListUndeclaredEntities(t *testing.T) {
 		t.Fatal("up removed an undeclared entity")
 	}
 }
+
+// A new agent starts only once it joined its group: a failed assign skips the
+// start, so the agent never runs outside its group.
+func TestUpFailedAssignSkipsTheStartOfANewAgent(t *testing.T) {
+	fc := newFake()
+	fc.fail = map[string]error{"POST /api/groups/team/assign": errors.New("assign failed")}
+	f := File{Version: 1,
+		Groups: map[string]GroupSpec{"team": {}},
+		Agents: map[string]AgentSpec{"a": {Image: "basic:latest", Group: "team"}, "b": {Image: "basic:latest"}},
+	}
+	r := NewRunner(fc, "", io.Discard)
+	r.skipBuild = true
+	if err := r.Up(f); err == nil || !strings.Contains(actionErrs(err), "assign agent a") {
+		t.Fatalf("Up = %v", err)
+	}
+	if n := countCalls(fc, "POST /api/agents/a/start"); n != 0 {
+		t.Fatalf("a started outside its group: %v", fc.calls)
+	}
+	if n := countCalls(fc, "POST /api/agents/b/start"); n != 1 {
+		t.Fatalf("b did not start: %v", fc.calls)
+	}
+}
+
+// With no task queue in the file, a failed queue list only leaves out the
+// undeclared queues; status still reports.
+func TestStatusWithoutQueuesToleratesAFailedQueueList(t *testing.T) {
+	fc := newFake()
+	fc.fail = map[string]error{"GET /api/task-queues": errors.New("tasks unavailable")}
+	var out strings.Builder
+	if err := NewRunner(fc, "", &out).Status(File{Version: 1, Agents: map[string]AgentSpec{"a": {Image: "basic:latest"}}}); err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if !strings.Contains(out.String(), "drift: 1") {
+		t.Fatalf("status:\n%s", out.String())
+	}
+}

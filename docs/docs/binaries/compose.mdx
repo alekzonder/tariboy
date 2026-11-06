@@ -226,7 +226,8 @@ The order follows what each step needs. A pool can only name agents that
 exist, and a workflow binding needs the pools it names, so the queue bindings
 come after the agents. A group's lead must already be a member, so the groups
 phase assigns the members first and then sets the lead with
-`PATCH /api/groups/{name}/lead`. Agents start last, so their first iteration
+`PATCH /api/groups/{name}/lead`. A group without `lead` in the file keeps the
+lead it has. A new agent starts only after it joined its group. Agents start last, so their first iteration
 already has its group, its pools and its queue's workflow.
 
 A setting that already matches makes no call. Running `up` again on a

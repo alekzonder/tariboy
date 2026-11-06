@@ -22,8 +22,10 @@ func (startPhase) plan(p *planner, f File, live *liveState) error {
 		}
 		switch {
 		case !exists:
+			// A new agent starts once it exists and joined its group, so it
+			// never runs outside the group the file gives it.
 			if !loopDisabled(a) {
-				start("start", nil, p.needs(id)...)
+				start("start", nil, p.needs(id, "member:"+name)...)
 			}
 		case cur.State == "stopped":
 		case harnessChange(name, a, cur) != nil && cur.Enabled && !loopDisabled(a):

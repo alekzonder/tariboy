@@ -52,9 +52,11 @@ func (r *Runner) undeclared(f File, live *liveState) ([]string, error) {
 	}
 	queues := live.queues
 	if queues == nil {
+		// The file declares no queue, so the queue list was not read. A
+		// failed read here only leaves out the undeclared queues.
 		var err error
 		if queues, err = r.listTaskQueues(); err != nil {
-			return nil, fmt.Errorf("task queues: %w", err)
+			return out, nil
 		}
 	}
 	for _, prefix := range sortedKeys(queues) {
