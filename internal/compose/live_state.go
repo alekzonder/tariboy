@@ -19,10 +19,24 @@ type liveState struct {
 	// holds the pools of every declared queue that exists.
 	queues map[string]tasks.Queue
 	pools  map[string]map[string]tasks.AgentPool
+	// queueSettings holds the env, secret keys and triggers of every
+	// declared queue that exists.
+	queueSettings map[string]liveQueueSettings
+}
+
+// liveQueueSettings is what the daemon returns for a queue's env, secrets and
+// triggers. The daemon never returns a secret value: secrets and globalEnv
+// hold names only.
+type liveQueueSettings struct {
+	env       map[string]string
+	secrets   map[string]bool
+	globalEnv map[string]bool // required secrets the daemon environment holds
+	triggers  []tasks.QueueWorkflowTrigger
 }
 
 func (r *Runner) readLive(f File) (*liveState, error) {
-	live := &liveState{pending: map[string]string{}, pools: map[string]map[string]tasks.AgentPool{}}
+	live := &liveState{pending: map[string]string{}, pools: map[string]map[string]tasks.AgentPool{},
+		queueSettings: map[string]liveQueueSettings{}}
 	var err error
 	if live.groups, err = r.liveGroups(); err != nil {
 		return nil, err
@@ -53,6 +67,9 @@ func (r *Runner) readLive(f File) (*liveState, error) {
 		}
 		if live.pools[prefix], err = r.listTaskPools(prefix); err != nil {
 			return nil, fmt.Errorf("task queue %s pools: %w", prefix, err)
+		}
+		if live.queueSettings[prefix], err = r.readQueueSettings(prefix); err != nil {
+			return nil, fmt.Errorf("task queue %s: %w", prefix, err)
 		}
 	}
 	return live, nil

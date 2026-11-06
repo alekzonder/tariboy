@@ -14,6 +14,9 @@ import (
 //   - a group that has an agent of the file as a member;
 //   - a task queue with a pool that names an agent of the file.
 //
+// For a declared queue it also lists the pools, env keys, secrets and
+// triggers the file omits.
+//
 // up never changes or removes them, and status does not count them as drift.
 // It only reads: the pools of an undeclared queue are read here.
 func (r *Runner) undeclared(f File, live *liveState) ([]string, error) {
@@ -48,6 +51,11 @@ func (r *Runner) undeclared(f File, live *liveState) ([]string, error) {
 		}
 		if len(members) > 0 {
 			line("group", name, "member "+strings.Join(members, ", "))
+		}
+	}
+	for _, prefix := range sortedKeys(f.TaskQueues) {
+		if _, exists := live.queues[prefix]; exists {
+			out = append(out, queueUndeclared(prefix, f.TaskQueues[prefix], live)...)
 		}
 	}
 	queues := live.queues

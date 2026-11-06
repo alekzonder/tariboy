@@ -8,9 +8,11 @@ import (
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
-// bindingsPhase binds the agent pools of each task queue, then its workflow.
-// The daemon binds a pool only to agents that exist, and a workflow only to
-// a queue whose pools it names, so this phase follows the agents and groups.
+// bindingsPhase binds the agent pools of each task queue, then sets its
+// CUSTOMER_AGENT_POOL and responsible agent, binds its workflow and creates
+// its triggers. The daemon binds a pool only to agents that exist, and a
+// workflow only to a queue whose pools it names, so this phase follows the
+// agents and groups.
 type bindingsPhase struct{}
 
 func (bindingsPhase) name() string { return "queue bindings" }
@@ -20,9 +22,13 @@ func (bindingsPhase) plan(p *planner, f File, live *liveState) error {
 		p.planPools(prefix, f.TaskQueues[prefix], live)
 	}
 	for _, prefix := range sortedKeys(f.TaskQueues) {
-		if err := p.planQueueWorkflow(prefix, f.TaskQueues[prefix]); err != nil {
+		want := f.TaskQueues[prefix]
+		p.planQueueEnv(prefix, want, live, true)
+		p.planResponsibleAgent(prefix, want, live)
+		if err := p.planQueueWorkflow(prefix, want); err != nil {
 			return err
 		}
+		p.planTriggers(prefix, want, live)
 	}
 	return nil
 }
@@ -66,7 +72,8 @@ func poolText(pool tasks.AgentPool, found bool) string {
 
 // planQueueWorkflow binds the workflow of one queue to the digest it resolves
 // to at apply time. The bind depends on the queue's other actions (create,
-// rename and pools) and on the build of its Store workflow. A queue with no
+// update, env, secrets and pools) and on the build of its Store workflow, so
+// a secret the workflow requires is set before it binds. A queue with no
 // workflow value keeps whatever binding it has; Compose never clears one.
 func (p *planner) planQueueWorkflow(prefix string, want TaskQueueSpec) error {
 	ref, declared, err := want.WorkflowRef()

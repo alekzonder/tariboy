@@ -127,6 +127,8 @@ In version 2, these references must name an entry of the same file:
 - The image of an agent (the name without the tag) must be in `images`.
 - The group of an agent must be in `groups`. This rule also applies in version 1.
 - Each agent of a pool must be in `agents`. This rule also applies in version 1.
+- The `responsible_agent` of a queue must be in `agents`. This rule also
+  applies in version 1.
 - The workflow of a queue must be in `workflows`. If the value has a `STORE/`
   prefix, that Store must be in `stores`.
 - The `store` of a workflow or an image must be in `stores`.
@@ -207,7 +209,7 @@ compose validate: 2 problem(s) in /work/Tariboycompose.yaml
 ## How `up` converges
 
 `compose up` reads the live state once: the groups, agents, budgets, task
-queues and their pools, and the pending image of each running agent whose
+queues with their pools, env, secret names and triggers, and the pending image of each running agent whose
 image differs from the file. It then plans the actions that move the daemon
 toward the file and applies them phase by phase:
 
@@ -216,10 +218,10 @@ toward the file and applies them phase by phase:
 | `stores` | Nothing yet; the `stores` section is not applied by `up`. |
 | `workflows` | Builds each Store workflow a task queue names, once per source. |
 | `images` | Builds each declared image as `NAME:latest`, one action per image. |
-| `queues` | Creates each task queue and restores a changed queue name. |
+| `queues` | Creates each task queue, restores a changed name, description and owners, and sets the plain env and the secrets of each queue. |
 | `agents` | Creates each new agent **without a group**, converges the settings of an existing one, stops one whose file sets `loop.enabled: false`, and sets the agent budget. |
 | `groups` | Creates each group without a lead, assigns the file's agents to it, sets the lead, and sets the group budget. |
-| `queue bindings` | Binds the agent pools of each queue, then its workflow. |
+| `queue bindings` | Binds the agent pools of each queue, then sets its `CUSTOMER_AGENT_POOL` and its responsible agent, binds its workflow, and creates its triggers. |
 | `start` | Starts each new agent and each stopped loop the file enables, and restarts an agent whose harness changed. |
 
 The order follows what each step needs. A pool can only name agents that
@@ -352,7 +354,7 @@ up: 0 ok, 3 changed, 1 failed, 1 skipped
 
 An agent's line covers its create or settings, its group membership and its
 start; a group's line covers the group and its lead; a queue's line covers the
-queue, its pools and its workflow binding. If any resource failed, `up` exits
+queue, its env, secrets, pools, workflow binding and triggers. If any resource failed, `up` exits
 non-zero and prints a one-line summary such as `compose up: 1 resource failed`
 to standard error; the report above already shows each error. The resources
 that succeeded stay applied, so the daemon can be partly converged; fix the
@@ -375,11 +377,17 @@ list them as `not declared`:
 - a group the file does not declare that has one of the file's agents as a
   member;
 - a task queue the file does not declare with a pool that names one of the
-  file's agents.
+  file's agents;
+- a pool, env key, secret or trigger of a declared task queue that the file
+  does not declare.
 
 ```text
 agent      old-bot        not declared (group=research state=running)
 group      legacy         not declared (member dev)
+task queue DEV            pool old-pool not declared
+task queue DEV            env LOG_LEVEL not declared
+task queue DEV            secret OLD_TOKEN not declared
+task queue DEV            trigger plugin:slack create_task not declared
 task queue OLD            not declared (pool dev has dev)
 ```
 
@@ -398,7 +406,7 @@ says so on its last line.
 
 ## Task queues and pools
 
-Compose can declare task queues and the explicit agent pools of each queue.
+Compose can declare task queues with every setting of a queue:
 
 ```yaml
 version: 1
@@ -406,10 +414,108 @@ version: 1
 task_queues:
   DEV:
     name: Development
+    description: Product development
+    owners: [dev-lead]
+    responsible_agent: dev-lead
     pools:
-      developers: [dev-ng-developer]
-      reviewers: [dev-ng-reviewer]
+      developers: [dev-developer]
+      customers: [dev-lead]
+    workflow: development:0.1.0
+    triggers:
+      - pattern: plugin:telegram
+        correlation_key: chat_id
+        action: create_task
+    env:
+      CUSTOMER_AGENT_POOL: customers
+      AUTO_MERGE: "false"
+    secrets:
+      GH_TOKEN: {from_env: DEV_GH_TOKEN}
 ```
+
+| Field | Meaning |
+| --- | --- |
+| `name` | The queue name. Required. |
+| `description` | The queue description. |
+| `owners` | The agents that own the queue. The daemon does not check that they exist, so an owner can be outside the file. |
+| `responsible_agent` | The agent responsible for the queue. It must be declared in `agents`. |
+| `pools` | The agent pools of the queue. Each agent must be declared in `agents`. |
+| `workflow` | The workflow image the queue follows. See [Queue workflows](#queue-workflows). |
+| `triggers` | Letters that create tasks: `pattern` is a sender such as `plugin:telegram` or `plugin:*`, `correlation_key` is optional, and `action` is `create_task`, the default. |
+| `env` | Plain variables for workflow scripts, for example `CUSTOMER_AGENT_POOL` and `AUTO_MERGE`. |
+| `secrets` | Secrets for workflow scripts. `from_env` names the variable of the `compose` process that holds the value. |
+
+An env or secret key holds letters, digits and underscores, does not start
+with a digit, and does not start with `TARIBOY_`. A key is either env or a
+secret, not both. `CUSTOMER_AGENT_POOL` is always env. `compose validate`
+checks these key rules, that each secret has a valid `from_env`, and that each
+trigger has a valid pattern and action and is declared once. It does not check
+that the `from_env` variable is set, because a file is checked without its
+secrets.
+
+`compose up` applies a queue in two phases:
+
+1. The `queues` phase runs before the agents. It creates the queue with its
+   name, description and owners, or changes the fields that differ in one
+   update. Then it sets the env keys, except `CUSTOMER_AGENT_POOL`, and the
+   secrets.
+2. The `queue bindings` phase runs after the agents and groups. It binds the
+   pools. Then it sets `CUSTOMER_AGENT_POOL`, because the daemon accepts it on
+   a bound queue only when the pool exists. Then it sets the responsible
+   agent, binds the workflow and creates the triggers.
+
+The workflow binding comes after the env and the secrets, so a secret that the
+workflow requires (`requires_secrets`) exists before the bind. The triggers
+come after the binding, so a task from a new letter follows the workflow.
+
+### Secrets
+
+The file never holds a secret value. `compose` reads the value of
+`secrets.KEY.from_env` from its own environment when it applies the secret,
+and an empty variable counts as not set. The value never appears in the output
+of `up`, `up --dry-run` or `status`, or in an error. The daemon never returns
+a secret value, so `compose` cannot compare it:
+
+| Variable | Secret on the queue | `status` | `up` |
+| --- | --- | --- | --- |
+| Set | Yes | `secret GH_TOKEN ok (value not compared)` | Writes the value again and reports `ok`. |
+| Set | No | `secret GH_TOKEN MISSING` | Writes the value and reports `changed`. |
+| Not set | Yes | `secret GH_TOKEN ok (DEV_GH_TOKEN not set, kept)` | Keeps the secret. |
+| Not set | No, but the daemon environment holds the key | `secret GH_TOKEN ok (daemon environment)` | Does nothing. |
+| Not set | No | `secret GH_TOKEN MISSING (DEV_GH_TOKEN not set)` | Fails the queue. The error names the variable and the `ttasks queue secret set` command. |
+
+Because `up` writes each set secret again, a second `up` reports `ok` and a
+new value of the variable reaches the daemon on the next `up`. Each write adds
+a `secret set` event to the queue history. `up --dry-run` does not list such a
+rewrite. When a secret fails, `up` skips the workflow binding and the triggers
+of that queue. The other queues and the agents still apply.
+
+### What `up` does not change
+
+`up` never removes a pool, an env key, a secret or a trigger that the file
+does not declare. `compose status` and `up --dry-run` list them as
+`not declared` (see [Removing an entity from the file](#removing-an-entity-from-the-file)).
+An empty `description`, `owners` or `responsible_agent` in the file keeps the
+value of the daemon. To clear one, use `ttasks queue update`.
+
+The API cannot change a trigger. If you change a trigger in the file, `up`
+creates a new trigger, and the old trigger stays and shows as `not declared`.
+To remove it, use `ttasks queue trigger delete`.
+
+If a key is in `env` in the file but is a secret on the queue, `up` makes it
+env, as the daemon does for `ttasks queue env set`.
+
+### Queue settings outside compose
+
+These queue operations of `ttasks queue` have no compose field:
+
+| Operation | Reason |
+| --- | --- |
+| `pool delete`, `env rm`, `secret rm`, `trigger delete`, `workflow clear` | `up` never removes anything. Use `ttasks queue` to remove. |
+| Turn a trigger on or off (`enabled`) | The API cannot change this flag. A trigger is always on. |
+| `source ls`, `source log` | These read state and set nothing. The workflow image declares its sources. |
+| `revision` | The daemon uses it to refuse concurrent writes. `compose` reads the current revision itself. |
+
+### Pools and parsing
 
 The file is parsed strictly: a misspelled or unknown field fails instead of
 being ignored. Queue prefixes and pool names use URL-safe ASCII identifiers
@@ -427,12 +533,12 @@ workflow engine. A non-empty value is rejected with an error that names the key
 and tells you to declare `version: 2`. In version 2, `workflows` declares
 workflow sources; see [The compose file](#the-compose-file).
 
-`compose up` creates the queues before the agents and binds the pools in the
-queue bindings phase, after the agents and groups, through the daemon's Native
-Tasks API; the queue workflow binding follows the pools. Repeating `compose up` is idempotent; it also restores changed queue
-names and pool membership. `compose status` remains read-only and reports queue,
-pool membership, and workflow drift alongside agent, group, and budget drift.
-Existing compose files without `task_queues` keep their previous behavior.
+`compose up` uses the Native Tasks API of the daemon. A second `compose up`
+on a converged file changes nothing. `compose status` changes nothing and
+reports drift of each queue field, pool, env key, secret, trigger and
+workflow, next to agent, group and budget drift. It prints env keys, never
+env values. Existing compose files without `task_queues` keep their previous
+behavior.
 
 ## Queue workflows
 
@@ -467,10 +573,11 @@ form without a Store prefix fails when the image is not built. Rebinding a
 queue to a newer version leaves its existing tasks on the version they pinned.
 
 Compose never clears a binding: removing `workflow` from the file leaves the
-queue bound; unbind with `ttasks queue workflow clear`. Compose never handles a
-secret value. When the workflow lists `requires_secrets` that the queue does
-not have, the bind fails with `workflow_secret_missing`, and the error names the
-secrets and the command to set one:
+queue bound; unbind with `ttasks queue workflow clear`. Declare the secrets
+that the workflow requires in `secrets` with `from_env` (see
+[Secrets](#secrets)). When the workflow lists `requires_secrets` that the queue
+does not have, the bind fails with `workflow_secret_missing`, and the error
+names the secrets and the command to set one:
 
 ```bash
 printf '%s' "$GH_TOKEN" | ttasks queue secret set DEV GH_TOKEN
