@@ -47,7 +47,7 @@ image activation. To schedule a script while working in another CWD, pass its
 absolute path to the [`scripts` plugin](/docs/plugins/built-in/scripts):
 
 ```bash
-scripts/scripts.sh schedule poll \
+tscripts schedule poll \
   --description "Poll the queue" \
   --every 60 \
   -- /home/alice/.tariboy/agents/worker/workdir/scripts/poll-queue

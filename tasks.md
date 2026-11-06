@@ -239,6 +239,26 @@ mentioned principal's next comment resolves only its own open wait. This makes
 “where is my answer required?” directly filterable for both agents and the
 customer.
 
+The customer can also close a question without an answer, for example a
+question an agent asked after the task was done.
+`POST /api/tasks/{key}/waits/dismiss` (`tasks.waits.dismiss`) works for a task
+in any status. Only the customer can call it; another caller gets `forbidden`
+(HTTP 403). In one transaction it:
+
+- closes each open wait on the customer, with no resolving comment;
+- closes the matching `task.question` letters with
+  `close_note = task-wait-dismissed`;
+- moves a flexible task from `wait_customer` to `in_progress` when no question
+  to the customer stays open, as an answer does. A workflow task gets the
+  state an answer gives it. A done or cancelled task keeps its status;
+- records a `task.waits_dismissed` event and sends each asker a
+  `task.answered` letter that says no answer is needed.
+
+The workflow's own wait on the customer stays open: an outcome or
+`workflow resume` resolves it. Questions to agents stay open too. With no open
+question to the customer, the call changes nothing and returns an empty
+`resolved_waits`.
+
 A mentioned name starts and ends with a letter or a digit. A dot, `_` or `-`
 inside the name is part of the name. Punctuation after the name is not part of
 it, so `@agent:worker.` and `(@agent:worker)` both mention `agent:worker`, and
@@ -414,6 +434,9 @@ the reader cannot see the parent. History is collapsed by default. The flexible 
 `wait_customer` reads Waiting for you. The flexible assignee list contains
 Unassigned, me, and each agent. You cannot type a principal. In the comment
 form, Ask an agent mentions an agent, and Reply Ok to the question posts `Ok`.
+When a question to you is open, the "Waiting for an answer" banner at the top
+of the sheet has **Dismiss question**, in every status, also for a done or
+cancelled task. The Needs you card has the same button.
 
 The sheet starts at half the viewport width. Drag its left separator or use
 its keyboard controls to resize it. The chosen width survives reloads.
@@ -527,6 +550,49 @@ started** or **Waiting for you**), the age, and the cost when it is known.
 Click a row to open the task sheet. The agent header's **Answer** button
 opens the tab at the first task's card, and **Give task** focuses the
 composer.
+
+## Task budget
+
+A task budget is a USD limit on the AI spending of a task and all of its
+subtasks. The field `budget_usd` holds it. The value `0` means no limit, and
+every task starts with `0`.
+
+Only the customer sets the limit, with `ttasks update KEY --budget-usd 5`, with
+`tariboy tasks update`, or in the **Budget, USD** field of the task panel. An
+agent that sends `--budget-usd` gets `forbidden`. An agent sees the limit in
+`ttasks show`. The panel shows under the field what the task and its subtasks
+spent, from `GET /api/tasks/{key}/budget`.
+
+The spending of a task is the sum of `cost_usd` of every AI request whose
+`task_id` is the key of the task or of one of its subtasks. Old keys from
+`task_key_aliases` count too. The limit has no time window.
+
+Before the AI proxy sends a request upstream, it checks the task of the request
+and each of its parents. If the subtree of one of them spent its limit or more,
+the proxy answers 429 with `budget exceeded: task KEY` and records the request
+as `budget_block`. Then the daemon reacts on the task of the request:
+
+| Task | Reaction | How the customer lifts it |
+| --- | --- | --- |
+| A workflow task | The task pauses with the reason `budget_exhausted`. The pause question names the task with the limit, the spending and the limit. | Raise the limit or set `0`, then resume with `ttasks workflow resume KEY --decision continue` or `release`. While the limit is still spent, the resume fails with `budget_exhausted`. |
+| A flexible task | The task gets the block reason `budget exhausted: task KEY spent $X of $Y`, and a comment by `system:budget` mentions the customer. A blocked task is not a Goal, so the agent takes other work. | Raise the limit above the spending or set `0`. The daemon then lifts, in the same write, each block in the subtree that names this task. A block with other text stays. The customer can also clear a block with `ttasks update KEY --manual-block-reason ""`. An agent cannot clear a budget block. |
+
+A task that is already paused, blocked or closed does not change. A parent with
+a limit is not blocked itself: each task of the subtree is paused or blocked at
+its own first refusal.
+
+Limits of a task budget:
+
+- Requests that already started can go over the limit, because the proxy knows
+  the cost only after the answer. Several agents in one subtree can go over it
+  at the same time.
+- Requests without a price, such as Cursor requests, cost `0` and are not
+  limited.
+- A request of an iteration without a Goal has no `task_id` and does not count.
+- If the database read of the check fails, the proxy lets the request through
+  and logs the error.
+- A move to another queue creates a new task without the limit. A move to
+  another server does not carry the limit.
 
 ## Moving a task to another queue
 

@@ -36,7 +36,7 @@ from the upstream stays in `upstream_status`.
 | --- | --- |
 | `ok` | The upstream answered below 400 and the response arrived complete. |
 | `auth_error` | The request had no valid attribution token or upstream credential. |
-| `budget_block` | A cost budget refused the request before it reached the upstream. |
+| `budget_block` | A cost budget or a task budget refused the request before it reached the upstream. |
 | `quota_probe` | The upstream answered 429 to the startup quota probe of Claude Code (`max_tokens` 1, one user message `quota`). This is not a failure. |
 | `rate_limited` | The upstream answered 429 to any other request, for example at a usage limit. |
 | `client_closed` | The client went away before the exchange finished. The daemon stops the session after `loop.sh done`, so an open request at that time gets this status. |
@@ -45,6 +45,24 @@ from the upstream stays in `upstream_status`.
 While the newest request of a running iteration is `rate_limited`, the agent
 status endpoint returns `active_iteration.rate_limited_since` with the time of
 that request. The next accepted request clears it.
+
+## Task budgets
+
+A [task budget](/docs/tasks#task-budget) limits the AI spending of a task and
+its subtree. The proxy checks it after the agent and group budgets, on every
+request with a `task_id`. The check reads the database on each request. It
+walks from the task of the request up to its root over `tasks.parent_id`. For
+each task with `budget_usd > 0`, it sums `ai_requests.cost_usd` of the subtree
+and of the old keys in `task_key_aliases`. The index
+`idx_ai_requests_task_cost` (migration `0079`) serves this sum.
+
+If one subtree spent its limit or more, the proxy answers 429 with
+`budget exceeded: task KEY`, in the Connect format for Cursor, and records
+`budget_block`. The audit event `budget_block` has the scope `task:KEY`. Then
+the proxy tells the daemon, which pauses or blocks the task off the request
+path, once at a time for each key. If that reaction fails, the daemon logs it,
+and the next refusal tries again. If the check itself fails, the request goes
+through and the proxy logs a warning.
 
 ## Transcript after iteration close
 

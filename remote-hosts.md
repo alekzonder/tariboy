@@ -15,22 +15,33 @@ by the operator. The desktop does not implement a second SSH stack.
 | --- | --- |
 | Desktop | macOS 12+, Apple Silicon |
 | Automatic remote install | Linux x86_64 and aarch64, macOS arm64 (Apple Silicon) |
-| SSH | system `ssh` and `scp` |
+| SSH | system `ssh` |
+| Server download | outbound HTTPS from the host to `github.com` and its release file domain |
 | Remote install root | `~/.local/lib/tariboy` |
 | Remote CLI links | `~/.local/bin` |
 | Daemon HTTP | remote loopback only |
 | Tunnel | local loopback forwarding over SSH |
 | Android app | signed arm64 APK in each release; forwarded loopback port or HTTPS server, no SSH hosts |
 
-Automatic installation requires a writable `~/.local` and `python3`; Linux
-hosts also need `flock`. The desktop app carries one server build per platform
-and uploads the one matching the host's `uname -s` and `uname -m`: Linux
-`x86_64` gets `linux-x86_64`, Linux `aarch64` (or `arm64`) gets
-`linux-aarch64`, and macOS (`Darwin`) `arm64` gets `darwin-arm64`. Install and
-update re-read the platform and architecture in preflight every time. Any other
-combination, such as 32-bit `armv7l` or an Intel Mac (`Darwin/x86_64`,
-including a shell running under Rosetta), is reported as unsupported and
-nothing changes on the host.
+Automatic installation requires a writable `~/.local`, `python3`, `curl` or
+`wget`, `tar`, and `sha256sum` or `shasum`. Linux hosts also need `flock`.
+Preflight names each missing program, and Desktop does not start the install.
+
+The desktop app package carries only the binaries of its own platform, which
+run the local daemon. It carries no server builds. The server downloads its
+build from the GitHub release of the Desktop version. Desktop selects the
+archive from the `uname -s` and `uname -m` of the host:
+
+| Host | Archive |
+| --- | --- |
+| Linux `x86_64` | `tariboy_<version>_linux-x86_64.tar.gz` |
+| Linux `aarch64` or `arm64` | `tariboy_<version>_linux-aarch64.tar.gz` |
+| macOS (`Darwin`) `arm64` | `tariboy_<version>_darwin-arm64.tar.gz` |
+
+Install and update read the platform and architecture again in preflight every
+time. Desktop reports any other combination as unsupported, and nothing
+changes on the host. Examples are 32-bit `armv7l` and an Intel Mac
+(`Darwin/x86_64`, also a shell that runs under Rosetta).
 
 macOS ships neither `flock` nor `sha256sum`, so on a Mac the installer takes
 its lock through `python3` and verifies checksums with `shasum -a 256`. On
@@ -82,7 +93,7 @@ start from, for the commands the daemon and its agents need:
 | `python3` | agent tool scripts | system package manager |
 | `git` | adding and refreshing Stores | system package manager |
 | `npx` | building images that carry `skills-lock.json` | Node.js (npm ships `npx`) |
-| `tariboy`, `ttasks` | Tariboy commands inside agents | Tariboy CLI links in `~/.local/bin` |
+| `tariboy`, `ttasks`, `tmail`, `tscripts` | Tariboy commands inside agents | Tariboy CLI links in `~/.local/bin` |
 | `claude`, `codex`, `opencode` or `agent` | at least one agent harness | the harness vendor's installer |
 
 The response carries `state` (`ready` or `error`), `missing_tools` (name,
@@ -104,8 +115,8 @@ connects, so reconnect it after installing the tools.
 1. Confirm the alias works in Terminal: `ssh build-box`.
 2. Add the same alias under **Settings → Hosts**.
 3. Choose one of the two setup modes:
-   - **Install Tariboy** (default) runs preflight, uploads and installs the
-     matching release, starts the daemon, and connects the tunnel.
+   - **Install Tariboy** (default) runs preflight, has the host download and
+     install the matching release, starts the daemon, and connects the tunnel.
    - **Connect to existing Tariboy** saves the host and connects without
      uploading, installing, activating, starting, or restarting anything.
 
@@ -129,23 +140,47 @@ keys, `known_hosts`, and organization authentication. Tariboy never adds
 ## Install and update behavior
 
 **Update Tariboy** on a Linux host whose CLI supports `tariboy update
---cleanup` uploads nothing: Desktop runs
+--cleanup` runs on the server: Desktop runs
 `tariboy update <Desktop version> --cleanup` on the server over SSH. The server
 downloads and verifies that release from GitHub, installs it with the same
 fixed installer, restarts the daemon, and deletes old releases, keeping the
 five newest and the active one. Desktop then checks the reported version, as
 below. When the command fails after the managed links already moved to the new
 release, Desktop reactivates and restarts the previous release; a failure
-before the switch leaves the host unchanged. The server needs outbound HTTPS to
-GitHub, and the Desktop version must be a published release with a server
-archive. Desktop does not fall back to uploading when the download fails.
+before the switch leaves the host unchanged.
 
-The upload path below remains for the first install, for macOS hosts, and for
-a host whose CLI predates `--cleanup`; such a host is updated by upload once,
-and its next update runs on the server.
+The first install, every macOS host, and a host whose CLI predates
+`--cleanup` use the Desktop installer path below. After one such update, the
+next update of a Linux host runs on the server.
 
-Desktop uploads five bundled binaries including the Tasks client and Telegram plugin, a version marker, checksums, and a
-fixed installer script to a staging directory. The remote installer:
+Desktop uploads no binaries. Over SSH, it runs two fixed scripts that are
+built into Desktop:
+
+1. `remote-download.sh` downloads `SHA256SUMS` and the archive for the host
+   from `<base URL>/download/v<Desktop version>/` with `curl`, or with `wget`
+   when `curl` is missing. It makes sure that the archive checksum matches the
+   line in `SHA256SUMS`. It accepts only plain file names at the archive root.
+   Then it unpacks the archive into a staging directory.
+2. `remote-install.sh` installs the staged release.
+
+The base URL is `https://github.com/alekzonder/tariboy/releases`. If
+`TARIBOY_UPDATE_BASE_URL` is set in the environment of the desktop app, it
+replaces the base URL, for example for a mirror. `tariboy update` reads the
+same variable. The base URL must start with `https://`, and it can contain
+only letters, digits, and `._~:/-`.
+
+The server needs outbound HTTPS to GitHub, and the Desktop version must be a
+published release with a server archive. A build of an unpublished version,
+for example a local development build, gets a 404 response. Set
+`TARIBOY_UPDATE_BASE_URL` to a mirror that has the archives of that version.
+The download has a budget of ten minutes. If the download or the checksum
+fails, the step **Download release** fails with the URL in the message.
+Desktop removes the staging directory, and the active release on the host
+does not change. Desktop does not fall back to an upload.
+
+The archive holds the seven binaries, a version marker, checksums, and a copy
+of the installer. Desktop does not run that copy. It runs its own built-in
+`remote-install.sh`, which:
 
 - validates checksums;
 - serializes installs with `flock`, or with a `python3` file lock where `flock`
@@ -155,22 +190,13 @@ fixed installer script to a staging directory. The remote installer:
 - verifies the daemon reports the requested version;
 - rolls back the previous release on activation failure.
 
-The upload runs over `scp` with SSH compression enabled, and its timeout is
-derived from the payload rather than fixed: a floor of two minutes plus one
-second per 128 KiB of bundle, capped at thirty minutes. A release bundle is
-around 100 MB, so a fixed short timeout used to abort the transfer on ordinary
-uplinks, leaving the update reported as `SSH command timed out` at the
-**Upload release** step. The budget now assumes a slow, incompressible worst
-case; a healthy link finishes far sooner and the timeout only bounds a stalled
-transfer.
-
 Reactivating a release that predates `tariboy-tasks` removes both newer Tasks
 links transactionally. Selecting the newer release again restores them; every
 selected release must contain its required payloads before links switch.
 
 An update refuses to replace unrelated regular files in `~/.local/bin`.
 Choosing **Update Tariboy** authorizes the version switch and daemon restart;
-connect, upload, activation, restart, and reconnect remain one operation with
+connect, download, activation, restart, and reconnect remain one operation with
 one operation ID. Daemon `0.10.1` and newer preserves running shims across that
 restart, so active agents do not require a second confirmation. A legacy daemon
 older than `0.10.1` instead fails closed before activation when active work
@@ -178,8 +204,8 @@ exists or cannot be checked.
 
 ## Update a host from its own shell
 
-A host can also fetch and install a release itself, without the desktop app
-uploading one:
+A Linux host can also fetch and install a release itself, without the desktop
+app:
 
 ```bash
 ssh build-box 'tariboy update latest'
@@ -192,7 +218,7 @@ architecture, `tariboy_<version>_linux-x86_64.tar.gz` or
 `tariboy_<version>_linux-aarch64.tar.gz`, and the release `SHA256SUMS`, verifies
 the archive checksum before unpacking, stages it under
 `~/.local/lib/tariboy/.stage-<token>`, and then runs the same fixed installer
-the desktop app uploads — so checksum validation, `flock` serialization,
+the desktop app runs — so checksum validation, `flock` serialization,
 atomic symlink switching, and rollback are identical. A running daemon is
 restarted onto the new release and must report the installed version; a stopped
 daemon is left stopped.
@@ -227,8 +253,8 @@ The host dialog presents provisioning and updates as one vertical sequence:
 
 1. Connect to host.
 2. Check server.
-3. Upload release; **Get release** for an update, which also covers the
-   server-side download.
+3. Download release, or **Get release** for an update. The server downloads
+   the release in both cases.
 4. Install release.
 5. Start or restart Tariboy.
 6. Connect or reconnect to Tariboy.

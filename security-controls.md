@@ -129,6 +129,10 @@ USD; a USD budget cannot bound that provider's actual spend. See
 - Budgets constrain spend.
 - Agent USD budgets have independent calendar hour/day/ISO-week/month limits;
   zero is unlimited, and an exhausted request is rejected before upstream access.
+- A [task budget](/docs/tasks#task-budget) limits the USD spending of a task and
+  its subtree. Only the customer sets or raises it. An agent gets `forbidden`
+  when it sends `--budget-usd` or clears a budget block, so it cannot give
+  itself more money. A database fault in the check lets the request through.
 - Cursor CLI traffic has no price, so it never adds to USD budgets or limits.
   Do not rely on a budget to cap a Cursor agent's spend; see
   [AI proxy](/docs/architecture/ai-proxy#cursor-harness).
@@ -189,6 +193,19 @@ Desktop installer preflights all six command paths before changing any of them
 and refuses regular files, directories, or symlinks not owned by the verified
 Tariboy app bundle. The bundle has five real payload files; `ttasks` is a
 managed alias whose source is `tariboy-tasks`.
+
+The Desktop package carries no server binaries. An SSH server downloads the
+archive of the Desktop version from the GitHub release over HTTPS, with the
+same trust as `tariboy update`. The server makes sure that the archive
+checksum matches the release `SHA256SUMS` before it unpacks the archive. It
+accepts only plain file names at the archive root, and only regular files.
+The release `SHA256SUMS` comes from the same GitHub release, so a person who
+can replace release files can also replace the checksums. Only the
+`remote-install.sh` built into Desktop switches the links; Desktop never runs
+the installer copy from the archive. Desktop sends the base URL to the remote
+shell only when it starts with `https://` and contains only letters, digits,
+and `._~:/-`. Plain HTTP is accepted only for `127.0.0.1`, for a local test
+mirror.
 
 Image builds resolve only the literal `$PLUGINS` root, source-relative paths,
 or explicit absolute paths. Prompt paths and plugin references reject traversal
@@ -340,7 +357,7 @@ runs the routine.
 
 ## Alpha signing and Gatekeeper
 
-`0.109.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.110.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &

@@ -61,7 +61,7 @@ the worktree and starts exactly one durable Scripts-plugin schedule, recording
 the PR, schedule, and state identifiers on the Native Task:
 
 ```text
-scripts/scripts.sh schedule NAME --every 60 -- ABSOLUTE_UTILITY monitor --repo OWNER/REPO --pr NUMBER --state-dir ABSOLUTE_STATE_DIR
+tscripts schedule NAME --every 60 -- ABSOLUTE_UTILITY monitor --repo OWNER/REPO --pr NUMBER --state-dir ABSOLUTE_STATE_DIR
 ```
 
 The daemon exports `TARIBOY_QUIET_EXIT=111` to every run, so the schedule

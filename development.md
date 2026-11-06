@@ -94,9 +94,10 @@ stable warning; neither the inherited nor resolved path nor shell startup
 output may be logged, audited, or included in support bundles.
 
 After resolving the account baseline, a packaged daemon prepends its shared
-runtime `bin` directory, which contains a `ttasks` symlink to the sibling
-`tariboy-tasks` payload. This makes the bundled client available to fresh
-Desktop agents without the optional CLI installation. The alias is refreshed
+runtime `bin` directory, which contains the `ttasks`, `tmail` and `tscripts`
+symlinks to the sibling `tariboy-tasks`, `tariboy-mail` and `tariboy-scripts`
+payloads. This makes the bundled clients available to fresh
+Desktop agents without the optional CLI installation. Each alias is refreshed
 atomically and retained across restart handoff.
 
 The final iteration environment preserves this precedence:
@@ -171,13 +172,13 @@ make full-check      # heavy, tens of minutes, includes check
 Run `make backend-check` for backend-only changes and `make frontend-check` for
 frontend- or documentation-only changes. Run `make check` for mixed changes or
 when ownership is unclear. The backend target runs `fmt-check`, `vet`,
-`staticcheck`, `gocyclo`, `test`, Go unit tests, `desktop-rust-check` and
+`staticcheck`, `gocyclo`, `gocognit`, `test`, Go unit tests, `desktop-rust-check` and
 smoke contracts. Its
 `test` and `tariboy-tasks-e2e` steps also check the HTTP API against the
 committed OpenAPI snapshot; see [Go control plane and plugins](#go-control-plane-and-plugins). The
 frontend target runs the UI format check, the generated API types check, UI
 typecheck, lint with the complexity and size thresholds, the unused-code check, unit tests,
-which fail when Vitest finishes fewer test files than it found, branding, the bundle budget, and the documentation checks. The documentation
+which fail when Vitest finishes fewer test files than it found, the Storybook build (`ui-storybook`), branding, the bundle budget, and the documentation checks. The documentation
 step restores the last build from a host cache when no input of the site
 changed; see [Documentation build cache](#documentation-build-cache). Before checking, `backend-check` runs `go mod download`
 for the module and for `tools.mod`. `frontend-check` uses
@@ -346,13 +347,14 @@ git clean -ndx
 ### Go control plane and plugins
 
 `make backend-check` covers this subsystem with `fmt-check`, `vet`,
-`staticcheck`, `gocyclo`, and `test`. To run one of them from the repository
-root while iterating:
+`staticcheck`, `gocyclo`, `gocognit`, and `test`. To run one of them from the
+repository root while iterating:
 
 ```bash
 make vet
 make staticcheck
 make gocyclo
+make gocognit
 make test
 make fmt-check
 ```
@@ -361,7 +363,7 @@ Those targets enumerate the module's packages and exclude `node_modules`; a Go
 fixture embedded in an npm dependency is not Tariboy source and must not extend
 the Go quality gate.
 
-The versions of `staticcheck` and `gocyclo` are pinned in `tools.mod` and
+The versions of `staticcheck`, `gocyclo` and `gocognit` are pinned in `tools.mod` and
 `tools.sum` at the repository root. This separate module file keeps the
 dependencies of the linters out of `go.mod`. The targets run each tool with
 `go tool -modfile=tools.mod NAME`, so you do not install anything into
@@ -374,11 +376,19 @@ depends on separate work, disable only that check in `staticcheck.conf` with a
 comment that names the task.
 
 `make gocyclo` fails when a non-test function has a cyclomatic complexity
-over `GOCYCLO_OVER` in the `Makefile`. The value is a ratchet: it is the
-current maximum, and a change that simplifies the most complex function lowers
-it. Do not raise it. The target for new code is 25. Test files are not
-measured. `make gocyclo-report` prints the 30 most complex functions and the
-average, and it never fails.
+over `GOCYCLO_OVER` in the `Makefile`, which is 25. Split a function that goes
+over the limit. Do not raise it. Test files are not measured.
+`make gocyclo-report` prints the 30 most complex functions and the average,
+and it never fails.
+
+`make gocognit` fails when a non-test function has a cognitive complexity
+over `GOCOGNIT_OVER` in the `Makefile`, which is 65. Cognitive complexity is
+a score that also counts how deep `if`, `for` and `switch` statements are
+nested. The limit is the current maximum. Do not raise it. Split a function
+that goes over the limit. When a change simplifies the most complex function,
+lower the limit in the same change. Test files, `node_modules` and hidden
+directories such as `.worktrees` are not measured. `make gocognit-report`
+prints the 30 most complex functions and the average, and it never fails.
 
 `make fmt` is not a check: it rewrites files. Only `fmt-check` is part of
 `backend-check`; run `make fmt` yourself when it reports drift.
@@ -388,19 +398,32 @@ writes nothing into `bin/`, and it is the first build step of `full-check`.
 Optional external plugins have their own build under `plugins/`. Canonical
 image sources, Agent Skills, and their static prompts are maintained in the
 separate `tariboy-store` repository rather than embedded in the binaries.
-`desktop-binaries` compiles the local and remote daemon payloads without
-building an agent image.
+`desktop-binaries` compiles only the binary set of the native Desktop package
+into `desktop/src-tauri/resources/bin/`: `darwin-arm64` on a Darwin arm64 host,
+`linux-x86_64` on a Linux x86_64 host. It does not build an agent image. SSH
+servers download their binaries from the release. `server-archives`
+cross-compiles one archive for each server platform into
+`dist/server-archives/<version>/`:
+`tariboy_<version>_linux-x86_64.tar.gz`,
+`tariboy_<version>_linux-aarch64.tar.gz` and
+`tariboy_<version>_darwin-arm64.tar.gz`. Each archive holds the seven
+binaries, `VERSION`, `SHA256SUMS` and `remote-install.sh` at its root. The
+release packager copies them into the release.
 `make install` installs the resulting commands under `$HOME/.local/bin`; it is
 not required for normal unit-test work.
 
-The Tasks mode E2E inside `backend-check` builds its five required binaries in
-temporary directories, so the check never regenerates workspace `bin/`.
+The Tasks mode E2E inside `backend-check` builds its seven required binaries in
+temporary directories, so the check never regenerates workspace `bin/`. It also
+tests `tscripts` on the isolated agent: `run`, `logs`, `schedule` with the
+quiet exit `111`, `rerun`, `cancel`, `rm`, the refusal of
+`schedule --quiet-exit`, and the runtime `bin/tscripts` link.
 
-`make server-install` builds all six real server binaries, stages and verifies
+`make server-install` builds all eight real server binaries, stages and verifies
 their checksums, publishes a versioned release under
 `$HOME/.local/lib/tariboy/<version>`, and transactionally switches the matching
-`$HOME/.local/bin` links. `ttasks` is an additional alias for
-`tariboy-tasks`. It does not start or restart the daemon.
+`$HOME/.local/bin` links. `ttasks`, `tmail` and `tscripts` are additional
+aliases for `tariboy-tasks`, `tariboy-mail` and `tariboy-scripts`. It does not
+start or restart the daemon.
 
 Native Tasks changes normally need focused tests under `internal/tasks`, the
 operator route/OpenAPI registry tests under `internal/commands`, and the agent
@@ -548,7 +571,7 @@ npm ci
 ```
 
 `make check` then covers `npm run fmt:check`, `npm run api-types:check`, `npx tsc -b --checkers 1`, `npm run lint`,
-`npm run knip`, `npm test`, `npm run branding:check`, and `npm run bundle:budget`. The type check uses one checker
+`npm run knip`, `npm test`, `npm run build-storybook`, `npm run branding:check`, and `npm run bundle:budget`. The type check uses one checker
 thread, because the default parallel checkers use about 0.4 GB more memory on a shared host. `make full-check` adds `npm run test:tasks-browser`
 and `npm run test:images-browser`, and builds the desktop bundle through its
 desktop step. Run any of them directly under `ui/` while iterating:
@@ -594,7 +617,130 @@ groups that the shell imports (see
 [Code splitting](/docs/architecture/web-ui#code-splitting)). To fix a failure
 of all JavaScript, make the lazily loaded code smaller.
 
-`npm run fmt` formats `ui/src`, `ui/store`, `ui/tests`, and `ui/.design-sync`
+#### Storybook
+
+Storybook shows a component in a theme and a width without the app and
+without a daemon. It builds the stories in `ui/src/**/*.stories.tsx`. Run it
+from `ui/`:
+
+```bash
+cd ui
+npm run storybook        # http://127.0.0.1:6006
+npm run build-storybook  # writes ui/storybook-static (ignored by git)
+```
+
+`npm run story:shot` writes a PNG of one story in a theme and a width, so that
+you can look at a story without a browser session:
+
+```bash
+cd ui
+npm run story:shot -- components-themetoggle--default dark 360
+npm run story:shot -- components-themetoggle--default light 360 --rebuild
+```
+
+The arguments are the story id, `light` or `dark`, and the width in pixels.
+The supported widths are 360, 390, 820, 1024 and 1180. The command prints the
+path of the PNG, `ui/.story-shots/<id>.<theme>.<width>.png`. The directory is
+ignored by git. The command builds `ui/storybook-static` when it has no
+`index.json`, when a file the build reads (`ui/src/**`, `ui/.storybook/**`,
+`vite.storybook.config.ts`, `vite.fsAllow.ts`, `package.json`,
+`package-lock.json` and the `tsconfig*.json` files) has a newer modification
+time than `index.json`, or when you pass `--rebuild`. It prints the reason, or
+`storybook-static is fresh`, on stderr. A file restored with an old modification
+time (`cp -p`) is not seen: pass `--rebuild`. Before the shot, it waits up to
+2 seconds for finite CSS transitions to end, so a `dark` shot does not show a
+frame of the theme change. It exits with the list of known ids
+when the id does not exist. It serves the build on `127.0.0.1` with a random
+port and opens it in the Playwright Chromium of `ui/node_modules`. It waits
+for one host check slot (`flock` on `/tmp/tariboy-check.lock`), like
+`make check`, and runs without the lock on a host that has no `flock`.
+
+The decorators are in `ui/src/storybook/decorators.tsx`.
+`ui/.storybook/preview.tsx` applies the first five to every story. A story
+adds `withSurface` and `withWidth` in its own `decorators` list:
+
+| Decorator | What it does |
+| --- | --- |
+| `withTheme` | Sets the `.dark` class when the toolbar theme is `dark` |
+| `withAppProviders` | Adds `TooltipProvider`, and a `MemoryRouter` unless the story sets a route |
+| `withQueryClient` | Adds a react-query client when `parameters.tariboy.query` is `true` |
+| `withDaemon` | Adds a host registry with one host on `storybook.invalid` when `parameters.tariboy.daemon` is `true`, and restores the real keys after the story |
+| `withRoute` | Mounts the story on `parameters.tariboy.route` for a component that reads `useParams()` |
+| `withSurface(kind, width?)` | Wraps the story in a frame: `sidebar` (288 px), `panel` (480 px), `card` (360 px) or `row` (720 px) |
+| `withWidth(width)` | Wraps a mockup story in a frame of that width and the full height of the viewport |
+
+A story sets `parameters.tariboy` with the type `TariboyParameters`:
+
+```ts
+parameters: { tariboy: { query: true, daemon: true, route: { path: "/tasks/TB-142", pattern: "/tasks/:key" } } }
+```
+
+All three fields are optional. `query` and `daemon` are booleans. `route` has
+the initial `path` and the route `pattern`.
+
+The `ui-storybook` step of `make frontend-check` runs `npm run build-storybook`
+into the run's temporary directory. It fails when a story does not compile or
+does not build. `npx tsc -b` also checks every story against the real
+component props, because the stories are under `src/`. An extra prop in
+`args` fails the type check. Measured on the shared host on 2026-11-05, the
+build takes about 10 seconds and its peak resident memory is about 0.86 GB
+(`/usr/bin/time -v`). If the peak grows above 1.5 GB, set
+`NODE_OPTIONS=--max-old-space-size=1536` in the step command.
+
+`make designer-check` is the check a designer runs before a hand-off. It is
+not part of `check`. It first runs `scripts/npm-ci-locked.sh ui` (about 30
+seconds in a new worktree), then takes the host check slot and runs six steps
+to the end, like `frontend-check`: `ui-typecheck` (`npx tsc -b --checkers 1`),
+`ui-oxlint` (oxlint on the `ui/*.ts` and `ui/*.tsx` files that differ from
+`git merge-base origin/main HEAD`, uncommitted files included),
+`ui-fmt-check` (oxfmt), `ui-designer-tests` (one Vitest run with
+`TARIBOY_VITEST_MAX_WORKERS=2` of `viewLintPolicy.test.ts`,
+`storybookSafety.test.ts`, `storyNetwork.test.tsx`,
+`arbitraryPxPolicy.test.ts` and `textInputPolicy.test.ts`), `ui-dead-code`
+(Knip) and `ui-storybook` (the Storybook build). Measured on the shared host on
+2026-11-05, Knip takes about 10 seconds and 0.4 GB of peak resident memory; the
+step stays in the target while it takes at most 90 seconds and 1.5 GB.
+
+`designer-check` does not run these `frontend-check` steps: `ui-api-types`,
+`ui-lint`, the rest of `ui-test`, `ui-branding`, `ui-bundle-budget` and `docs`.
+The developer's pull request runs them. A successful step prints only its
+result line, except that the target first prints the file list of the oxlint
+step (`oxlint files: …`); with no changed file the step passes with
+`no changed UI files`. Without `origin/main` the oxlint step fails: run
+`git fetch origin`. `scripts/designer-check-contract-test.sh`, a part of
+`smoke-contract-test`, pins the steps and their order.
+
+Storybook never reaches a daemon. Four layers keep it that way:
+
+1. Storybook reads `ui/vite.storybook.config.ts`, not `ui/vite.config.ts`.
+   The app config proxies `/api` to `127.0.0.1:9990`. The Storybook file has
+   the same plugins and alias and no `server.proxy`. `ui/.storybook/main.ts`
+   has no `viteFinal` and no addons. The Storybook file also defines
+   `VITE_TARIBOY_NO_LOCAL_HOST` as `"1"`. `fetchAllAgents`
+   (`ui/src/lib/aggregate.ts`) then leaves out the implicit host "This daemon
+   (local)", whose empty base URL would send `/api/agents` to the page origin.
+   The app never sets the variable, so it still lists that host.
+2. The `withDaemon` decorator (`ui/src/storybook/decorators.tsx`) writes a
+   host registry with one host, `http://storybook.invalid`, into the
+   `tariboy_daemons` and `tariboy_active_daemon` keys. The `.invalid` name
+   never resolves. After the story, the decorator restores both keys. A story
+   asks for it with `parameters.tariboy = { daemon: true }`.
+3. `ui/src/test/storybookSafety.test.ts` fails when a story or a mockup
+   imports `CustomerQuestionNotifications`, because that component opens the
+   tasks WebSocket.
+
+4. `ui/src/test/storyNetwork.test.tsx` mounts every story of
+   `src/**/*.stories.tsx` in jsdom with portable stories and
+   `.storybook/preview.tsx`. It replaces `fetch` and `WebSocket`, records each
+   URL, and fails on any URL that is not on `storybook.invalid`. So a relative
+   `/api` path and `127.0.0.1:9990` both fail it. A new story joins the check
+   by itself. The test does not see `XMLHttpRequest`, `EventSource` or
+   `<img src>`.
+
+`ui/src/test/storybookConfig.test.ts` and
+`ui/src/test/storybookDecorators.test.tsx` pin layers 1 and 2.
+
+`npm run fmt` formats `ui/src`, `ui/store`, `ui/tests`, and `ui/.storybook`
 in place with [oxfmt](https://oxc.rs/docs/guide/usage/formatter) and
 `ui/.oxfmtrc.json`: double quotes, semicolons, and two-space indentation
 without tabs. Import sorting and Tailwind class sorting are off. oxfmt skips
@@ -622,8 +768,19 @@ A warning therefore fails `make frontend-check` in the same way as an error.
 The configuration turns on the complete `correctness` category, adds
 selected rules from other categories, and turns on the
 [complexity and size thresholds](#frontend-complexity-thresholds). It has
-two kinds of rule override: the test override and the `.design-sync` override.
-The next section describes them.
+two kinds of rule override: the test override, which the next section
+describes, and the view-layer override. The view-layer override applies to
+`src/**/*.view.tsx`, `src/**/*.stories.tsx`, `src/mockups/**` and
+`src/fixtures/**`. It forbids every import from `@/lib/api` (also
+`import type` and `export … from`, and the relative path), every import from
+`@tanstack/react-query`, and `fetch`, `window.fetch`, `globalThis.fetch` and
+`self.fetch`. Types come from `@/types`. oxlint has no rule for colors, so
+`ui/src/test/viewLintPolicy.test.ts` searches the `.ts` and `.tsx` files of
+the same globs for hex colors and Tailwind palette classes (`bg-red-500`,
+`border-[#fff]`, `var(--color-zinc-950)`), and fails with a list of
+`file:line: match`. Use semantic tokens (`bg-card`, `text-muted-foreground`).
+The test also runs oxlint on files that break each rule, so a rename of a glob
+or an oxlint update cannot turn the override off unnoticed.
 
 Fix the code before you suppress a diagnostic. If a suppression is necessary,
 put an oxlint comment on the line before the diagnostic. The comment names the
@@ -636,7 +793,7 @@ rule and gives the reason after `--`:
 A generated file can use one file-level `/* oxlint-disable RULE -- reason */`
 comment. Do not use `eslint-disable` comments. `ui/src/test/lintPolicy.test.ts`
 fails on an `eslint-disable` comment, on an oxlint comment without a rule or a
-reason, and on a rule override of another kind. Turn off a `correctness` rule
+reason, and on a rule override of a third kind. Turn off a `correctness` rule
 for the complete project only when the rule does not apply to the project, and
 write the reason in this guide.
 
@@ -681,10 +838,6 @@ files are unit tests, Playwright tests, and the shared test code in
 
 Unlike `make gocyclo`, which does not measure Go test files, these limits
 measure the complexity of the frontend tests.
-
-`ui/.design-sync` is the design synchronization tool, not app code. An
-override turns off the six limits for `.design-sync/**`. The `correctness`
-rules still apply to it.
 
 `make ui-complexity-report` prints every function and file over a limit. When
 nothing is over a limit, it prints
@@ -738,20 +891,22 @@ passes:
 1. `knip --production --include files` follows imports from the Desktop and
    Android app (`src/main.tsx`, found through `index.html`) and from the Store
    app (`store/main.tsx`, found through `vite.store.config.ts`). Tests,
-   `tests/**`, and `.design-sync/**` are not entry points in this pass. A file
-   that only a test or the design-sync bundle imports is reported as unused.
+   stories, mockups, fixtures, `src/storybook/**` and `tests/**` are not entry
+   points in this pass. A file that only a test or a story imports is
+   reported as unused.
 2. `knip` checks the complete graph: the apps, the Vitest unit tests, the
-   Playwright tests and fixtures under `tests/`, and the design-sync files
-   under `.design-sync/`. It reports every issue type: unused files, exports,
+   Playwright tests and fixtures under `tests/`, and the stories with
+   `ui/.storybook/`. It reports every issue type: unused files, exports,
    exported types, duplicate exports, unused or unlisted dependencies and
    devDependencies, and unlisted binaries. An export that a test imports is
    not reported, but an export that no file imports is.
 
 Knip finds entry points in three ways. Its Vite, Vitest, and Playwright
 plugins read every `vite*.config.ts` and `playwright.*.config.ts` file in
-`ui/`, so a new config with a name of that form needs no change. The `entry`
-list in `ui/knip.json` adds `tests/**` and `.design-sync/**`, because a
-script or an external tool loads those files by path, not by import. A new
+`ui/`, so a new config with a name of that form needs no change. Its Storybook
+plugin finds the stories. The `entry` list in `ui/knip.json` adds `tests/**`,
+because a script or an external tool loads those files by path, not by
+import. A new
 file that is loaded by path, by a glob, or by a tool outside the import graph
 must be added to `entry`. Otherwise Knip reports it as an unused file. The
 `project` list names the files that can be reported. It includes `*.css`
@@ -778,22 +933,23 @@ which the first pass does not check. Add an exception to `ignoreIssues` in
 `ui/knip.json` only for code that the app does not use on purpose. Name each
 file, list only the issue types it needs, and give the reason in the pull
 request. Do not add a pattern that covers all of `src/` or all components.
+Stories, mockups, fixtures and Storybook decorators are not reported as unused
+files (`project` excludes `src/**/*.stories.tsx`, `src/mockups/**`,
+`src/fixtures/**` and `src/storybook/**`), and the exports of
+`src/storybook/decorators.tsx` are allowed, because stories use them.
 The current exceptions are the shadcn primitives under `src/components/ui/`.
-The repository keeps that kit complete for the design-sync catalog, so its
-unused exports and the unused `separator.tsx` and `tooltip.tsx` files are
-allowed.
-
-The design-sync catalog under `ui/.design-sync` is checked by `make check` in
-two places. `npx tsc -b` builds `ui/tsconfig.design-sync.json`, which
-type-checks `.design-sync/entry.tsx` and every preview against the real
-component props: the `tariboy-ui` import in a preview resolves to the
-generated entry. When a component's props change, update its preview in the
-same change. `src/test/designSyncCatalog.test.ts` fails when the committed
-`entry.tsx` differs from a fresh `node .design-sync/make-entry.mjs` run, when a
-`componentSrcMap` path in `config.json` names a missing file, or when a preview
-or an override has no `componentSrcMap` key. To fix the first case, run
-`node .design-sync/make-entry.mjs` from `ui/` and commit the result. For the
-other cases, correct `config.json`.
+The repository keeps that kit complete for the Storybook catalog, so the
+unused exports of `src/components/ui/*.tsx` are allowed. `knip.json` is JSON
+and has no comments, so the reason is here. Without the exceptions for
+`separator.tsx` and `tooltip.tsx`, the production pass reports both files as
+unused, because only their stories import them. Those two exceptions stay for
+the Storybook catalog.
+The Storybook catalog is checked by `make check` in two places. `npx tsc -b`
+compiles the stories with the app (`ui/tsconfig.app.json` includes `src`), so
+a story is checked against the real component props. When the props of a
+component change, update its story in the same change. The `ui-storybook`
+step runs `npm run build-storybook`, which fails when a story does not
+build.
 
 #### Onboarding steps for a new feature
 

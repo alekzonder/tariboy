@@ -487,7 +487,7 @@ and run ids, name, mode, status, optional exit code and the absolute
 `log_path`; the log starts with the resolved working directory, and the
 combined output stays in that file. Sending the result also stops a recurring
 definition, so one failing command cannot flood the inbox;
-`scripts/scripts.sh rerun scr-...` resumes it once the agent has handled the
+`tscripts rerun scr-...` resumes it once the agent has handled the
 letter. A quiet run, one that exits `111`, sends nothing and keeps the
 schedule running.
 

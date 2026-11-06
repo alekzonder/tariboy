@@ -361,23 +361,46 @@ active host while a Library page is open. The image links of an agent's
 
 ## Home
 
+Home is the first screen of a workspace that has agents. It shows what needs
+the operator now and whether the agents are in order. The user is the operator
+who runs AI agents on one or more hosts. The task is to open the application,
+find the task or the letter that waits for an answer, see which agents run now
+and how the day goes, then go to the right place. Success: the operator
+understands in 5 seconds where an action is needed. At 1280 px all four
+sections (Needs you, Running now, Today, Recent) are visible on the first
+screen, and Needs you shows the most urgent items first, not every item. The
+goal is also recorded in `ui/src/mockups/home/Home.stories.tsx`.
+
 `/` is Home when the workspace has at least one agent
 (`ui/src/pages/home/HomePage.tsx`, loaded on first open). It has a **New
 agent** button and four sections:
 
 - **Needs you (N)**: the tasks that need you on every workspace host, newest
-  first, then your open letters. A question letter about a listed task is not
-  shown again. A task row opens the task drawer on its host, and a letter row
-  opens `/inbox?letter=<id>`. The chevron button **Answer in place** before a
-  task row expands the row into its
+  first, then your open letters. Home shows the 7 most urgent rows, with
+  **Show all (N)** under them. The link opens Inbox when every row is a letter
+  and Tasks otherwise. Letters from one sender about one task are one row of
+  the newest letter, and its meta starts with `N letters`. The inbox read
+  returns at most 100 letters, so when a host returned that many, N is a lower
+  bound and reads `100+`. A question letter about a listed task is not shown
+  again. The prefix `Answer on KEY:` or `Question on KEY:` of a letter subject
+  moves to the meta line, so the subject starts the title. The meta of a task
+  says `waiting for you` (or `paused`), and the age reads `12 min ago` or
+  `2 h ago` for the last 24 hours and a date (`Nov 4`) before that. The rows
+  are formatted in `ui/src/pages/home/needsYouModel.ts`. A task row opens the
+  task drawer on its host, and a letter row opens `/inbox?letter=<id>`. The
+  chevron button **Answer in place** before a task row expands the row into its
   [Needs you card](#needs-you-card), so you can answer without the drawer. With nothing to show it says **Nothing needs
   you.** When no host could be read, it shows the error and **Retry**.
 - **Running now (N)**: the agents in state `running`, with the time since
-  `current_iteration_started_at`. Each row opens the agent's Terminal.
+  `current_iteration_started_at`. Each row opens the agent's Terminal. Home
+  shows 8 rows. With more, **Show all (N)** shows the rest in place and
+  **Show less** folds them again.
 - **Today**: the Activity totals of the page host for the last 24 hours, with
-  **History**, which opens the Activity table at `/activity`.
+  **History**, which opens the Activity table at `/activity`. The number of a
+  tile sits at the bottom of the tile, so a label that wraps does not move it.
 - **Recent**: eight agents, newest `last_iteration_at` first; agents that never
-  ran follow in sidebar order.
+  ran follow in sidebar order. The meta is the time of the last iteration
+  (`2 h ago`), or `not run yet`.
 
 ## First run
 
@@ -631,6 +654,13 @@ that is not on the host any more has no link. The Images and Workflows tables
 group the versions of one name, newest version first. **Compare versions** and
 the `⇄` button of a version row open `/metrics/compare`. From `⇄`, B is the
 version of the row and A is the nearest older version.
+
+The **AI usage in this period** cards include **Without a task**: the cost of
+the AI requests without a task (`usage_without_task.cost_usd`). Its second
+line gives the part of **Cost**, for example `15% of cost`. If **Cost** is 0,
+the card has no second line. The Agents, Images, and Workflows tables have the
+column **Cost without task** after **Cost in period**. The comparison page has
+the row **Cost without task** after **Cost in period**.
 
 `/metrics/compare` shows the two versions side by side with the difference
 B − A, the percentage of A, and the word `better`, `worse`, or `no change`.
@@ -1046,11 +1076,23 @@ generates it from the committed snapshot
 for the workflow after an API change.
 
 Each schema is a top-level type with the Go type's name, such as `AgentRow`
-or `TaskDetail`. A domain module re-exports the types that its callers need,
-for example `export type { AgentRow, AgentView } from "../api-types.generated"`,
-and components import them from `@/lib/api`. `Comment` and `Event` would
-shadow DOM globals, so `tasks.ts` re-exports them as `TaskComment` and
-`TaskEvent`. Where the spec has a plain
+or `TaskDetail`. The directory `ui/src/types/` holds the types. It has one
+file for each domain, such as `agents.ts` and `tasks.ts`. A domain file
+re-exports the types of that domain from the generated file and holds the
+hand-written types listed below. `ui/src/types/index.ts` re-exports every
+domain file with `export type * from "./<domain>"`.
+
+Components, stories, fixtures and new code import types from `@/types`, or
+from `@/types/<domain>`. A file in `ui/src/types/` has types only and no
+runtime code, so a story can import a response type without loading the API
+client. `ui/src/test/typesOnly.test.ts` fails when a file there compiles to
+JavaScript. A domain module in `ui/src/lib/api/` re-exports the types of its
+domain from `@/types/<domain>`, so older imports from `@/lib/api` still work.
+The API client types (`ApiError`, `ApiClient`, `ApiTarget`, `Transport`) and
+the narrowing functions stay in `ui/src/lib/api/`.
+
+`Comment` and `Event` would shadow DOM globals, so `types/tasks.ts`
+re-exports them as `TaskComment` and `TaskEvent`. Where the spec has a plain
 string and the UI needs a union, the module narrows it at one place, such as
 `taskPriority(task)`.
 
@@ -1197,7 +1239,8 @@ to it. When you add a text size or a radius to `@theme`, add it to `cn()` too.
 `ui/src` or `ui/store` uses a class of the form `utility-[Npx]`. Composite
 values, such as `grid-cols-[76px_minmax(0,1fr)]`, are allowed. The shadcn
 primitives under `ui/src/components/ui/` are not checked, so they stay the same
-as upstream. An inline `style` is only for a value that the code calculates at
+as upstream. Story files are not checked: a story sizes its demo frame in
+pixels. An inline `style` is only for a value that the code calculates at
 run time, such as a column width or a CSS variable.
 
 Text fields use the shared controls: `Input`, `Textarea` and `CommandInput`
@@ -1216,6 +1259,352 @@ pseudo-elements, a media query for one widget, or a rule that must override
 another component. `ui/src/pages/tasks/tasks.css` lists the rules it keeps
 and gives the reason for each at its top.
 
+## Designer workflow in Storybook
+
+A designer sees and changes the UI in Storybook, not in the app. The stories
+live next to the components (`ui/src/components/**/*.stories.tsx`,
+`ui/src/pages/**/*.stories.tsx`) and in the mockups
+(`ui/src/mockups/**/*.stories.tsx`). Shared values are in `ui/src/fixtures/`
+(`agents.ts`, `tasks.ts`, `images.ts`, `operations.ts`, `metrics.ts`,
+`activity.ts`, and the fixed clock `time.ts`). The decorators are in `ui/src/storybook/decorators.tsx`.
+`npx tsc -b` compiles the stories with the app, so a change of the props of a
+view component breaks the stories that use it until they compile.
+[Development](/docs/development#storybook) tells how to run Storybook and why
+it never reaches a daemon.
+
+### Style rules
+
+- Character. Tariboy UI is shadcn/ui on Tailwind v4, with achromatic metal
+  neutrals (hue 250, chroma at most .008), one blue accent, and Geist Variable.
+  A design reads as a control surface for dense operator tooling (agent
+  consoles, task trees, image and host tables), not as a marketing page.
+- Colors are always semantic tokens, never hex and never a Tailwind color
+  scale. So light and dark both work. `viewLintPolicy.test.ts` enforces it.
+  - Surfaces: `bg-background`, `bg-card`, `bg-popover`, `bg-muted`,
+    `bg-accent`, `bg-secondary`.
+  - Text: `text-foreground`, `text-muted-foreground`, `text-card-foreground`,
+    `text-primary-foreground`.
+  - Emphasis: `bg-primary` with `text-primary-foreground`.
+  - Danger: `text-destructive`, `bg-destructive/10`.
+  - Lines: `border border-border`, `border-t`, `border-b`, `border-input`.
+  - Focus: `ring-ring/50`, `focus-visible:border-ring`.
+- CSS custom properties are for inline styles and for what utilities do not
+  cover: `--background`, `--foreground`, `--card`, `--popover`, `--primary`,
+  `--secondary`, `--muted`, `--accent`, `--destructive`, `--border`,
+  `--input`, `--ring`, `--radius`, each with a `-foreground` partner where it
+  carries text, plus `--sidebar*` and `--chart-1` to `--chart-5`.
+- `--background` is a window-wide gradient. `background-color` and
+  `color-mix()` drop a gradient value. In an inline `background-color` and in
+  `color-mix(…, var(--background-base))`, use `--background-base`.
+  `bg-background` resolves to it. Only the window itself paints
+  `--background`.
+- Status is a system, not a color choice. `--status-running` is in progress.
+  `--status-failed` is failed or out of budget. `--primary` is waiting on the
+  customer. `--status-queued`, `--status-done` and `--status-stopped` are
+  quiet text. A fill is only for what is alive and what needs a person:
+  `text-status-running` with `bg-status-running/13`, `text-status-failed` with
+  `bg-status-failed/12`, `text-primary` with `bg-primary/12`. Open, done and
+  cancelled get `text-muted-foreground` and no fill.
+- Elevation has two levels, never three. `--raise` is for a selected row and
+  the active segment of a segmented control. `--lift` is for the content
+  island and menus. The island is `bg-card`, `rounded-[var(--panel-radius)]`
+  and `shadow-[var(--lift)]`, and it sits on a `--background` chrome without
+  borders.
+- Typography. Body is `text-sm`. Secondary meta is `text-xs`. Headings are
+  `text-base` or `text-lg` with `font-medium` or `font-semibold`. Task keys,
+  image refs, digests, paths and terminal output are `font-mono`. Identifiers,
+  durations and timestamps are `font-mono` with `tabular-nums`, so they line
+  up down a column.
+- Controls, spacing and radius. Buttons are `h-8` (`h-7` for sm, `h-6` for
+  xs). Inputs are `h-8`. Spacing is `gap-1`, `gap-2`, `gap-3`, `p-3` and
+  `p-4`. Radius comes from `--radius: 0.625rem` through `rounded-md`,
+  `rounded-lg` and `rounded-xl`. Console surfaces are denser: rows 30px,
+  buttons 24, 26 and 28px, pills 17, 19 and 20px, radii 5, 6, 7, 8, 9, 12 and
+  14px.
+- Icons are `lucide-react`: 16px at the default control size, 14px at sm.
+  Never use emoji.
+- Dark mode is the class `.dark` on an ancestor (`<html>` in the app).
+  `ThemeProvider` sets it, and `ThemeToggle` is the titlebar control.
+  Storybook has a theme switch in its toolbar.
+- Content is realistic product content: agents `builder`, `reviewer`,
+  `packager`, `docs-bot`; images `worker:v1`, `bare:latest`; hosts
+  `This daemon (local)` and `build-01`; task keys such as `TB-142`.
+- Where the truth is. The tokens are in `ui/src/index.css`. The API of a
+  component is its props type in its source file.
+- Storybook compiles `src/index.css` with Tailwind over the same `src`
+  sources, so every utility works in a story. An inline style with
+  `var(--token)` is only for what utilities do not cover.
+
+An idiomatic example:
+
+```jsx
+<Card size="sm">
+  <CardHeader>
+    <CardTitle>worker:v2</CardTitle>
+    <CardDescription>Built 2026-09-11 · sha256:9ac71e3f52</CardDescription>
+    <CardAction>
+      <Badge variant="secondary">Pending</Badge>
+    </CardAction>
+  </CardHeader>
+  <CardContent>
+    <div className="flex items-center justify-between gap-2 text-sm">
+      <span className="font-mono text-muted-foreground">builder</span>
+      <div className="flex gap-2">
+        <Button size="sm" variant="outline">
+          Export
+        </Button>
+        <Button size="sm" variant="destructive">
+          Remove
+        </Button>
+      </div>
+    </div>
+  </CardContent>
+</Card>
+```
+
+### Work rules
+
+- Work only in the designer paths: the view files, the stories, the mockups
+  under `ui/src/mockups/`, the fixtures, `ui/src/index.css` and the primitives
+  in `ui/src/components/ui/`.
+- Never import `@/lib/api` or `@tanstack/react-query`, and never call `fetch`,
+  in view files, stories, mockups and fixtures. `npm run lint` enforces this.
+  The other designer paths have no data access to forbid.
+- Take types from `@/types`. A view takes the narrowest type it needs:
+  `Pick<…>` or its own `XProps`.
+- A component without a view file: copy its markup into a local view part
+  `ui/src/mockups/<page>/<Name>.view.tsx` (or
+  `ui/src/mockups/<component>/<Name>.view.tsx`), change it there, show it in
+  the mockup story, and ask in `handoff.md` to split the component. Do not edit
+  the container.
+- A change of a token or a primitive variant lists every affected story in
+  `## Tokens and styles` of the handoff. Check those stories in both themes.
+- See a story. Run
+  `cd ui && npm run story:shot -- <story-id> <light|dark> <width>`. The command
+  builds `storybook-static` when there is no build, when a file the build
+  reads is newer than it, or with `--rebuild` (it prints the reason on
+  stderr), serves it on a loopback port, and writes a PNG of
+  `iframe.html?id=<story-id>&viewMode=story&globals=theme:<theme>`. It prints
+  the path of the PNG, `ui/.story-shots/<story-id>.<theme>.<width>.png`. Check
+  each changed story in `light` and `dark`, at the smallest supported width
+  (360 px) and at 1024 px. The story id is the title and the story name in
+  kebab case, joined by `--`: `mockups-home--width-360` (Storybook puts a hyphen before the digits of the
+  export name `Width360`). All ids are in
+  `storybook-static/index.json`.
+- Build stories from the fixture factories:
+  `agentRow({ name: "builder", state: "running" })`. Take dates from `NOW` and
+  `minutesAgo()` in `ui/src/fixtures/time.ts`. `NOW` is a string, so a
+  component with a `now` prop of type `Date` gets `new Date(NOW)`. A mockup
+  story uses `parameters: { layout: "fullscreen" }` and one story for each
+  supported width (`Width360`, `Width390`, `Width820`, `Width1024`,
+  `Width1180`) with `withWidth(width)`.
+- Put `handoff.md` next to its mockup. A page change has
+  `ui/src/mockups/<page>/handoff.md` next to `<Page>.stories.tsx`
+  (`title: "Mockups/<Page>"`). A change of one component without a page mockup
+  has `ui/src/mockups/<component>/handoff.md` next to
+  `<Component>.stories.tsx` (`title: "Mockups/<Component>"`).
+- Hand off a change:
+  1. Work in a branch `designer/<task>-<topic>` of your own worktree.
+  2. Before you hand off, run `make designer-check`. After
+     `scripts/npm-ci-locked.sh ui` (about 30 seconds in a new worktree), it
+     takes the host check slot and runs six steps: the type check, oxlint on
+     the files changed against `origin/main` (uncommitted files included),
+     `ui-fmt-check` (oxfmt), one Vitest run of `viewLintPolicy.test.ts`,
+     `storybookSafety.test.ts`, `storyNetwork.test.tsx`,
+     `arbitraryPxPolicy.test.ts` and `textInputPolicy.test.ts`, Knip
+     (`ui-dead-code`) and `build-storybook`. It fails if one step failed. It
+     does not run `ui-api-types`, `ui-lint`, the rest of `ui-test`,
+     `ui-branding`, `ui-bundle-budget` and `docs`: the developer's pull request
+     runs them.
+  3. Run `git rebase origin/main` and `git push origin <branch>`. Report the
+     branch on your own TARIDESIGN task in a comment that mentions the PM. The
+     developer opens the pull request.
+  4. When `make frontend-check` fails in the developer's pull request on a
+     designer file, the developer fixes a mechanical error (the format) in that
+     pull request and says so on the developer's own task. For any other
+     error, the developer reports it to the PM on the developer's own task, and
+     the PM orders the fix from the designer.
+- Propose a new prop in `handoff.md`. Do not add it to a container.
+
+### Roles
+
+Each path has one owner. A designer change touches only the designer column.
+A developer change that breaks a story fixes the story in the same commit.
+
+| Paths | Designer | Developer |
+| --- | --- | --- |
+| `ui/src/index.css`, `ui/src/components/ui/*.tsx` | Owns colors, radii, density, shadows and the `cva()` variants | Changes only accessibility and behavior, after agreement with the designer |
+| `ui/src/**/*.view.tsx` | Owns markup and styles. Proposes a new prop in `handoff.md` | Owns the props type. Connects the view to data in a container |
+| Other `ui/src/components/**/*.tsx` and `ui/src/pages/**/*.tsx` | Does not change them. Copies the markup into a local view part of a mockup | Owns data hooks, `@/lib/api`, react-query, router hooks, state and handlers |
+| `ui/src/mockups/<name>/` | Builds the mockup stories and the local view parts | Moves the change into the real component or page |
+| `ui/src/**/*.stories.tsx` | Writes and changes them | Changes a story only when a props change breaks it, and tells the designer on the task of the change |
+| `ui/src/fixtures/<domain>.ts` | Writes and changes them | Keeps them typed against `@/types` |
+| `ui/src/mockups/<name>/handoff.md` | Writes it | Reads it, answers the open questions, and implements it |
+| `ui/src/types/` | Reads it | Owns it |
+| `ui/.storybook/`, `ui/src/storybook/`, `ui/vite.storybook.config.ts`, `ui/scripts/story-shot.mjs` | Proposes a new decorator | Owns the configuration and the decorators |
+
+A view file is a file named `*.view.tsx`. A container is every other file
+under `ui/src/components/` and `ui/src/pages/`. `viewLintPolicy.test.ts` and
+`npm run lint` keep data access out of view files.
+
+The developer follows these rules:
+
+- Own the props type of every view file. A change of a props type changes the
+  stories in the same commit, and `npx tsc -b` fails until they compile.
+- Keep data hooks, `@/lib/api`, react-query, router hooks, state and handlers
+  in containers and pages. A view takes props and callbacks and returns JSX.
+- Import types from `@/types` in new code.
+- Move a component to the view layer one component at a time. Split data and
+  markup, rename the markup file to `*.view.tsx`, and add or move its story.
+- Change the primitives in `ui/src/components/ui/` only for accessibility and
+  behavior, and tell the designer.
+- To implement a handoff, open the pull request from the designer's branch.
+  Write the answer to each open question under it in `handoff.md`, add the
+  first line `Implemented in #<PR>`, and keep the final type in the view file.
+  If the handoff asks to split a component, split it and move the local view
+  part of the mockup into the new view file.
+- When a props change breaks a story, fix the story in the same commit and
+  tell the designer on the task of the change.
+- Keep the Storybook setup and its checks (`ui-storybook`,
+  `make designer-check`) green.
+
+After the implementation, the mockup stays while it compiles. The developer
+deletes the mockup directory, `handoff.md` included, when the story of the real
+page or component shows the same states. Git history keeps the handoff.
+
+### Fixtures
+
+- A fixture file `ui/src/fixtures/<domain>.ts` is typed with `@/types` and is
+  a complete response value, as the rule in [API types](#api-types) says.
+- Each file exports a factory `<entity>(over: Partial<T> = {}): T` with
+  complete defaults, such as `agentRow`, `taskItem`, `imageSummary`,
+  `operation` and `metricsReport`. A story writes only the fields that matter.
+- Each domain also exports a set of edge states: `empty`, `one`, `many` (50
+  items) and `longText` (long names and texts, for truncation and wrapping),
+  such as `agentRows.many` and `taskItems.longText`. The exception is
+  `activity.ts`: it exports one factory of totals, `taskActivityTotals`, not a
+  list, so it has no set.
+- A fixture of a shape that only the UI uses takes the type of the prop of its
+  view, as `agents.ts` does with `HomeAgentLink`.
+- All dates come from `NOW` in `ui/src/fixtures/time.ts`, or from `minutesAgo()`
+  and `hoursAgo()`, which count back from it. A story passes `NOW` as `now` to
+  a component that takes one, so "5 min ago" is the same on each run and in
+  each screenshot.
+- A value that only one story uses stays in that story file.
+- `ui/src/test/fixtures/apiFixtures.ts` re-exports the factories that stories
+  use, so tests keep their imports. A fixture never imports that file, because
+  it is test code.
+
+### Handoff format
+
+A `handoff.md` has these sections, in this order. It is in the language of the
+designer's request, and the interface texts in it are in English.
+
+1. `# Handoff: <page or component>`, then one line with the date, the key of
+   the design task and the story ids, such as `mockups-home--width-1024`.
+2. `## What changed`: each visible change with the story that shows it.
+3. `## New props`: a table with the columns Component, Prop, Type, Meaning and
+   Source of data. The type uses `@/types` names or a narrow type such as
+   `Pick<AgentRow, "name" | "state">`. The source names the API call or the
+   state, or says "unknown". The designer only proposes a prop. The developer
+   owns the final type.
+4. `## Changed and removed props`: the same table for a prop whose type or
+   meaning changes, and for a removed prop.
+5. `## States`: each state with its story id (empty, loading, error, long
+   text, many items).
+6. `## Behavior`: what happens on click, keyboard, hover and focus. Name a
+   change of behavior as a change.
+7. `## Texts`: every interface text that the stories do not show, such as API
+   errors, toasts, `aria-label` values and tooltips.
+8. `## Accessibility`: labels, focus order, focus return after a dialog
+   closes, how an error is announced, and the contrast of new token pairs.
+9. `## Layout at widths`: the layout at each supported width, at least at 360
+   px, each with the story or the `story:shot` width that shows it.
+10. `## Screenshots`: a table of the shots that show the change, with the
+    columns Story id, Theme and Width. The PNG files are not in git. The
+    developer repeats each shot with `npm run story:shot`.
+11. `## Tokens and styles`: new or changed tokens in `ui/src/index.css` and
+    changed `cva()` variants. List every affected story.
+12. `## Acceptance criteria`: numbered criteria that the developer and the
+    reviewer check one by one.
+13. `## Open questions`: questions for the developer.
+
+The reference mockup is `ui/src/mockups/home/Home.stories.tsx`.
+
+### Safety
+
+Storybook never reaches a daemon, so a story is safe to open.
+
+- Storybook reads `ui/vite.storybook.config.ts`, which has no `/api` proxy.
+- A story that needs a host registry sets `parameters.tariboy = { daemon: true }`.
+  The `withDaemon` decorator then uses one host on `http://storybook.invalid`,
+  a name that never resolves.
+- Never import `CustomerQuestionNotifications` in a story or a mockup. It
+  opens a tasks WebSocket. `storybookSafety.test.ts` fails on it.
+- `storyNetwork.test.tsx` fails when a story requests any URL outside
+  `storybook.invalid`.
+
+[Development](/docs/development#storybook) describes the four layers and the
+tests that pin them.
+
+### Component notes
+
+- `Tooltip` needs `TooltipProvider`. The global decorator gives it, so a story
+  does not add its own.
+- A component that reads `useParams()` needs a matched route. Set
+  `parameters: { tariboy: { route: { path, pattern } } }` on the story.
+  `MemoryRouter` is global, so other components need nothing.
+- `AgentNameContext` and `AgentStatusContext` come from their source modules.
+  A story that needs them wraps its content in the provider.
+- Radix `open` and `defaultOpen` render overlay content in the story.
+  `defaultOpen` works on Dialog, AlertDialog, Sheet, DropdownMenu and
+  Collapsible. `ContextMenu` has no `open`: open it with a real `contextmenu`
+  event from a mount effect.
+- Overlays need real content behind them, or the backdrop covers an empty
+  canvas.
+- Small components need a size. Input and Textarea need a labelled field
+  320 to 460px wide. Badge needs a flex row. A vertical `Separator` needs an
+  explicit height. `ScrollArea` needs a fixed height with content that
+  overflows.
+- `Switch` uses `defaultChecked`. `checked` without `onCheckedChange` makes
+  Radix warn.
+- `CommandList` is `max-h-64`: keep a palette to about 5 items. `CommandEmpty`
+  renders with `shouldFilter={false}`.
+- Many components that look self-fetching have injection seams.
+  `ShellScriptEditor` takes `load` and `save`. `FileBrowser` takes a
+  `FileBrowserApi`. `TuiScreen` takes a `controller`. `PathAutocomplete` is
+  controlled. Read the props type first. Two seams are missing. They are
+  requests to the developer, not changes of the design: `UpdateBanner` needs an
+  exported context or a snapshot prop, and `IterationAuditLog` needs an
+  optional `events` prop.
+- A component that takes its color from data needs that data, or the story
+  shows the wrong color. `.agent-header` reads `--agent-hue`, and without it
+  the strip is pink.
+- `Button variant="destructive"` is soft (`bg-destructive/10
+  text-destructive`) on purpose.
+- Drive a state that has no prop through the DOM. `.click()` opens Radix
+  Dialog, AlertDialog, Sheet and Collapsible. Radix `Select` needs a
+  `pointerdown` PointerEvent. Inputs take the native value setter and a
+  bubbling `input` event.
+- Three components cannot have a meaningful static story. `UpdateBanner` renders
+  only after a Tauri update snapshot. `CustomerQuestionNotifications` is
+  headless, and it never goes into a story because it opens a tasks websocket.
+  `IterationAuditLog` shows only "No events." without a daemon.
+- A page story without a daemon shows the genuine empty or error state. That
+  is real content, not a placeholder.
+- `Separator`, `SheetFooter`, `AlertDialogMedia`, `DropdownMenuLabel`,
+  `DropdownMenuSeparator` and `AlertDialogContent size="sm"` are not used in
+  the app. Their stories are plausible compositions. Re-ground them when real
+  usage appears.
+- Typing into a field that your own click revealed needs two timer ticks
+  (about 120 ms for the click, 260 ms for the typing).
+- A host without an emoji font shows emoji in component source (the
+  `ProxyCallRow` markers) as empty boxes in a `story:shot` screenshot. This is
+  a screenshot artifact, not a bug of the component.
+- Open product findings, not changed by this work: `FileBrowser` uses `prose`
+  classes without `@tailwindcss/typography`, and the `--agent-hue` fallback of
+  `.agent-header` is pink, not neutral.
+
 ## WebView storage
 
 `ui/src/lib/storage.ts` owns all access to `localStorage` and `sessionStorage`
@@ -1225,7 +1614,7 @@ its area, name, version, parser, and fallback value. Other modules call
 test `ui/src/test/webStoragePolicy.test.ts` fails when production code under
 `ui/src` or `ui/store` uses `localStorage`, `sessionStorage`, or
 `window.dispatchEvent` directly. It scans the sources because the lint policy
-allows no per-file oxlint overrides. Tests and fixtures still seed raw values,
+has no rule for it. Tests and fixtures still seed raw values,
 so they detect a change of a stored format.
 
 Storage access is best effort. A missing value, a value the parser rejects,
@@ -2027,7 +2416,9 @@ key and title. The drawer uses
   block of the workflow panel;
 - for an open question, **Send answer** and **Reply Ok to the question**. Both
   post a customer comment, which resolves the wait. **Reply Ok to the
-  question** shows only while the message box is empty;
+  question** shows only while the message box is empty. **Dismiss question**
+  calls `POST /api/tasks/{key}/waits/dismiss` (`tasks.waits.dismiss`): it
+  closes the question without a comment;
 - for a paused task, the pause reason with **Continue**, **Release holder**
   (pool status only), and **Cancel task**.
 

@@ -991,7 +991,7 @@ from the upstream stays in `upstream_status`.
 | --- | --- |
 | `ok` | The upstream answered below 400 and the response arrived complete. |
 | `auth_error` | The request had no valid attribution token or upstream credential. |
-| `budget_block` | A cost budget refused the request before it reached the upstream. |
+| `budget_block` | A cost budget or a task budget refused the request before it reached the upstream. |
 | `quota_probe` | The upstream answered 429 to the startup quota probe of Claude Code (`max_tokens` 1, one user message `quota`). This is not a failure. |
 | `rate_limited` | The upstream answered 429 to any other request, for example at a usage limit. |
 | `client_closed` | The client went away before the exchange finished. The daemon stops the session after `loop.sh done`, so an open request at that time gets this status. |
@@ -1000,6 +1000,24 @@ from the upstream stays in `upstream_status`.
 While the newest request of a running iteration is `rate_limited`, the agent
 status endpoint returns `active_iteration.rate_limited_since` with the time of
 that request. The next accepted request clears it.
+
+## Task budgets
+
+A [task budget](/docs/tasks#task-budget) limits the AI spending of a task and
+its subtree. The proxy checks it after the agent and group budgets, on every
+request with a `task_id`. The check reads the database on each request. It
+walks from the task of the request up to its root over `tasks.parent_id`. For
+each task with `budget_usd > 0`, it sums `ai_requests.cost_usd` of the subtree
+and of the old keys in `task_key_aliases`. The index
+`idx_ai_requests_task_cost` (migration `0079`) serves this sum.
+
+If one subtree spent its limit or more, the proxy answers 429 with
+`budget exceeded: task KEY`, in the Connect format for Cursor, and records
+`budget_block`. The audit event `budget_block` has the scope `task:KEY`. Then
+the proxy tells the daemon, which pauses or blocks the task off the request
+path, once at a time for each key. If that reaction fails, the daemon logs it,
+and the next refusal tries again. If the check itself fails, the request goes
+through and the proxy logs a warning.
 
 ## Transcript after iteration close
 
@@ -1262,7 +1280,10 @@ The loop is driven three ways, all requiring the agent to be **enabled**:
   iteration now (only while the agent's inbox holds open letters).
 
 A message iteration can end with an error (`harness_error`, or a launch that
-failed). Open letters then stay open. If the agent still has open letters and
+failed). Open letters then stay open, except the Goal letter of a
+`harness_error` iteration (see
+[Redelivery after a failed iteration](#redelivery-after-a-failed-iteration)).
+If the agent still has open letters and
 `on_error` is not `stop`, the loop starts a new message iteration after a
 delay. The first delay is 30 seconds. Each further error doubles the delay, up
 to 10 minutes. An iteration that does not fail resets the delay to 30 seconds.
@@ -1345,6 +1366,71 @@ valid sticky key; only disabling Goal clears it. The end of an iteration
 closes the agent's open Goal and task notices about its Goal task, and stale
 task notices start no iteration; see
 [Task notifications](/docs/architecture/messaging#task-notifications).
+After a `harness_error` iteration, the end closes only the Goal letters. The
+`task.assigned` and `task.answered` notices stay open for the next iteration.
+
+#### Redelivery after a failed iteration
+
+A failed iteration is an iteration that ended without `loop.sh done`, with the
+status `harness_error`, `timeout` or `no_i_am_done`. If the newest iteration of
+the agent failed, the reconciler sends the Goal again after a pause. It does
+not wait for a new letter.
+
+The reconciler counts `n`, the failed iterations of the agent in a row. It
+reads the count from the `iterations` table, newest first, up to the last `done`
+iteration. The count therefore survives a daemon restart. A `done` iteration
+resets the count. A `killed` or `failed` iteration does not change the count
+and does not reset it. The pause starts at the end of the newest failed
+iteration:
+
+```text
+pause = max(c, min(c × 2^(n−1), 600 s))
+```
+
+In this formula, `c` is the `goal_delivery_cooldown_s` of the agent. The first
+pause is `c`. Each further failure in a row doubles the pause, up to 10 minutes.
+If `c` is more than 10 minutes, the pause is `c`: the bound never makes the
+pause shorter than the configured cooldown. For `c` = 60 seconds, the pauses
+are 60, 120, 240, 480, 600 and 600 seconds.
+
+Before the pause ends, the reconciler sends no Goal letter and arms one timer
+in memory for the due time. The timer starts a full reconciliation pass. After
+a restart, the startup pass reads the due time from the database. If the
+timer does not fire, the one-minute pass sends the letter up to one minute late.
+When the pause ends, the reconciler sends one `task.goal` letter with the
+reason `retry`. The usual delivery checks still apply: an open Goal letter
+blocks it, and so does the cooldown since the last delivery. Each failed
+iteration gets at most one such letter.
+
+For each letter, the reconciler writes the `goal_redelivered` event to the
+audit log of the agent, with the source `system` and the ID of the failed
+iteration. The event data has these fields:
+
+- `task_key`: the key of the Goal task.
+- `failures`: the count `n`.
+- `pause_s`: the pause in seconds.
+- `last_status`: the status of the failed iteration.
+
+These rules apply in special cases:
+
+- If the newest iteration is still running, the reconciler sends nothing. The
+  end of that iteration starts the next decision.
+- If the agent is disabled, it gets no Goal, so it gets no letter and no event.
+- If a stop policy (`on_error=stop` or `on_timeout=stop`) halted the loop, the
+  reconciler sends nothing. After Start clears the halt, the next pass sends
+  the Goal with the pause of the current count.
+- If the newest iteration is `killed` (an operator stop) or `failed`, the usual
+  Goal delivery applies, with no pause and no event.
+
+The engine retry for open letters (30 seconds, doubled up to 10 minutes) still
+applies after a `harness_error` iteration when other letters stay open. The
+Goal letter of that iteration is closed, so if it was the only open letter,
+the engine does not retry and only the reconciler wakes the agent. If other
+letters stay open, the engine retry can start the next iteration before the
+pause ends. A Goal letter sent while the engine retry is armed joins that
+retry and starts no second iteration. When the pause ends, the reconciler
+decides again from the newest iteration, so one failure gives one new
+iteration. The engine retry stays in memory and writes no event.
 
 Every non-bare agent receives daemon-owned Goal guidance inside **Task Processing
 Order**, regardless of image plugins or runtime entries. The guidance has two
@@ -1376,7 +1462,9 @@ an iteration (normal finish, runner error, a manual failure with the tmux sessio
 alive, and the adoption and stale-kill recovery paths) calls
 `Manager.iterationCompleted`, which first hands the daemon the agent, the
 iteration, the Goal task key the iteration was prepared with, and its start and
-end times, and only then wakes the Goal reconciler. The daemon counts the
+end times, and only then wakes the Goal reconciler. A `harness_error` iteration
+is reported with a harness-error mark: the daemon closes its Goal letters and
+does not count it as idle. For other iterations, the daemon counts the
 iteration as idle when the agent held the task's pool status when the iteration
 began and made no transition request during it, and pauses the task at the
 limit; see [Pauses](/docs/task-workflows#pauses).
@@ -1876,7 +1964,7 @@ leaves it empty and records a `close_note`.
 | `user:*` | the customer replies or archives it | the customer archives it; opening it or `tariboy mail read` only marks it read |
 | `plugin:*` | the plugin's `/deliver` accepts it (`delivered`) | the same |
 | `system:*`, `queue:*` | at once: stored closed | at once |
-| any, `task.question` | the question is answered on the task (`task-comment:<id>`), or a workflow outcome resolves it (`task-outcome:<status>`) | — |
+| any, `task.question` | the question is answered on the task (`task-comment:<id>`), a workflow outcome resolves it (`task-outcome:<status>`), or the customer dismisses it (`task-wait-dismissed`) | — |
 
 An operator can archive any letter without a reply (`tariboy mail close`,
 with an optional note). The agent tool has no archive: an agent answers.
@@ -2027,7 +2115,10 @@ letters with `close_note = task-comment:<id>`, for an agent recipient and the
 customer alike. The asker is matched by `data.from`, so a question the outbox
 sent as `system:tasks` closes too. A notification whose recipient no longer
 exists is marked failed in the outbox with `last_error` and is not retried. A workflow outcome that resolves the customer's open wait
-closes its question letters with `task-outcome:<status>`.
+closes its question letters with `task-outcome:<status>`. When the customer
+dismisses a question without an answer (`tasks.waits.dismiss`), its letters
+close with `task-wait-dismissed`, and each asker gets a `task.answered`
+letter that says no answer is needed.
 
 A `task.question` goes only to a principal that exists: a registered agent, or
 the customer login. A mention ends at the last letter or digit of the name, so
@@ -2248,14 +2339,30 @@ the request. `--since` is an inclusive bound and `--until` is an exclusive
 bound.
 
 The report has `total`, `agents[]`, `images[]` and `workflows[]`. Each slice
-has two blocks:
+has three blocks:
 
 - `usage`: the iterations, tokens and cost of the AI requests with `ts` in the
   period. Each iteration goes to the exact agent, image version and workflow
   version of that iteration.
+- `usage_without_task`: the part of `usage` whose requests have no task.
+  A request without a task has a `task_id` that is `NULL` or empty. Such a
+  request comes from an iteration without a selected Goal, or from an
+  iteration before it ran `scripts/goal.sh set`. These requests go to the
+  workflow slice `none`. The filters limit this block the same way as `usage`.
+  A period without such requests gives zeros, not `null`.
 - `tasks`: the aggregates of the tasks with `status = done` and
   `completed_at` in the period. The iterations, tokens and cost in this
   block are for the whole life of each task, not only for the period.
+
+In `usage_without_task`, the tokens and `cost_usd` are an exact part of
+`usage`, and `cost_usd` is never more than `usage.cost_usd`. `iterations`
+counts the iterations with at least one request without a task. An
+iteration that selected its Goal after its first requests counts in both
+`usage.iterations` and `usage_without_task.iterations`. So you cannot
+subtract `usage_without_task.iterations` from `usage.iterations` to get the
+iterations with a task. The `tasks` block does not include requests without a
+task. `tariboy metrics server` shows `usage_without_task.cost_usd` in the
+column `NO_TASK_COST_USD`, after `COST_USD`.
 
 | `tasks` field | Unit | Definition |
 | --- | --- | --- |
@@ -3668,23 +3775,46 @@ active host while a Library page is open. The image links of an agent's
 
 ## Home
 
+Home is the first screen of a workspace that has agents. It shows what needs
+the operator now and whether the agents are in order. The user is the operator
+who runs AI agents on one or more hosts. The task is to open the application,
+find the task or the letter that waits for an answer, see which agents run now
+and how the day goes, then go to the right place. Success: the operator
+understands in 5 seconds where an action is needed. At 1280 px all four
+sections (Needs you, Running now, Today, Recent) are visible on the first
+screen, and Needs you shows the most urgent items first, not every item. The
+goal is also recorded in `ui/src/mockups/home/Home.stories.tsx`.
+
 `/` is Home when the workspace has at least one agent
 (`ui/src/pages/home/HomePage.tsx`, loaded on first open). It has a **New
 agent** button and four sections:
 
 - **Needs you (N)**: the tasks that need you on every workspace host, newest
-  first, then your open letters. A question letter about a listed task is not
-  shown again. A task row opens the task drawer on its host, and a letter row
-  opens `/inbox?letter=<id>`. The chevron button **Answer in place** before a
-  task row expands the row into its
+  first, then your open letters. Home shows the 7 most urgent rows, with
+  **Show all (N)** under them. The link opens Inbox when every row is a letter
+  and Tasks otherwise. Letters from one sender about one task are one row of
+  the newest letter, and its meta starts with `N letters`. The inbox read
+  returns at most 100 letters, so when a host returned that many, N is a lower
+  bound and reads `100+`. A question letter about a listed task is not shown
+  again. The prefix `Answer on KEY:` or `Question on KEY:` of a letter subject
+  moves to the meta line, so the subject starts the title. The meta of a task
+  says `waiting for you` (or `paused`), and the age reads `12 min ago` or
+  `2 h ago` for the last 24 hours and a date (`Nov 4`) before that. The rows
+  are formatted in `ui/src/pages/home/needsYouModel.ts`. A task row opens the
+  task drawer on its host, and a letter row opens `/inbox?letter=<id>`. The
+  chevron button **Answer in place** before a task row expands the row into its
   [Needs you card](#needs-you-card), so you can answer without the drawer. With nothing to show it says **Nothing needs
   you.** When no host could be read, it shows the error and **Retry**.
 - **Running now (N)**: the agents in state `running`, with the time since
-  `current_iteration_started_at`. Each row opens the agent's Terminal.
+  `current_iteration_started_at`. Each row opens the agent's Terminal. Home
+  shows 8 rows. With more, **Show all (N)** shows the rest in place and
+  **Show less** folds them again.
 - **Today**: the Activity totals of the page host for the last 24 hours, with
-  **History**, which opens the Activity table at `/activity`.
+  **History**, which opens the Activity table at `/activity`. The number of a
+  tile sits at the bottom of the tile, so a label that wraps does not move it.
 - **Recent**: eight agents, newest `last_iteration_at` first; agents that never
-  ran follow in sidebar order.
+  ran follow in sidebar order. The meta is the time of the last iteration
+  (`2 h ago`), or `not run yet`.
 
 ## First run
 
@@ -3938,6 +4068,13 @@ that is not on the host any more has no link. The Images and Workflows tables
 group the versions of one name, newest version first. **Compare versions** and
 the `⇄` button of a version row open `/metrics/compare`. From `⇄`, B is the
 version of the row and A is the nearest older version.
+
+The **AI usage in this period** cards include **Without a task**: the cost of
+the AI requests without a task (`usage_without_task.cost_usd`). Its second
+line gives the part of **Cost**, for example `15% of cost`. If **Cost** is 0,
+the card has no second line. The Agents, Images, and Workflows tables have the
+column **Cost without task** after **Cost in period**. The comparison page has
+the row **Cost without task** after **Cost in period**.
 
 `/metrics/compare` shows the two versions side by side with the difference
 B − A, the percentage of A, and the word `better`, `worse`, or `no change`.
@@ -4353,11 +4490,23 @@ generates it from the committed snapshot
 for the workflow after an API change.
 
 Each schema is a top-level type with the Go type's name, such as `AgentRow`
-or `TaskDetail`. A domain module re-exports the types that its callers need,
-for example `export type { AgentRow, AgentView } from "../api-types.generated"`,
-and components import them from `@/lib/api`. `Comment` and `Event` would
-shadow DOM globals, so `tasks.ts` re-exports them as `TaskComment` and
-`TaskEvent`. Where the spec has a plain
+or `TaskDetail`. The directory `ui/src/types/` holds the types. It has one
+file for each domain, such as `agents.ts` and `tasks.ts`. A domain file
+re-exports the types of that domain from the generated file and holds the
+hand-written types listed below. `ui/src/types/index.ts` re-exports every
+domain file with `export type * from "./<domain>"`.
+
+Components, stories, fixtures and new code import types from `@/types`, or
+from `@/types/<domain>`. A file in `ui/src/types/` has types only and no
+runtime code, so a story can import a response type without loading the API
+client. `ui/src/test/typesOnly.test.ts` fails when a file there compiles to
+JavaScript. A domain module in `ui/src/lib/api/` re-exports the types of its
+domain from `@/types/<domain>`, so older imports from `@/lib/api` still work.
+The API client types (`ApiError`, `ApiClient`, `ApiTarget`, `Transport`) and
+the narrowing functions stay in `ui/src/lib/api/`.
+
+`Comment` and `Event` would shadow DOM globals, so `types/tasks.ts`
+re-exports them as `TaskComment` and `TaskEvent`. Where the spec has a plain
 string and the UI needs a union, the module narrows it at one place, such as
 `taskPriority(task)`.
 
@@ -4504,7 +4653,8 @@ to it. When you add a text size or a radius to `@theme`, add it to `cn()` too.
 `ui/src` or `ui/store` uses a class of the form `utility-[Npx]`. Composite
 values, such as `grid-cols-[76px_minmax(0,1fr)]`, are allowed. The shadcn
 primitives under `ui/src/components/ui/` are not checked, so they stay the same
-as upstream. An inline `style` is only for a value that the code calculates at
+as upstream. Story files are not checked: a story sizes its demo frame in
+pixels. An inline `style` is only for a value that the code calculates at
 run time, such as a column width or a CSS variable.
 
 Text fields use the shared controls: `Input`, `Textarea` and `CommandInput`
@@ -4523,6 +4673,352 @@ pseudo-elements, a media query for one widget, or a rule that must override
 another component. `ui/src/pages/tasks/tasks.css` lists the rules it keeps
 and gives the reason for each at its top.
 
+## Designer workflow in Storybook
+
+A designer sees and changes the UI in Storybook, not in the app. The stories
+live next to the components (`ui/src/components/**/*.stories.tsx`,
+`ui/src/pages/**/*.stories.tsx`) and in the mockups
+(`ui/src/mockups/**/*.stories.tsx`). Shared values are in `ui/src/fixtures/`
+(`agents.ts`, `tasks.ts`, `images.ts`, `operations.ts`, `metrics.ts`,
+`activity.ts`, and the fixed clock `time.ts`). The decorators are in `ui/src/storybook/decorators.tsx`.
+`npx tsc -b` compiles the stories with the app, so a change of the props of a
+view component breaks the stories that use it until they compile.
+[Development](/docs/development#storybook) tells how to run Storybook and why
+it never reaches a daemon.
+
+### Style rules
+
+- Character. Tariboy UI is shadcn/ui on Tailwind v4, with achromatic metal
+  neutrals (hue 250, chroma at most .008), one blue accent, and Geist Variable.
+  A design reads as a control surface for dense operator tooling (agent
+  consoles, task trees, image and host tables), not as a marketing page.
+- Colors are always semantic tokens, never hex and never a Tailwind color
+  scale. So light and dark both work. `viewLintPolicy.test.ts` enforces it.
+  - Surfaces: `bg-background`, `bg-card`, `bg-popover`, `bg-muted`,
+    `bg-accent`, `bg-secondary`.
+  - Text: `text-foreground`, `text-muted-foreground`, `text-card-foreground`,
+    `text-primary-foreground`.
+  - Emphasis: `bg-primary` with `text-primary-foreground`.
+  - Danger: `text-destructive`, `bg-destructive/10`.
+  - Lines: `border border-border`, `border-t`, `border-b`, `border-input`.
+  - Focus: `ring-ring/50`, `focus-visible:border-ring`.
+- CSS custom properties are for inline styles and for what utilities do not
+  cover: `--background`, `--foreground`, `--card`, `--popover`, `--primary`,
+  `--secondary`, `--muted`, `--accent`, `--destructive`, `--border`,
+  `--input`, `--ring`, `--radius`, each with a `-foreground` partner where it
+  carries text, plus `--sidebar*` and `--chart-1` to `--chart-5`.
+- `--background` is a window-wide gradient. `background-color` and
+  `color-mix()` drop a gradient value. In an inline `background-color` and in
+  `color-mix(…, var(--background-base))`, use `--background-base`.
+  `bg-background` resolves to it. Only the window itself paints
+  `--background`.
+- Status is a system, not a color choice. `--status-running` is in progress.
+  `--status-failed` is failed or out of budget. `--primary` is waiting on the
+  customer. `--status-queued`, `--status-done` and `--status-stopped` are
+  quiet text. A fill is only for what is alive and what needs a person:
+  `text-status-running` with `bg-status-running/13`, `text-status-failed` with
+  `bg-status-failed/12`, `text-primary` with `bg-primary/12`. Open, done and
+  cancelled get `text-muted-foreground` and no fill.
+- Elevation has two levels, never three. `--raise` is for a selected row and
+  the active segment of a segmented control. `--lift` is for the content
+  island and menus. The island is `bg-card`, `rounded-[var(--panel-radius)]`
+  and `shadow-[var(--lift)]`, and it sits on a `--background` chrome without
+  borders.
+- Typography. Body is `text-sm`. Secondary meta is `text-xs`. Headings are
+  `text-base` or `text-lg` with `font-medium` or `font-semibold`. Task keys,
+  image refs, digests, paths and terminal output are `font-mono`. Identifiers,
+  durations and timestamps are `font-mono` with `tabular-nums`, so they line
+  up down a column.
+- Controls, spacing and radius. Buttons are `h-8` (`h-7` for sm, `h-6` for
+  xs). Inputs are `h-8`. Spacing is `gap-1`, `gap-2`, `gap-3`, `p-3` and
+  `p-4`. Radius comes from `--radius: 0.625rem` through `rounded-md`,
+  `rounded-lg` and `rounded-xl`. Console surfaces are denser: rows 30px,
+  buttons 24, 26 and 28px, pills 17, 19 and 20px, radii 5, 6, 7, 8, 9, 12 and
+  14px.
+- Icons are `lucide-react`: 16px at the default control size, 14px at sm.
+  Never use emoji.
+- Dark mode is the class `.dark` on an ancestor (`<html>` in the app).
+  `ThemeProvider` sets it, and `ThemeToggle` is the titlebar control.
+  Storybook has a theme switch in its toolbar.
+- Content is realistic product content: agents `builder`, `reviewer`,
+  `packager`, `docs-bot`; images `worker:v1`, `bare:latest`; hosts
+  `This daemon (local)` and `build-01`; task keys such as `TB-142`.
+- Where the truth is. The tokens are in `ui/src/index.css`. The API of a
+  component is its props type in its source file.
+- Storybook compiles `src/index.css` with Tailwind over the same `src`
+  sources, so every utility works in a story. An inline style with
+  `var(--token)` is only for what utilities do not cover.
+
+An idiomatic example:
+
+```jsx
+<Card size="sm">
+  <CardHeader>
+    <CardTitle>worker:v2</CardTitle>
+    <CardDescription>Built 2026-09-11 · sha256:9ac71e3f52</CardDescription>
+    <CardAction>
+      <Badge variant="secondary">Pending</Badge>
+    </CardAction>
+  </CardHeader>
+  <CardContent>
+    <div className="flex items-center justify-between gap-2 text-sm">
+      <span className="font-mono text-muted-foreground">builder</span>
+      <div className="flex gap-2">
+        <Button size="sm" variant="outline">
+          Export
+        </Button>
+        <Button size="sm" variant="destructive">
+          Remove
+        </Button>
+      </div>
+    </div>
+  </CardContent>
+</Card>
+```
+
+### Work rules
+
+- Work only in the designer paths: the view files, the stories, the mockups
+  under `ui/src/mockups/`, the fixtures, `ui/src/index.css` and the primitives
+  in `ui/src/components/ui/`.
+- Never import `@/lib/api` or `@tanstack/react-query`, and never call `fetch`,
+  in view files, stories, mockups and fixtures. `npm run lint` enforces this.
+  The other designer paths have no data access to forbid.
+- Take types from `@/types`. A view takes the narrowest type it needs:
+  `Pick<…>` or its own `XProps`.
+- A component without a view file: copy its markup into a local view part
+  `ui/src/mockups/<page>/<Name>.view.tsx` (or
+  `ui/src/mockups/<component>/<Name>.view.tsx`), change it there, show it in
+  the mockup story, and ask in `handoff.md` to split the component. Do not edit
+  the container.
+- A change of a token or a primitive variant lists every affected story in
+  `## Tokens and styles` of the handoff. Check those stories in both themes.
+- See a story. Run
+  `cd ui && npm run story:shot -- <story-id> <light|dark> <width>`. The command
+  builds `storybook-static` when there is no build, when a file the build
+  reads is newer than it, or with `--rebuild` (it prints the reason on
+  stderr), serves it on a loopback port, and writes a PNG of
+  `iframe.html?id=<story-id>&viewMode=story&globals=theme:<theme>`. It prints
+  the path of the PNG, `ui/.story-shots/<story-id>.<theme>.<width>.png`. Check
+  each changed story in `light` and `dark`, at the smallest supported width
+  (360 px) and at 1024 px. The story id is the title and the story name in
+  kebab case, joined by `--`: `mockups-home--width-360` (Storybook puts a hyphen before the digits of the
+  export name `Width360`). All ids are in
+  `storybook-static/index.json`.
+- Build stories from the fixture factories:
+  `agentRow({ name: "builder", state: "running" })`. Take dates from `NOW` and
+  `minutesAgo()` in `ui/src/fixtures/time.ts`. `NOW` is a string, so a
+  component with a `now` prop of type `Date` gets `new Date(NOW)`. A mockup
+  story uses `parameters: { layout: "fullscreen" }` and one story for each
+  supported width (`Width360`, `Width390`, `Width820`, `Width1024`,
+  `Width1180`) with `withWidth(width)`.
+- Put `handoff.md` next to its mockup. A page change has
+  `ui/src/mockups/<page>/handoff.md` next to `<Page>.stories.tsx`
+  (`title: "Mockups/<Page>"`). A change of one component without a page mockup
+  has `ui/src/mockups/<component>/handoff.md` next to
+  `<Component>.stories.tsx` (`title: "Mockups/<Component>"`).
+- Hand off a change:
+  1. Work in a branch `designer/<task>-<topic>` of your own worktree.
+  2. Before you hand off, run `make designer-check`. After
+     `scripts/npm-ci-locked.sh ui` (about 30 seconds in a new worktree), it
+     takes the host check slot and runs six steps: the type check, oxlint on
+     the files changed against `origin/main` (uncommitted files included),
+     `ui-fmt-check` (oxfmt), one Vitest run of `viewLintPolicy.test.ts`,
+     `storybookSafety.test.ts`, `storyNetwork.test.tsx`,
+     `arbitraryPxPolicy.test.ts` and `textInputPolicy.test.ts`, Knip
+     (`ui-dead-code`) and `build-storybook`. It fails if one step failed. It
+     does not run `ui-api-types`, `ui-lint`, the rest of `ui-test`,
+     `ui-branding`, `ui-bundle-budget` and `docs`: the developer's pull request
+     runs them.
+  3. Run `git rebase origin/main` and `git push origin <branch>`. Report the
+     branch on your own TARIDESIGN task in a comment that mentions the PM. The
+     developer opens the pull request.
+  4. When `make frontend-check` fails in the developer's pull request on a
+     designer file, the developer fixes a mechanical error (the format) in that
+     pull request and says so on the developer's own task. For any other
+     error, the developer reports it to the PM on the developer's own task, and
+     the PM orders the fix from the designer.
+- Propose a new prop in `handoff.md`. Do not add it to a container.
+
+### Roles
+
+Each path has one owner. A designer change touches only the designer column.
+A developer change that breaks a story fixes the story in the same commit.
+
+| Paths | Designer | Developer |
+| --- | --- | --- |
+| `ui/src/index.css`, `ui/src/components/ui/*.tsx` | Owns colors, radii, density, shadows and the `cva()` variants | Changes only accessibility and behavior, after agreement with the designer |
+| `ui/src/**/*.view.tsx` | Owns markup and styles. Proposes a new prop in `handoff.md` | Owns the props type. Connects the view to data in a container |
+| Other `ui/src/components/**/*.tsx` and `ui/src/pages/**/*.tsx` | Does not change them. Copies the markup into a local view part of a mockup | Owns data hooks, `@/lib/api`, react-query, router hooks, state and handlers |
+| `ui/src/mockups/<name>/` | Builds the mockup stories and the local view parts | Moves the change into the real component or page |
+| `ui/src/**/*.stories.tsx` | Writes and changes them | Changes a story only when a props change breaks it, and tells the designer on the task of the change |
+| `ui/src/fixtures/<domain>.ts` | Writes and changes them | Keeps them typed against `@/types` |
+| `ui/src/mockups/<name>/handoff.md` | Writes it | Reads it, answers the open questions, and implements it |
+| `ui/src/types/` | Reads it | Owns it |
+| `ui/.storybook/`, `ui/src/storybook/`, `ui/vite.storybook.config.ts`, `ui/scripts/story-shot.mjs` | Proposes a new decorator | Owns the configuration and the decorators |
+
+A view file is a file named `*.view.tsx`. A container is every other file
+under `ui/src/components/` and `ui/src/pages/`. `viewLintPolicy.test.ts` and
+`npm run lint` keep data access out of view files.
+
+The developer follows these rules:
+
+- Own the props type of every view file. A change of a props type changes the
+  stories in the same commit, and `npx tsc -b` fails until they compile.
+- Keep data hooks, `@/lib/api`, react-query, router hooks, state and handlers
+  in containers and pages. A view takes props and callbacks and returns JSX.
+- Import types from `@/types` in new code.
+- Move a component to the view layer one component at a time. Split data and
+  markup, rename the markup file to `*.view.tsx`, and add or move its story.
+- Change the primitives in `ui/src/components/ui/` only for accessibility and
+  behavior, and tell the designer.
+- To implement a handoff, open the pull request from the designer's branch.
+  Write the answer to each open question under it in `handoff.md`, add the
+  first line `Implemented in #<PR>`, and keep the final type in the view file.
+  If the handoff asks to split a component, split it and move the local view
+  part of the mockup into the new view file.
+- When a props change breaks a story, fix the story in the same commit and
+  tell the designer on the task of the change.
+- Keep the Storybook setup and its checks (`ui-storybook`,
+  `make designer-check`) green.
+
+After the implementation, the mockup stays while it compiles. The developer
+deletes the mockup directory, `handoff.md` included, when the story of the real
+page or component shows the same states. Git history keeps the handoff.
+
+### Fixtures
+
+- A fixture file `ui/src/fixtures/<domain>.ts` is typed with `@/types` and is
+  a complete response value, as the rule in [API types](#api-types) says.
+- Each file exports a factory `<entity>(over: Partial<T> = {}): T` with
+  complete defaults, such as `agentRow`, `taskItem`, `imageSummary`,
+  `operation` and `metricsReport`. A story writes only the fields that matter.
+- Each domain also exports a set of edge states: `empty`, `one`, `many` (50
+  items) and `longText` (long names and texts, for truncation and wrapping),
+  such as `agentRows.many` and `taskItems.longText`. The exception is
+  `activity.ts`: it exports one factory of totals, `taskActivityTotals`, not a
+  list, so it has no set.
+- A fixture of a shape that only the UI uses takes the type of the prop of its
+  view, as `agents.ts` does with `HomeAgentLink`.
+- All dates come from `NOW` in `ui/src/fixtures/time.ts`, or from `minutesAgo()`
+  and `hoursAgo()`, which count back from it. A story passes `NOW` as `now` to
+  a component that takes one, so "5 min ago" is the same on each run and in
+  each screenshot.
+- A value that only one story uses stays in that story file.
+- `ui/src/test/fixtures/apiFixtures.ts` re-exports the factories that stories
+  use, so tests keep their imports. A fixture never imports that file, because
+  it is test code.
+
+### Handoff format
+
+A `handoff.md` has these sections, in this order. It is in the language of the
+designer's request, and the interface texts in it are in English.
+
+1. `# Handoff: <page or component>`, then one line with the date, the key of
+   the design task and the story ids, such as `mockups-home--width-1024`.
+2. `## What changed`: each visible change with the story that shows it.
+3. `## New props`: a table with the columns Component, Prop, Type, Meaning and
+   Source of data. The type uses `@/types` names or a narrow type such as
+   `Pick<AgentRow, "name" | "state">`. The source names the API call or the
+   state, or says "unknown". The designer only proposes a prop. The developer
+   owns the final type.
+4. `## Changed and removed props`: the same table for a prop whose type or
+   meaning changes, and for a removed prop.
+5. `## States`: each state with its story id (empty, loading, error, long
+   text, many items).
+6. `## Behavior`: what happens on click, keyboard, hover and focus. Name a
+   change of behavior as a change.
+7. `## Texts`: every interface text that the stories do not show, such as API
+   errors, toasts, `aria-label` values and tooltips.
+8. `## Accessibility`: labels, focus order, focus return after a dialog
+   closes, how an error is announced, and the contrast of new token pairs.
+9. `## Layout at widths`: the layout at each supported width, at least at 360
+   px, each with the story or the `story:shot` width that shows it.
+10. `## Screenshots`: a table of the shots that show the change, with the
+    columns Story id, Theme and Width. The PNG files are not in git. The
+    developer repeats each shot with `npm run story:shot`.
+11. `## Tokens and styles`: new or changed tokens in `ui/src/index.css` and
+    changed `cva()` variants. List every affected story.
+12. `## Acceptance criteria`: numbered criteria that the developer and the
+    reviewer check one by one.
+13. `## Open questions`: questions for the developer.
+
+The reference mockup is `ui/src/mockups/home/Home.stories.tsx`.
+
+### Safety
+
+Storybook never reaches a daemon, so a story is safe to open.
+
+- Storybook reads `ui/vite.storybook.config.ts`, which has no `/api` proxy.
+- A story that needs a host registry sets `parameters.tariboy = { daemon: true }`.
+  The `withDaemon` decorator then uses one host on `http://storybook.invalid`,
+  a name that never resolves.
+- Never import `CustomerQuestionNotifications` in a story or a mockup. It
+  opens a tasks WebSocket. `storybookSafety.test.ts` fails on it.
+- `storyNetwork.test.tsx` fails when a story requests any URL outside
+  `storybook.invalid`.
+
+[Development](/docs/development#storybook) describes the four layers and the
+tests that pin them.
+
+### Component notes
+
+- `Tooltip` needs `TooltipProvider`. The global decorator gives it, so a story
+  does not add its own.
+- A component that reads `useParams()` needs a matched route. Set
+  `parameters: { tariboy: { route: { path, pattern } } }` on the story.
+  `MemoryRouter` is global, so other components need nothing.
+- `AgentNameContext` and `AgentStatusContext` come from their source modules.
+  A story that needs them wraps its content in the provider.
+- Radix `open` and `defaultOpen` render overlay content in the story.
+  `defaultOpen` works on Dialog, AlertDialog, Sheet, DropdownMenu and
+  Collapsible. `ContextMenu` has no `open`: open it with a real `contextmenu`
+  event from a mount effect.
+- Overlays need real content behind them, or the backdrop covers an empty
+  canvas.
+- Small components need a size. Input and Textarea need a labelled field
+  320 to 460px wide. Badge needs a flex row. A vertical `Separator` needs an
+  explicit height. `ScrollArea` needs a fixed height with content that
+  overflows.
+- `Switch` uses `defaultChecked`. `checked` without `onCheckedChange` makes
+  Radix warn.
+- `CommandList` is `max-h-64`: keep a palette to about 5 items. `CommandEmpty`
+  renders with `shouldFilter={false}`.
+- Many components that look self-fetching have injection seams.
+  `ShellScriptEditor` takes `load` and `save`. `FileBrowser` takes a
+  `FileBrowserApi`. `TuiScreen` takes a `controller`. `PathAutocomplete` is
+  controlled. Read the props type first. Two seams are missing. They are
+  requests to the developer, not changes of the design: `UpdateBanner` needs an
+  exported context or a snapshot prop, and `IterationAuditLog` needs an
+  optional `events` prop.
+- A component that takes its color from data needs that data, or the story
+  shows the wrong color. `.agent-header` reads `--agent-hue`, and without it
+  the strip is pink.
+- `Button variant="destructive"` is soft (`bg-destructive/10
+  text-destructive`) on purpose.
+- Drive a state that has no prop through the DOM. `.click()` opens Radix
+  Dialog, AlertDialog, Sheet and Collapsible. Radix `Select` needs a
+  `pointerdown` PointerEvent. Inputs take the native value setter and a
+  bubbling `input` event.
+- Three components cannot have a meaningful static story. `UpdateBanner` renders
+  only after a Tauri update snapshot. `CustomerQuestionNotifications` is
+  headless, and it never goes into a story because it opens a tasks websocket.
+  `IterationAuditLog` shows only "No events." without a daemon.
+- A page story without a daemon shows the genuine empty or error state. That
+  is real content, not a placeholder.
+- `Separator`, `SheetFooter`, `AlertDialogMedia`, `DropdownMenuLabel`,
+  `DropdownMenuSeparator` and `AlertDialogContent size="sm"` are not used in
+  the app. Their stories are plausible compositions. Re-ground them when real
+  usage appears.
+- Typing into a field that your own click revealed needs two timer ticks
+  (about 120 ms for the click, 260 ms for the typing).
+- A host without an emoji font shows emoji in component source (the
+  `ProxyCallRow` markers) as empty boxes in a `story:shot` screenshot. This is
+  a screenshot artifact, not a bug of the component.
+- Open product findings, not changed by this work: `FileBrowser` uses `prose`
+  classes without `@tailwindcss/typography`, and the `--agent-hue` fallback of
+  `.agent-header` is pink, not neutral.
+
 ## WebView storage
 
 `ui/src/lib/storage.ts` owns all access to `localStorage` and `sessionStorage`
@@ -4532,7 +5028,7 @@ its area, name, version, parser, and fallback value. Other modules call
 test `ui/src/test/webStoragePolicy.test.ts` fails when production code under
 `ui/src` or `ui/store` uses `localStorage`, `sessionStorage`, or
 `window.dispatchEvent` directly. It scans the sources because the lint policy
-allows no per-file oxlint overrides. Tests and fixtures still seed raw values,
+has no rule for it. Tests and fixtures still seed raw values,
 so they detect a change of a stored format.
 
 Storage access is best effort. A missing value, a value the parser rejects,
@@ -5334,7 +5830,9 @@ key and title. The drawer uses
   block of the workflow panel;
 - for an open question, **Send answer** and **Reply Ok to the question**. Both
   post a customer comment, which resolves the wait. **Reply Ok to the
-  question** shows only while the message box is empty;
+  question** shows only while the message box is empty. **Dismiss question**
+  calls `POST /api/tasks/{key}/waits/dismiss` (`tasks.waits.dismiss`): it
+  closes the question without a comment;
 - for a paused task, the pause reason with **Continue**, **Release holder**
   (pool status only), and **Cancel task**.
 
@@ -5869,7 +6367,7 @@ reference](/docs/reference/mail) for the complete contract.
 # Binaries & commands
 Source: https://alekzonder.github.io/tariboy/binaries
 
-Six real binaries are built by `make build`:
+`make build` builds eight real binaries:
 
 | Binary | Role |
 | --- | --- |
@@ -5877,6 +6375,7 @@ Six real binaries are built by `make build`:
 | `tariboy` | The [operator CLI](/docs/binaries/operator-cli) — human/CI client over the socket. |
 | `tariboy-tasks` | The Native Tasks client; installers also provide its `ttasks` alias. |
 | `tariboy-mail` | The [mail client](/docs/reference/mail); installers also provide its `tmail` alias. |
+| `tariboy-scripts` | The agent client of the [`scripts` plugin](/docs/plugins/built-in/scripts); installers also provide its `tscripts` alias. |
 | `tariboy-shim` | Runs [one harness iteration under a watchdog](/docs/architecture/shim). |
 | `tariboy-store` | A standalone [image registry](/docs/binaries/store) server. |
 | `tariboy-plugin-telegram` | The bundled Telegram mail and operator-surface plugin. |
@@ -5955,7 +6454,7 @@ must therefore include it.
 | `tmail send --to P …` / `tmail reply ID TEXT` | send a letter, answer one; `--instant` sends an [instant letter](/docs/reference/mail#instant-letters) |
 | `tmail instant [--format text\|json]` | for a harness hook: print the instant letters that wait for this iteration (`POST /tools/mail/instant`) |
 | `scripts/schedule.sh add`/`ls`/`cancel` | agent-owned scheduled wake-ups |
-| `scripts/scripts.sh run`/`schedule`/`rerun`/`ls`/`runs`/`logs`/`cancel`/`rm` | local asynchronous commands and run history |
+| `tscripts run`/`schedule`/`rerun`/`ls`/`runs`/`logs`/`cancel`/`rm` | local asynchronous commands and run history |
 | `tariboy assessment add --file PATH` / `ls [--history]` / `show ID` | record an [assessment](/docs/plugins/built-in/assessments) (needs `assessments`); read assessments (open to every agent). `ls` returns the latest assessment of each iteration and task; `--history` returns every assessment |
 | `GET /tools/group/info`, `status`, `observe/{member}`, `POST /tools/group/loop` | group coordination; group sends are `tmail send --to group:<g>` or `agent:<member>` |
 
@@ -5969,6 +6468,19 @@ unreachable socket fails closed; without the variable it uses the host Unix
 daemon socket as the customer actor. Images that enable `plugins: [{name:
 tasks}]` also get the bare `tasks` legacy compatibility shim. See [Native
 Tasks](/docs/tasks) for the command flow.
+
+`tariboy-scripts` is installed globally with the `tscripts` alias, and the
+daemon links it as runtime `bin/tscripts` in the same way as `ttasks` and
+`tmail`. It replaces `scripts.py` of the `scripts` skill and prints the same
+output, errors and exit codes. It works only in agent mode: without
+`TARIBOY_TOOLS_SOCKET` it exits `2`. The skill launcher `scripts/scripts.sh`
+stays a thin launcher, `exec tscripts "$@"`, like `tasks.sh` and `mail.sh`.
+`--json`, or `TARIBOY_TOOLS_JSON=1`, prints the result as compact JSON.
+`tscripts --version` prints the client build. Exit codes:
+
+- `0`: the command succeeded.
+- `1`: the daemon refused the request. The client prints the message of the daemon.
+- `2`: the command line is wrong, `TARIBOY_TOOLS_SOCKET` is not set, or the socket is not reachable.
 
 On a task that follows a queue's [workflow](/docs/task-workflows) the daemon
 assigns the work, and `ttasks done`, `ttasks update --status`, and
@@ -6011,7 +6523,7 @@ runs after the request is built but before it is sent, so nothing reaches the
 daemon. Older builds dropped an unread flag silently and exited `0`, which is how
 `ttasks update --priority` could look like it worked while changing nothing.
 
-`scripts/scripts.sh run` and `scripts/scripts.sh schedule` have a `--` separator: flags are parsed up to it, and
+`tscripts run` and `tscripts schedule` have a `--` separator: flags are parsed up to it, and
 everything after it is taken verbatim for the local command — that is why
 `-- curl --silent URL` hands `--silent` to `curl`. No other command has one, so
 elsewhere an argument that starts with `--` cannot be passed through: it is
@@ -6026,15 +6538,15 @@ scripts, so their exports, such as tokens, reach the command. Queue one run, or
 create a fixed-delay recurring definition:
 
 ```bash
-scripts/scripts.sh run health --description "Check service health" -- curl -fsS http://localhost:8080/health
-scripts/scripts.sh schedule poll --every 60 -- ./bin/poll-queue
-scripts/scripts.sh ls
-scripts/scripts.sh runs scr-agent-...
-scripts/scripts.sh logs srun-agent-...
-scripts/scripts.sh rerun scr-agent-...        # also resumes a stopped schedule
-scripts/scripts.sh cancel scr-agent-...       # definition, including its active run
-scripts/scripts.sh cancel srun-agent-...      # this run only
-scripts/scripts.sh rm scr-agent-...
+tscripts run health --description "Check service health" -- curl -fsS http://localhost:8080/health
+tscripts schedule poll --every 60 -- ./bin/poll-queue
+tscripts ls
+tscripts runs scr-agent-...
+tscripts logs srun-agent-...
+tscripts rerun scr-agent-...        # also resumes a stopped schedule
+tscripts cancel scr-agent-...       # definition, including its active run
+tscripts cancel srun-agent-...      # this run only
+tscripts rm scr-agent-...
 ```
 
 Each run's combined stdout and stderr is kept in its own agent scripts log. Exit
@@ -6460,9 +6972,10 @@ stable warning; neither the inherited nor resolved path nor shell startup
 output may be logged, audited, or included in support bundles.
 
 After resolving the account baseline, a packaged daemon prepends its shared
-runtime `bin` directory, which contains a `ttasks` symlink to the sibling
-`tariboy-tasks` payload. This makes the bundled client available to fresh
-Desktop agents without the optional CLI installation. The alias is refreshed
+runtime `bin` directory, which contains the `ttasks`, `tmail` and `tscripts`
+symlinks to the sibling `tariboy-tasks`, `tariboy-mail` and `tariboy-scripts`
+payloads. This makes the bundled clients available to fresh
+Desktop agents without the optional CLI installation. Each alias is refreshed
 atomically and retained across restart handoff.
 
 The final iteration environment preserves this precedence:
@@ -6537,13 +7050,13 @@ make full-check      # heavy, tens of minutes, includes check
 Run `make backend-check` for backend-only changes and `make frontend-check` for
 frontend- or documentation-only changes. Run `make check` for mixed changes or
 when ownership is unclear. The backend target runs `fmt-check`, `vet`,
-`staticcheck`, `gocyclo`, `test`, Go unit tests, `desktop-rust-check` and
+`staticcheck`, `gocyclo`, `gocognit`, `test`, Go unit tests, `desktop-rust-check` and
 smoke contracts. Its
 `test` and `tariboy-tasks-e2e` steps also check the HTTP API against the
 committed OpenAPI snapshot; see [Go control plane and plugins](#go-control-plane-and-plugins). The
 frontend target runs the UI format check, the generated API types check, UI
 typecheck, lint with the complexity and size thresholds, the unused-code check, unit tests,
-which fail when Vitest finishes fewer test files than it found, branding, the bundle budget, and the documentation checks. The documentation
+which fail when Vitest finishes fewer test files than it found, the Storybook build (`ui-storybook`), branding, the bundle budget, and the documentation checks. The documentation
 step restores the last build from a host cache when no input of the site
 changed; see [Documentation build cache](#documentation-build-cache). Before checking, `backend-check` runs `go mod download`
 for the module and for `tools.mod`. `frontend-check` uses
@@ -6712,13 +7225,14 @@ git clean -ndx
 ### Go control plane and plugins
 
 `make backend-check` covers this subsystem with `fmt-check`, `vet`,
-`staticcheck`, `gocyclo`, and `test`. To run one of them from the repository
-root while iterating:
+`staticcheck`, `gocyclo`, `gocognit`, and `test`. To run one of them from the
+repository root while iterating:
 
 ```bash
 make vet
 make staticcheck
 make gocyclo
+make gocognit
 make test
 make fmt-check
 ```
@@ -6727,7 +7241,7 @@ Those targets enumerate the module's packages and exclude `node_modules`; a Go
 fixture embedded in an npm dependency is not Tariboy source and must not extend
 the Go quality gate.
 
-The versions of `staticcheck` and `gocyclo` are pinned in `tools.mod` and
+The versions of `staticcheck`, `gocyclo` and `gocognit` are pinned in `tools.mod` and
 `tools.sum` at the repository root. This separate module file keeps the
 dependencies of the linters out of `go.mod`. The targets run each tool with
 `go tool -modfile=tools.mod NAME`, so you do not install anything into
@@ -6740,11 +7254,19 @@ depends on separate work, disable only that check in `staticcheck.conf` with a
 comment that names the task.
 
 `make gocyclo` fails when a non-test function has a cyclomatic complexity
-over `GOCYCLO_OVER` in the `Makefile`. The value is a ratchet: it is the
-current maximum, and a change that simplifies the most complex function lowers
-it. Do not raise it. The target for new code is 25. Test files are not
-measured. `make gocyclo-report` prints the 30 most complex functions and the
-average, and it never fails.
+over `GOCYCLO_OVER` in the `Makefile`, which is 25. Split a function that goes
+over the limit. Do not raise it. Test files are not measured.
+`make gocyclo-report` prints the 30 most complex functions and the average,
+and it never fails.
+
+`make gocognit` fails when a non-test function has a cognitive complexity
+over `GOCOGNIT_OVER` in the `Makefile`, which is 65. Cognitive complexity is
+a score that also counts how deep `if`, `for` and `switch` statements are
+nested. The limit is the current maximum. Do not raise it. Split a function
+that goes over the limit. When a change simplifies the most complex function,
+lower the limit in the same change. Test files, `node_modules` and hidden
+directories such as `.worktrees` are not measured. `make gocognit-report`
+prints the 30 most complex functions and the average, and it never fails.
 
 `make fmt` is not a check: it rewrites files. Only `fmt-check` is part of
 `backend-check`; run `make fmt` yourself when it reports drift.
@@ -6754,19 +7276,32 @@ writes nothing into `bin/`, and it is the first build step of `full-check`.
 Optional external plugins have their own build under `plugins/`. Canonical
 image sources, Agent Skills, and their static prompts are maintained in the
 separate `tariboy-store` repository rather than embedded in the binaries.
-`desktop-binaries` compiles the local and remote daemon payloads without
-building an agent image.
+`desktop-binaries` compiles only the binary set of the native Desktop package
+into `desktop/src-tauri/resources/bin/`: `darwin-arm64` on a Darwin arm64 host,
+`linux-x86_64` on a Linux x86_64 host. It does not build an agent image. SSH
+servers download their binaries from the release. `server-archives`
+cross-compiles one archive for each server platform into
+`dist/server-archives/<version>/`:
+`tariboy_<version>_linux-x86_64.tar.gz`,
+`tariboy_<version>_linux-aarch64.tar.gz` and
+`tariboy_<version>_darwin-arm64.tar.gz`. Each archive holds the seven
+binaries, `VERSION`, `SHA256SUMS` and `remote-install.sh` at its root. The
+release packager copies them into the release.
 `make install` installs the resulting commands under `$HOME/.local/bin`; it is
 not required for normal unit-test work.
 
-The Tasks mode E2E inside `backend-check` builds its five required binaries in
-temporary directories, so the check never regenerates workspace `bin/`.
+The Tasks mode E2E inside `backend-check` builds its seven required binaries in
+temporary directories, so the check never regenerates workspace `bin/`. It also
+tests `tscripts` on the isolated agent: `run`, `logs`, `schedule` with the
+quiet exit `111`, `rerun`, `cancel`, `rm`, the refusal of
+`schedule --quiet-exit`, and the runtime `bin/tscripts` link.
 
-`make server-install` builds all six real server binaries, stages and verifies
+`make server-install` builds all eight real server binaries, stages and verifies
 their checksums, publishes a versioned release under
 `$HOME/.local/lib/tariboy/<version>`, and transactionally switches the matching
-`$HOME/.local/bin` links. `ttasks` is an additional alias for
-`tariboy-tasks`. It does not start or restart the daemon.
+`$HOME/.local/bin` links. `ttasks`, `tmail` and `tscripts` are additional
+aliases for `tariboy-tasks`, `tariboy-mail` and `tariboy-scripts`. It does not
+start or restart the daemon.
 
 Native Tasks changes normally need focused tests under `internal/tasks`, the
 operator route/OpenAPI registry tests under `internal/commands`, and the agent
@@ -6914,7 +7449,7 @@ npm ci
 ```
 
 `make check` then covers `npm run fmt:check`, `npm run api-types:check`, `npx tsc -b --checkers 1`, `npm run lint`,
-`npm run knip`, `npm test`, `npm run branding:check`, and `npm run bundle:budget`. The type check uses one checker
+`npm run knip`, `npm test`, `npm run build-storybook`, `npm run branding:check`, and `npm run bundle:budget`. The type check uses one checker
 thread, because the default parallel checkers use about 0.4 GB more memory on a shared host. `make full-check` adds `npm run test:tasks-browser`
 and `npm run test:images-browser`, and builds the desktop bundle through its
 desktop step. Run any of them directly under `ui/` while iterating:
@@ -6960,7 +7495,130 @@ groups that the shell imports (see
 [Code splitting](/docs/architecture/web-ui#code-splitting)). To fix a failure
 of all JavaScript, make the lazily loaded code smaller.
 
-`npm run fmt` formats `ui/src`, `ui/store`, `ui/tests`, and `ui/.design-sync`
+#### Storybook
+
+Storybook shows a component in a theme and a width without the app and
+without a daemon. It builds the stories in `ui/src/**/*.stories.tsx`. Run it
+from `ui/`:
+
+```bash
+cd ui
+npm run storybook        # http://127.0.0.1:6006
+npm run build-storybook  # writes ui/storybook-static (ignored by git)
+```
+
+`npm run story:shot` writes a PNG of one story in a theme and a width, so that
+you can look at a story without a browser session:
+
+```bash
+cd ui
+npm run story:shot -- components-themetoggle--default dark 360
+npm run story:shot -- components-themetoggle--default light 360 --rebuild
+```
+
+The arguments are the story id, `light` or `dark`, and the width in pixels.
+The supported widths are 360, 390, 820, 1024 and 1180. The command prints the
+path of the PNG, `ui/.story-shots/<id>.<theme>.<width>.png`. The directory is
+ignored by git. The command builds `ui/storybook-static` when it has no
+`index.json`, when a file the build reads (`ui/src/**`, `ui/.storybook/**`,
+`vite.storybook.config.ts`, `vite.fsAllow.ts`, `package.json`,
+`package-lock.json` and the `tsconfig*.json` files) has a newer modification
+time than `index.json`, or when you pass `--rebuild`. It prints the reason, or
+`storybook-static is fresh`, on stderr. A file restored with an old modification
+time (`cp -p`) is not seen: pass `--rebuild`. Before the shot, it waits up to
+2 seconds for finite CSS transitions to end, so a `dark` shot does not show a
+frame of the theme change. It exits with the list of known ids
+when the id does not exist. It serves the build on `127.0.0.1` with a random
+port and opens it in the Playwright Chromium of `ui/node_modules`. It waits
+for one host check slot (`flock` on `/tmp/tariboy-check.lock`), like
+`make check`, and runs without the lock on a host that has no `flock`.
+
+The decorators are in `ui/src/storybook/decorators.tsx`.
+`ui/.storybook/preview.tsx` applies the first five to every story. A story
+adds `withSurface` and `withWidth` in its own `decorators` list:
+
+| Decorator | What it does |
+| --- | --- |
+| `withTheme` | Sets the `.dark` class when the toolbar theme is `dark` |
+| `withAppProviders` | Adds `TooltipProvider`, and a `MemoryRouter` unless the story sets a route |
+| `withQueryClient` | Adds a react-query client when `parameters.tariboy.query` is `true` |
+| `withDaemon` | Adds a host registry with one host on `storybook.invalid` when `parameters.tariboy.daemon` is `true`, and restores the real keys after the story |
+| `withRoute` | Mounts the story on `parameters.tariboy.route` for a component that reads `useParams()` |
+| `withSurface(kind, width?)` | Wraps the story in a frame: `sidebar` (288 px), `panel` (480 px), `card` (360 px) or `row` (720 px) |
+| `withWidth(width)` | Wraps a mockup story in a frame of that width and the full height of the viewport |
+
+A story sets `parameters.tariboy` with the type `TariboyParameters`:
+
+```ts
+parameters: { tariboy: { query: true, daemon: true, route: { path: "/tasks/TB-142", pattern: "/tasks/:key" } } }
+```
+
+All three fields are optional. `query` and `daemon` are booleans. `route` has
+the initial `path` and the route `pattern`.
+
+The `ui-storybook` step of `make frontend-check` runs `npm run build-storybook`
+into the run's temporary directory. It fails when a story does not compile or
+does not build. `npx tsc -b` also checks every story against the real
+component props, because the stories are under `src/`. An extra prop in
+`args` fails the type check. Measured on the shared host on 2026-11-05, the
+build takes about 10 seconds and its peak resident memory is about 0.86 GB
+(`/usr/bin/time -v`). If the peak grows above 1.5 GB, set
+`NODE_OPTIONS=--max-old-space-size=1536` in the step command.
+
+`make designer-check` is the check a designer runs before a hand-off. It is
+not part of `check`. It first runs `scripts/npm-ci-locked.sh ui` (about 30
+seconds in a new worktree), then takes the host check slot and runs six steps
+to the end, like `frontend-check`: `ui-typecheck` (`npx tsc -b --checkers 1`),
+`ui-oxlint` (oxlint on the `ui/*.ts` and `ui/*.tsx` files that differ from
+`git merge-base origin/main HEAD`, uncommitted files included),
+`ui-fmt-check` (oxfmt), `ui-designer-tests` (one Vitest run with
+`TARIBOY_VITEST_MAX_WORKERS=2` of `viewLintPolicy.test.ts`,
+`storybookSafety.test.ts`, `storyNetwork.test.tsx`,
+`arbitraryPxPolicy.test.ts` and `textInputPolicy.test.ts`), `ui-dead-code`
+(Knip) and `ui-storybook` (the Storybook build). Measured on the shared host on
+2026-11-05, Knip takes about 10 seconds and 0.4 GB of peak resident memory; the
+step stays in the target while it takes at most 90 seconds and 1.5 GB.
+
+`designer-check` does not run these `frontend-check` steps: `ui-api-types`,
+`ui-lint`, the rest of `ui-test`, `ui-branding`, `ui-bundle-budget` and `docs`.
+The developer's pull request runs them. A successful step prints only its
+result line, except that the target first prints the file list of the oxlint
+step (`oxlint files: …`); with no changed file the step passes with
+`no changed UI files`. Without `origin/main` the oxlint step fails: run
+`git fetch origin`. `scripts/designer-check-contract-test.sh`, a part of
+`smoke-contract-test`, pins the steps and their order.
+
+Storybook never reaches a daemon. Four layers keep it that way:
+
+1. Storybook reads `ui/vite.storybook.config.ts`, not `ui/vite.config.ts`.
+   The app config proxies `/api` to `127.0.0.1:9990`. The Storybook file has
+   the same plugins and alias and no `server.proxy`. `ui/.storybook/main.ts`
+   has no `viteFinal` and no addons. The Storybook file also defines
+   `VITE_TARIBOY_NO_LOCAL_HOST` as `"1"`. `fetchAllAgents`
+   (`ui/src/lib/aggregate.ts`) then leaves out the implicit host "This daemon
+   (local)", whose empty base URL would send `/api/agents` to the page origin.
+   The app never sets the variable, so it still lists that host.
+2. The `withDaemon` decorator (`ui/src/storybook/decorators.tsx`) writes a
+   host registry with one host, `http://storybook.invalid`, into the
+   `tariboy_daemons` and `tariboy_active_daemon` keys. The `.invalid` name
+   never resolves. After the story, the decorator restores both keys. A story
+   asks for it with `parameters.tariboy = { daemon: true }`.
+3. `ui/src/test/storybookSafety.test.ts` fails when a story or a mockup
+   imports `CustomerQuestionNotifications`, because that component opens the
+   tasks WebSocket.
+
+4. `ui/src/test/storyNetwork.test.tsx` mounts every story of
+   `src/**/*.stories.tsx` in jsdom with portable stories and
+   `.storybook/preview.tsx`. It replaces `fetch` and `WebSocket`, records each
+   URL, and fails on any URL that is not on `storybook.invalid`. So a relative
+   `/api` path and `127.0.0.1:9990` both fail it. A new story joins the check
+   by itself. The test does not see `XMLHttpRequest`, `EventSource` or
+   `<img src>`.
+
+`ui/src/test/storybookConfig.test.ts` and
+`ui/src/test/storybookDecorators.test.tsx` pin layers 1 and 2.
+
+`npm run fmt` formats `ui/src`, `ui/store`, `ui/tests`, and `ui/.storybook`
 in place with [oxfmt](https://oxc.rs/docs/guide/usage/formatter) and
 `ui/.oxfmtrc.json`: double quotes, semicolons, and two-space indentation
 without tabs. Import sorting and Tailwind class sorting are off. oxfmt skips
@@ -6988,8 +7646,19 @@ A warning therefore fails `make frontend-check` in the same way as an error.
 The configuration turns on the complete `correctness` category, adds
 selected rules from other categories, and turns on the
 [complexity and size thresholds](#frontend-complexity-thresholds). It has
-two kinds of rule override: the test override and the `.design-sync` override.
-The next section describes them.
+two kinds of rule override: the test override, which the next section
+describes, and the view-layer override. The view-layer override applies to
+`src/**/*.view.tsx`, `src/**/*.stories.tsx`, `src/mockups/**` and
+`src/fixtures/**`. It forbids every import from `@/lib/api` (also
+`import type` and `export … from`, and the relative path), every import from
+`@tanstack/react-query`, and `fetch`, `window.fetch`, `globalThis.fetch` and
+`self.fetch`. Types come from `@/types`. oxlint has no rule for colors, so
+`ui/src/test/viewLintPolicy.test.ts` searches the `.ts` and `.tsx` files of
+the same globs for hex colors and Tailwind palette classes (`bg-red-500`,
+`border-[#fff]`, `var(--color-zinc-950)`), and fails with a list of
+`file:line: match`. Use semantic tokens (`bg-card`, `text-muted-foreground`).
+The test also runs oxlint on files that break each rule, so a rename of a glob
+or an oxlint update cannot turn the override off unnoticed.
 
 Fix the code before you suppress a diagnostic. If a suppression is necessary,
 put an oxlint comment on the line before the diagnostic. The comment names the
@@ -7002,7 +7671,7 @@ rule and gives the reason after `--`:
 A generated file can use one file-level `/* oxlint-disable RULE -- reason */`
 comment. Do not use `eslint-disable` comments. `ui/src/test/lintPolicy.test.ts`
 fails on an `eslint-disable` comment, on an oxlint comment without a rule or a
-reason, and on a rule override of another kind. Turn off a `correctness` rule
+reason, and on a rule override of a third kind. Turn off a `correctness` rule
 for the complete project only when the rule does not apply to the project, and
 write the reason in this guide.
 
@@ -7047,10 +7716,6 @@ files are unit tests, Playwright tests, and the shared test code in
 
 Unlike `make gocyclo`, which does not measure Go test files, these limits
 measure the complexity of the frontend tests.
-
-`ui/.design-sync` is the design synchronization tool, not app code. An
-override turns off the six limits for `.design-sync/**`. The `correctness`
-rules still apply to it.
 
 `make ui-complexity-report` prints every function and file over a limit. When
 nothing is over a limit, it prints
@@ -7104,20 +7769,22 @@ passes:
 1. `knip --production --include files` follows imports from the Desktop and
    Android app (`src/main.tsx`, found through `index.html`) and from the Store
    app (`store/main.tsx`, found through `vite.store.config.ts`). Tests,
-   `tests/**`, and `.design-sync/**` are not entry points in this pass. A file
-   that only a test or the design-sync bundle imports is reported as unused.
+   stories, mockups, fixtures, `src/storybook/**` and `tests/**` are not entry
+   points in this pass. A file that only a test or a story imports is
+   reported as unused.
 2. `knip` checks the complete graph: the apps, the Vitest unit tests, the
-   Playwright tests and fixtures under `tests/`, and the design-sync files
-   under `.design-sync/`. It reports every issue type: unused files, exports,
+   Playwright tests and fixtures under `tests/`, and the stories with
+   `ui/.storybook/`. It reports every issue type: unused files, exports,
    exported types, duplicate exports, unused or unlisted dependencies and
    devDependencies, and unlisted binaries. An export that a test imports is
    not reported, but an export that no file imports is.
 
 Knip finds entry points in three ways. Its Vite, Vitest, and Playwright
 plugins read every `vite*.config.ts` and `playwright.*.config.ts` file in
-`ui/`, so a new config with a name of that form needs no change. The `entry`
-list in `ui/knip.json` adds `tests/**` and `.design-sync/**`, because a
-script or an external tool loads those files by path, not by import. A new
+`ui/`, so a new config with a name of that form needs no change. Its Storybook
+plugin finds the stories. The `entry` list in `ui/knip.json` adds `tests/**`,
+because a script or an external tool loads those files by path, not by
+import. A new
 file that is loaded by path, by a glob, or by a tool outside the import graph
 must be added to `entry`. Otherwise Knip reports it as an unused file. The
 `project` list names the files that can be reported. It includes `*.css`
@@ -7144,22 +7811,23 @@ which the first pass does not check. Add an exception to `ignoreIssues` in
 `ui/knip.json` only for code that the app does not use on purpose. Name each
 file, list only the issue types it needs, and give the reason in the pull
 request. Do not add a pattern that covers all of `src/` or all components.
+Stories, mockups, fixtures and Storybook decorators are not reported as unused
+files (`project` excludes `src/**/*.stories.tsx`, `src/mockups/**`,
+`src/fixtures/**` and `src/storybook/**`), and the exports of
+`src/storybook/decorators.tsx` are allowed, because stories use them.
 The current exceptions are the shadcn primitives under `src/components/ui/`.
-The repository keeps that kit complete for the design-sync catalog, so its
-unused exports and the unused `separator.tsx` and `tooltip.tsx` files are
-allowed.
-
-The design-sync catalog under `ui/.design-sync` is checked by `make check` in
-two places. `npx tsc -b` builds `ui/tsconfig.design-sync.json`, which
-type-checks `.design-sync/entry.tsx` and every preview against the real
-component props: the `tariboy-ui` import in a preview resolves to the
-generated entry. When a component's props change, update its preview in the
-same change. `src/test/designSyncCatalog.test.ts` fails when the committed
-`entry.tsx` differs from a fresh `node .design-sync/make-entry.mjs` run, when a
-`componentSrcMap` path in `config.json` names a missing file, or when a preview
-or an override has no `componentSrcMap` key. To fix the first case, run
-`node .design-sync/make-entry.mjs` from `ui/` and commit the result. For the
-other cases, correct `config.json`.
+The repository keeps that kit complete for the Storybook catalog, so the
+unused exports of `src/components/ui/*.tsx` are allowed. `knip.json` is JSON
+and has no comments, so the reason is here. Without the exceptions for
+`separator.tsx` and `tooltip.tsx`, the production pass reports both files as
+unused, because only their stories import them. Those two exceptions stay for
+the Storybook catalog.
+The Storybook catalog is checked by `make check` in two places. `npx tsc -b`
+compiles the stories with the app (`ui/tsconfig.app.json` includes `src`), so
+a story is checked against the real component props. When the props of a
+component change, update its story in the same change. The `ui-storybook`
+step runs `npm run build-storybook`, which fails when a story does not
+build.
 
 #### Onboarding steps for a new feature
 
@@ -8783,7 +9451,7 @@ the worktree and starts exactly one durable Scripts-plugin schedule, recording
 the PR, schedule, and state identifiers on the Native Task:
 
 ```text
-scripts/scripts.sh schedule NAME --every 60 -- ABSOLUTE_UTILITY monitor --repo OWNER/REPO --pr NUMBER --state-dir ABSOLUTE_STATE_DIR
+tscripts schedule NAME --every 60 -- ABSOLUTE_UTILITY monitor --repo OWNER/REPO --pr NUMBER --state-dir ABSOLUTE_STATE_DIR
 ```
 
 The daemon exports `TARIBOY_QUIET_EXIT=111` to every run, so the schedule
@@ -9422,7 +10090,7 @@ runtime prompt entries explicitly. Neither kind starts a supervised subprocess.
 | [`workdir`](/docs/plugins/built-in/workdir) | Instruction-only | Yes | Prompt only | None |
 | [`goal`](/docs/plugins/built-in/goal) | Optional | Yes | `scripts/goal.sh set <TASK-KEY>` | Selected task and AI usage attribution on the iteration lease |
 | [`schedule`](/docs/plugins/built-in/schedule) | Optional | No | `scripts/schedule.sh …` | Schedules and the letters they send |
-| [`scripts`](/docs/plugins/built-in/scripts) | Optional | Yes | `scripts/scripts.sh …` | Script records and logs |
+| [`scripts`](/docs/plugins/built-in/scripts) | Optional | Yes | `tscripts …` | Script records and logs |
 | [`image-creator`](/docs/plugins/built-in/image-creator) | Optional | No | `scripts/image_creator.sh build` | Built image in the host image store |
 | [`tasks`](/docs/plugins/built-in/tasks) | Optional | Yes | Bare `tasks` command | Native Tasks in SQLite |
 | [`assessments`](/docs/plugins/built-in/assessments) | Optional | No | `tariboy assessment add` | Assessments in SQLite |
@@ -9833,7 +10501,7 @@ prompts:
 
 The prompt tells agents to wait for dispatched subagents and terminal-tool jobs,
 inspect their final results, and resolve failures before completing the iteration.
-Manager-owned durable `scripts/scripts.sh run` and `scripts/scripts.sh schedule` jobs remain non-blocking because their
+Manager-owned durable `tscripts run` and `tscripts schedule` jobs remain non-blocking because their
 results are intentionally delivered in a later iteration. The prompt also
 explains when the idle form is appropriate.
 
@@ -9993,16 +10661,22 @@ plugin owns timed letters.
 
 ## Capability surface
 
+The agent uses `tscripts`, the managed alias of the `tariboy-scripts` binary.
+Agent provisioning puts it on the agent `PATH`. It calls
+`/tools/script/<action>` on the identity-bound agent socket. The skill launcher
+`scripts/scripts.sh` stays a thin launcher, `exec tscripts "$@"`, like
+`tasks.sh` and `mail.sh`.
+
 Run exactly once:
 
 ```bash
-scripts/scripts.sh run health --description "Check service health" -- curl -fsS http://localhost:8080/health
+tscripts run health --description "Check service health" -- curl -fsS http://localhost:8080/health
 ```
 
 Run immediately and then 60 seconds after each completion:
 
 ```bash
-scripts/scripts.sh schedule poll --every 60 --description "Poll the queue" -- ./bin/poll-queue
+tscripts schedule poll --every 60 --description "Poll the queue" -- ./bin/poll-queue
 ```
 
 Runs of one recurring script never overlap. The fixed delay starts at the
@@ -10018,13 +10692,13 @@ run stays quiet by exiting with the quiet exit code `111` (see
 Inspect and control definitions and runs separately:
 
 ```bash
-scripts/scripts.sh ls
-scripts/scripts.sh runs scr-agent-...
-scripts/scripts.sh logs srun-agent-...
-scripts/scripts.sh rerun scr-agent-...        # run now, or resume a stopped recurring definition
-scripts/scripts.sh cancel scr-agent-...       # stop a definition and its active run
-scripts/scripts.sh cancel srun-agent-...      # stop only this run
-scripts/scripts.sh rm scr-agent-...           # inactive definitions only
+tscripts ls
+tscripts runs scr-agent-...
+tscripts logs srun-agent-...
+tscripts rerun scr-agent-...        # run now, or resume a stopped recurring definition
+tscripts cancel scr-agent-...       # stop a definition and its active run
+tscripts cancel srun-agent-...      # stop only this run
+tscripts rm scr-agent-...           # inactive definitions only
 ```
 
 Both creation commands require `--`. Everything after it is preserved as the
@@ -10090,7 +10764,7 @@ The quiet exit code is fixed. Each run receives it as `TARIBOY_QUIET_EXIT`, so a
 script reports "nothing changed" without a magic number:
 
 ```bash
-scripts/scripts.sh schedule poll --every 60 -- ./bin/poll-queue
+tscripts schedule poll --every 60 -- ./bin/poll-queue
 ```
 
 where `bin/poll-queue` is:
@@ -10482,7 +11156,7 @@ image activation. To schedule a script while working in another CWD, pass its
 absolute path to the [`scripts` plugin](/docs/plugins/built-in/scripts):
 
 ```bash
-scripts/scripts.sh schedule poll \
+tscripts schedule poll \
   --description "Poll the queue" \
   --every 60 \
   -- /home/alice/.tariboy/agents/worker/workdir/scripts/poll-queue
@@ -10515,13 +11189,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.109.0` alpha on an Apple Silicon Mac.
+This path is for the `0.110.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.109.0_aarch64.dmg`;
+- a verified `Tariboy_0.110.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -10755,6 +11429,10 @@ tariboy has four command surfaces:
 4. **Mail** — `tariboy-mail`, installed as `tmail`, reads, sends and answers
    letters for an identity-bound agent or an operator. `tariboy mail …` runs the
    same client, always in operator mode.
+5. **Scripts** — `tariboy-scripts`, installed as `tscripts`, runs and inspects
+   the durable scripts of an identity-bound agent. It has no operator mode. The
+   skill launcher `scripts/scripts.sh` stays a thin launcher,
+   `exec tscripts "$@"`, like `tasks.sh` and `mail.sh`.
 
 ## Operator commands
 
@@ -11105,12 +11783,12 @@ Run inside an agent; the socket comes from `$TARIBOY_TOOLS_SOCKET`.
 | `scripts/schedule.sh add --kind cron\|oneshot --spec S [--message JSON]` | Schedule a future letter; without a recipient it writes to you |
 | `scripts/schedule.sh ls` | List your schedules |
 | `scripts/schedule.sh cancel ID` | Cancel a schedule |
-| `scripts/scripts.sh ls` | List your scripts |
-| `scripts/scripts.sh run NAME [--description TEXT] -- COMMAND` | Queue exactly one local run |
-| `scripts/scripts.sh schedule NAME --every SECONDS -- COMMAND` | Run now and repeat after each completion; a run that exits `111` (`TARIBOY_QUIET_EXIT`) stays quiet |
-| `scripts/scripts.sh runs SCRIPT_ID` / `logs RUN_ID` | Inspect run history and bounded logs |
-| `scripts/scripts.sh rerun SCRIPT_ID` | Run a completed one-shot or idle recurring definition immediately |
-| `scripts/scripts.sh cancel SCRIPT_OR_RUN_ID` / `rm SCRIPT_ID` | Cancel work or remove inactive history |
+| `tscripts ls` | List your scripts |
+| `tscripts run NAME [--description TEXT] -- COMMAND` | Queue exactly one local run |
+| `tscripts schedule NAME --every SECONDS -- COMMAND` | Run now and repeat after each completion; a run that exits `111` (`TARIBOY_QUIET_EXIT`) stays quiet |
+| `tscripts runs SCRIPT_ID` / `logs RUN_ID` | Inspect run history and bounded logs |
+| `tscripts rerun SCRIPT_ID` | Run a completed one-shot or idle recurring definition immediately |
+| `tscripts cancel SCRIPT_OR_RUN_ID` / `rm SCRIPT_ID` | Cancel work or remove inactive history |
 | `scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR` | Build a schema-v2 image from a daemon-readable source directory (`image-creator` only); relative paths start at the managed workdir |
 
 ## Mail (`tmail …`)
@@ -11716,7 +12394,7 @@ and run ids, name, mode, status, optional exit code and the absolute
 `log_path`; the log starts with the resolved working directory, and the
 combined output stays in that file. Sending the result also stops a recurring
 definition, so one failing command cannot flood the inbox;
-`scripts/scripts.sh rerun scr-...` resumes it once the agent has handled the
+`tscripts rerun scr-...` resumes it once the agent has handled the
 letter. A quiet run, one that exits `111`, sends nothing and keeps the
 schedule running.
 
@@ -11791,22 +12469,33 @@ by the operator. The desktop does not implement a second SSH stack.
 | --- | --- |
 | Desktop | macOS 12+, Apple Silicon |
 | Automatic remote install | Linux x86_64 and aarch64, macOS arm64 (Apple Silicon) |
-| SSH | system `ssh` and `scp` |
+| SSH | system `ssh` |
+| Server download | outbound HTTPS from the host to `github.com` and its release file domain |
 | Remote install root | `~/.local/lib/tariboy` |
 | Remote CLI links | `~/.local/bin` |
 | Daemon HTTP | remote loopback only |
 | Tunnel | local loopback forwarding over SSH |
 | Android app | signed arm64 APK in each release; forwarded loopback port or HTTPS server, no SSH hosts |
 
-Automatic installation requires a writable `~/.local` and `python3`; Linux
-hosts also need `flock`. The desktop app carries one server build per platform
-and uploads the one matching the host's `uname -s` and `uname -m`: Linux
-`x86_64` gets `linux-x86_64`, Linux `aarch64` (or `arm64`) gets
-`linux-aarch64`, and macOS (`Darwin`) `arm64` gets `darwin-arm64`. Install and
-update re-read the platform and architecture in preflight every time. Any other
-combination, such as 32-bit `armv7l` or an Intel Mac (`Darwin/x86_64`,
-including a shell running under Rosetta), is reported as unsupported and
-nothing changes on the host.
+Automatic installation requires a writable `~/.local`, `python3`, `curl` or
+`wget`, `tar`, and `sha256sum` or `shasum`. Linux hosts also need `flock`.
+Preflight names each missing program, and Desktop does not start the install.
+
+The desktop app package carries only the binaries of its own platform, which
+run the local daemon. It carries no server builds. The server downloads its
+build from the GitHub release of the Desktop version. Desktop selects the
+archive from the `uname -s` and `uname -m` of the host:
+
+| Host | Archive |
+| --- | --- |
+| Linux `x86_64` | `tariboy_<version>_linux-x86_64.tar.gz` |
+| Linux `aarch64` or `arm64` | `tariboy_<version>_linux-aarch64.tar.gz` |
+| macOS (`Darwin`) `arm64` | `tariboy_<version>_darwin-arm64.tar.gz` |
+
+Install and update read the platform and architecture again in preflight every
+time. Desktop reports any other combination as unsupported, and nothing
+changes on the host. Examples are 32-bit `armv7l` and an Intel Mac
+(`Darwin/x86_64`, also a shell that runs under Rosetta).
 
 macOS ships neither `flock` nor `sha256sum`, so on a Mac the installer takes
 its lock through `python3` and verifies checksums with `shasum -a 256`. On
@@ -11858,7 +12547,7 @@ start from, for the commands the daemon and its agents need:
 | `python3` | agent tool scripts | system package manager |
 | `git` | adding and refreshing Stores | system package manager |
 | `npx` | building images that carry `skills-lock.json` | Node.js (npm ships `npx`) |
-| `tariboy`, `ttasks` | Tariboy commands inside agents | Tariboy CLI links in `~/.local/bin` |
+| `tariboy`, `ttasks`, `tmail`, `tscripts` | Tariboy commands inside agents | Tariboy CLI links in `~/.local/bin` |
 | `claude`, `codex`, `opencode` or `agent` | at least one agent harness | the harness vendor's installer |
 
 The response carries `state` (`ready` or `error`), `missing_tools` (name,
@@ -11880,8 +12569,8 @@ connects, so reconnect it after installing the tools.
 1. Confirm the alias works in Terminal: `ssh build-box`.
 2. Add the same alias under **Settings → Hosts**.
 3. Choose one of the two setup modes:
-   - **Install Tariboy** (default) runs preflight, uploads and installs the
-     matching release, starts the daemon, and connects the tunnel.
+   - **Install Tariboy** (default) runs preflight, has the host download and
+     install the matching release, starts the daemon, and connects the tunnel.
    - **Connect to existing Tariboy** saves the host and connects without
      uploading, installing, activating, starting, or restarting anything.
 
@@ -11905,23 +12594,47 @@ keys, `known_hosts`, and organization authentication. Tariboy never adds
 ## Install and update behavior
 
 **Update Tariboy** on a Linux host whose CLI supports `tariboy update
---cleanup` uploads nothing: Desktop runs
+--cleanup` runs on the server: Desktop runs
 `tariboy update <Desktop version> --cleanup` on the server over SSH. The server
 downloads and verifies that release from GitHub, installs it with the same
 fixed installer, restarts the daemon, and deletes old releases, keeping the
 five newest and the active one. Desktop then checks the reported version, as
 below. When the command fails after the managed links already moved to the new
 release, Desktop reactivates and restarts the previous release; a failure
-before the switch leaves the host unchanged. The server needs outbound HTTPS to
-GitHub, and the Desktop version must be a published release with a server
-archive. Desktop does not fall back to uploading when the download fails.
+before the switch leaves the host unchanged.
 
-The upload path below remains for the first install, for macOS hosts, and for
-a host whose CLI predates `--cleanup`; such a host is updated by upload once,
-and its next update runs on the server.
+The first install, every macOS host, and a host whose CLI predates
+`--cleanup` use the Desktop installer path below. After one such update, the
+next update of a Linux host runs on the server.
 
-Desktop uploads five bundled binaries including the Tasks client and Telegram plugin, a version marker, checksums, and a
-fixed installer script to a staging directory. The remote installer:
+Desktop uploads no binaries. Over SSH, it runs two fixed scripts that are
+built into Desktop:
+
+1. `remote-download.sh` downloads `SHA256SUMS` and the archive for the host
+   from `<base URL>/download/v<Desktop version>/` with `curl`, or with `wget`
+   when `curl` is missing. It makes sure that the archive checksum matches the
+   line in `SHA256SUMS`. It accepts only plain file names at the archive root.
+   Then it unpacks the archive into a staging directory.
+2. `remote-install.sh` installs the staged release.
+
+The base URL is `https://github.com/alekzonder/tariboy/releases`. If
+`TARIBOY_UPDATE_BASE_URL` is set in the environment of the desktop app, it
+replaces the base URL, for example for a mirror. `tariboy update` reads the
+same variable. The base URL must start with `https://`, and it can contain
+only letters, digits, and `._~:/-`.
+
+The server needs outbound HTTPS to GitHub, and the Desktop version must be a
+published release with a server archive. A build of an unpublished version,
+for example a local development build, gets a 404 response. Set
+`TARIBOY_UPDATE_BASE_URL` to a mirror that has the archives of that version.
+The download has a budget of ten minutes. If the download or the checksum
+fails, the step **Download release** fails with the URL in the message.
+Desktop removes the staging directory, and the active release on the host
+does not change. Desktop does not fall back to an upload.
+
+The archive holds the seven binaries, a version marker, checksums, and a copy
+of the installer. Desktop does not run that copy. It runs its own built-in
+`remote-install.sh`, which:
 
 - validates checksums;
 - serializes installs with `flock`, or with a `python3` file lock where `flock`
@@ -11931,22 +12644,13 @@ fixed installer script to a staging directory. The remote installer:
 - verifies the daemon reports the requested version;
 - rolls back the previous release on activation failure.
 
-The upload runs over `scp` with SSH compression enabled, and its timeout is
-derived from the payload rather than fixed: a floor of two minutes plus one
-second per 128 KiB of bundle, capped at thirty minutes. A release bundle is
-around 100 MB, so a fixed short timeout used to abort the transfer on ordinary
-uplinks, leaving the update reported as `SSH command timed out` at the
-**Upload release** step. The budget now assumes a slow, incompressible worst
-case; a healthy link finishes far sooner and the timeout only bounds a stalled
-transfer.
-
 Reactivating a release that predates `tariboy-tasks` removes both newer Tasks
 links transactionally. Selecting the newer release again restores them; every
 selected release must contain its required payloads before links switch.
 
 An update refuses to replace unrelated regular files in `~/.local/bin`.
 Choosing **Update Tariboy** authorizes the version switch and daemon restart;
-connect, upload, activation, restart, and reconnect remain one operation with
+connect, download, activation, restart, and reconnect remain one operation with
 one operation ID. Daemon `0.10.1` and newer preserves running shims across that
 restart, so active agents do not require a second confirmation. A legacy daemon
 older than `0.10.1` instead fails closed before activation when active work
@@ -11954,8 +12658,8 @@ exists or cannot be checked.
 
 ## Update a host from its own shell
 
-A host can also fetch and install a release itself, without the desktop app
-uploading one:
+A Linux host can also fetch and install a release itself, without the desktop
+app:
 
 ```bash
 ssh build-box 'tariboy update latest'
@@ -11968,7 +12672,7 @@ architecture, `tariboy_<version>_linux-x86_64.tar.gz` or
 `tariboy_<version>_linux-aarch64.tar.gz`, and the release `SHA256SUMS`, verifies
 the archive checksum before unpacking, stages it under
 `~/.local/lib/tariboy/.stage-<token>`, and then runs the same fixed installer
-the desktop app uploads — so checksum validation, `flock` serialization,
+the desktop app runs — so checksum validation, `flock` serialization,
 atomic symlink switching, and rollback are identical. A running daemon is
 restarted onto the new release and must report the installed version; a stopped
 daemon is left stopped.
@@ -12003,8 +12707,8 @@ The host dialog presents provisioning and updates as one vertical sequence:
 
 1. Connect to host.
 2. Check server.
-3. Upload release; **Get release** for an update, which also covers the
-   server-side download.
+3. Download release, or **Get release** for an update. The server downloads
+   the release in both cases.
 4. Install release.
 5. Start or restart Tariboy.
 6. Connect or reconnect to Tariboy.
@@ -12262,6 +12966,10 @@ USD; a USD budget cannot bound that provider's actual spend. See
 - Budgets constrain spend.
 - Agent USD budgets have independent calendar hour/day/ISO-week/month limits;
   zero is unlimited, and an exhausted request is rejected before upstream access.
+- A [task budget](/docs/tasks#task-budget) limits the USD spending of a task and
+  its subtree. Only the customer sets or raises it. An agent gets `forbidden`
+  when it sends `--budget-usd` or clears a budget block, so it cannot give
+  itself more money. A database fault in the check lets the request through.
 - Cursor CLI traffic has no price, so it never adds to USD budgets or limits.
   Do not rely on a budget to cap a Cursor agent's spend; see
   [AI proxy](/docs/architecture/ai-proxy#cursor-harness).
@@ -12322,6 +13030,19 @@ Desktop installer preflights all six command paths before changing any of them
 and refuses regular files, directories, or symlinks not owned by the verified
 Tariboy app bundle. The bundle has five real payload files; `ttasks` is a
 managed alias whose source is `tariboy-tasks`.
+
+The Desktop package carries no server binaries. An SSH server downloads the
+archive of the Desktop version from the GitHub release over HTTPS, with the
+same trust as `tariboy update`. The server makes sure that the archive
+checksum matches the release `SHA256SUMS` before it unpacks the archive. It
+accepts only plain file names at the archive root, and only regular files.
+The release `SHA256SUMS` comes from the same GitHub release, so a person who
+can replace release files can also replace the checksums. Only the
+`remote-install.sh` built into Desktop switches the links; Desktop never runs
+the installer copy from the archive. Desktop sends the base URL to the remote
+shell only when it starts with `https://` and contains only letters, digits,
+and `._~:/-`. Plain HTTP is accepted only for `127.0.0.1`, for a local test
+mirror.
 
 Image builds resolve only the literal `$PLUGINS` root, source-relative paths,
 or explicit absolute paths. Prompt paths and plugin references reject traversal
@@ -12473,7 +13194,7 @@ runs the routine.
 
 ## Alpha signing and Gatekeeper
 
-`0.109.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.110.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -12587,7 +13308,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.109.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.110.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -14214,7 +14935,7 @@ be turned off. `unavailable_grace: 0` is allowed and pauses at once.
 ## Pauses
 
 A pause stops a task that is stalled and asks the customer what to do. The
-daemon pauses a task for exactly four reasons, the `reason` of the pause.
+daemon pauses a task for exactly five reasons, the `reason` of the pause.
 
 | Reason | When it fires |
 | --- | --- |
@@ -14222,6 +14943,7 @@ daemon pauses a task for exactly four reasons, the `reason` of the pause.
 | `rejected_requests` | A check rejected `rejected_requests` requests in the visit. Every rejection counts; a failed request in between does not reset the count. The detail is the last script message. |
 | `script_failures` | Checks or watches failed `script_failures` times in a row in the visit, including a check interrupted by a daemon restart, an undeclared outcome, or an invalid artifact. The detail is the failure message and the log path. |
 | `holder_unavailable` | The holder of a pool status cannot work (it is disabled, its loop is off, it is halted, it left the pool, or it was deleted) and has been unable for `unavailable_grace`. The daemon notes when it first saw the holder unavailable and checks after every dispatch pass (on each task change and every minute). The mark clears when the holder can work again or the task is dispatched anew. |
+| `budget_exhausted` | The AI proxy refused a request of the task because the task or one of its parents spent its [task budget](/docs/tasks#task-budget). The detail names the task with the limit, the spending and the limit. A resume fails with `budget_exhausted` while the limit is still spent: raise the limit or set `0` first. |
 
 A task that is already paused, or closed, is not paused again.
 
@@ -15149,6 +15871,26 @@ mentioned principal's next comment resolves only its own open wait. This makes
 “where is my answer required?” directly filterable for both agents and the
 customer.
 
+The customer can also close a question without an answer, for example a
+question an agent asked after the task was done.
+`POST /api/tasks/{key}/waits/dismiss` (`tasks.waits.dismiss`) works for a task
+in any status. Only the customer can call it; another caller gets `forbidden`
+(HTTP 403). In one transaction it:
+
+- closes each open wait on the customer, with no resolving comment;
+- closes the matching `task.question` letters with
+  `close_note = task-wait-dismissed`;
+- moves a flexible task from `wait_customer` to `in_progress` when no question
+  to the customer stays open, as an answer does. A workflow task gets the
+  state an answer gives it. A done or cancelled task keeps its status;
+- records a `task.waits_dismissed` event and sends each asker a
+  `task.answered` letter that says no answer is needed.
+
+The workflow's own wait on the customer stays open: an outcome or
+`workflow resume` resolves it. Questions to agents stay open too. With no open
+question to the customer, the call changes nothing and returns an empty
+`resolved_waits`.
+
 A mentioned name starts and ends with a letter or a digit. A dot, `_` or `-`
 inside the name is part of the name. Punctuation after the name is not part of
 it, so `@agent:worker.` and `(@agent:worker)` both mention `agent:worker`, and
@@ -15324,6 +16066,9 @@ the reader cannot see the parent. History is collapsed by default. The flexible 
 `wait_customer` reads Waiting for you. The flexible assignee list contains
 Unassigned, me, and each agent. You cannot type a principal. In the comment
 form, Ask an agent mentions an agent, and Reply Ok to the question posts `Ok`.
+When a question to you is open, the "Waiting for an answer" banner at the top
+of the sheet has **Dismiss question**, in every status, also for a done or
+cancelled task. The Needs you card has the same button.
 
 The sheet starts at half the viewport width. Drag its left separator or use
 its keyboard controls to resize it. The chosen width survives reloads.
@@ -15437,6 +16182,49 @@ started** or **Waiting for you**), the age, and the cost when it is known.
 Click a row to open the task sheet. The agent header's **Answer** button
 opens the tab at the first task's card, and **Give task** focuses the
 composer.
+
+## Task budget
+
+A task budget is a USD limit on the AI spending of a task and all of its
+subtasks. The field `budget_usd` holds it. The value `0` means no limit, and
+every task starts with `0`.
+
+Only the customer sets the limit, with `ttasks update KEY --budget-usd 5`, with
+`tariboy tasks update`, or in the **Budget, USD** field of the task panel. An
+agent that sends `--budget-usd` gets `forbidden`. An agent sees the limit in
+`ttasks show`. The panel shows under the field what the task and its subtasks
+spent, from `GET /api/tasks/{key}/budget`.
+
+The spending of a task is the sum of `cost_usd` of every AI request whose
+`task_id` is the key of the task or of one of its subtasks. Old keys from
+`task_key_aliases` count too. The limit has no time window.
+
+Before the AI proxy sends a request upstream, it checks the task of the request
+and each of its parents. If the subtree of one of them spent its limit or more,
+the proxy answers 429 with `budget exceeded: task KEY` and records the request
+as `budget_block`. Then the daemon reacts on the task of the request:
+
+| Task | Reaction | How the customer lifts it |
+| --- | --- | --- |
+| A workflow task | The task pauses with the reason `budget_exhausted`. The pause question names the task with the limit, the spending and the limit. | Raise the limit or set `0`, then resume with `ttasks workflow resume KEY --decision continue` or `release`. While the limit is still spent, the resume fails with `budget_exhausted`. |
+| A flexible task | The task gets the block reason `budget exhausted: task KEY spent $X of $Y`, and a comment by `system:budget` mentions the customer. A blocked task is not a Goal, so the agent takes other work. | Raise the limit above the spending or set `0`. The daemon then lifts, in the same write, each block in the subtree that names this task. A block with other text stays. The customer can also clear a block with `ttasks update KEY --manual-block-reason ""`. An agent cannot clear a budget block. |
+
+A task that is already paused, blocked or closed does not change. A parent with
+a limit is not blocked itself: each task of the subtree is paused or blocked at
+its own first refusal.
+
+Limits of a task budget:
+
+- Requests that already started can go over the limit, because the proxy knows
+  the cost only after the answer. Several agents in one subtree can go over it
+  at the same time.
+- Requests without a price, such as Cursor requests, cost `0` and are not
+  limited.
+- A request of an iteration without a Goal has no `task_id` and does not count.
+- If the database read of the check fails, the proxy lets the request through
+  and logs the error.
+- A move to another queue creates a new task without the limit. A move to
+  another server does not carry the limit.
 
 ## Moving a task to another queue
 

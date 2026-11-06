@@ -13,16 +13,22 @@ plugin owns timed letters.
 
 ## Capability surface
 
+The agent uses `tscripts`, the managed alias of the `tariboy-scripts` binary.
+Agent provisioning puts it on the agent `PATH`. It calls
+`/tools/script/<action>` on the identity-bound agent socket. The skill launcher
+`scripts/scripts.sh` stays a thin launcher, `exec tscripts "$@"`, like
+`tasks.sh` and `mail.sh`.
+
 Run exactly once:
 
 ```bash
-scripts/scripts.sh run health --description "Check service health" -- curl -fsS http://localhost:8080/health
+tscripts run health --description "Check service health" -- curl -fsS http://localhost:8080/health
 ```
 
 Run immediately and then 60 seconds after each completion:
 
 ```bash
-scripts/scripts.sh schedule poll --every 60 --description "Poll the queue" -- ./bin/poll-queue
+tscripts schedule poll --every 60 --description "Poll the queue" -- ./bin/poll-queue
 ```
 
 Runs of one recurring script never overlap. The fixed delay starts at the
@@ -38,13 +44,13 @@ run stays quiet by exiting with the quiet exit code `111` (see
 Inspect and control definitions and runs separately:
 
 ```bash
-scripts/scripts.sh ls
-scripts/scripts.sh runs scr-agent-...
-scripts/scripts.sh logs srun-agent-...
-scripts/scripts.sh rerun scr-agent-...        # run now, or resume a stopped recurring definition
-scripts/scripts.sh cancel scr-agent-...       # stop a definition and its active run
-scripts/scripts.sh cancel srun-agent-...      # stop only this run
-scripts/scripts.sh rm scr-agent-...           # inactive definitions only
+tscripts ls
+tscripts runs scr-agent-...
+tscripts logs srun-agent-...
+tscripts rerun scr-agent-...        # run now, or resume a stopped recurring definition
+tscripts cancel scr-agent-...       # stop a definition and its active run
+tscripts cancel srun-agent-...      # stop only this run
+tscripts rm scr-agent-...           # inactive definitions only
 ```
 
 Both creation commands require `--`. Everything after it is preserved as the
@@ -110,7 +116,7 @@ The quiet exit code is fixed. Each run receives it as `TARIBOY_QUIET_EXIT`, so a
 script reports "nothing changed" without a magic number:
 
 ```bash
-scripts/scripts.sh schedule poll --every 60 -- ./bin/poll-queue
+tscripts schedule poll --every 60 -- ./bin/poll-queue
 ```
 
 where `bin/poll-queue` is:
