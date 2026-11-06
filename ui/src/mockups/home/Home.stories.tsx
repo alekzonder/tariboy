@@ -9,6 +9,22 @@ import { HomeView, type HomeViewProps } from "@/pages/home/HomePage.view";
 import { withWidth } from "@/storybook/decorators";
 import { NeedsYouListView, type NeedsYouViewRow } from "./NeedsYouList.view";
 
+/**
+ * Purpose: Home is the first screen of a workspace that has agents. It shows
+ * what needs the operator now and whether the agents are in order.
+ *
+ * User: the operator who runs AI agents on one or more hosts.
+ *
+ * Task: open the application, find the task or the letter that waits for an
+ * answer, see which agents run now and how the day goes, then go to the
+ * right place.
+ *
+ * Success: the operator understands in 5 seconds where an action is needed.
+ * At 1280 px all four sections (Needs you, Running now, Today, Recent) are
+ * visible on the first screen, and Needs you shows the most urgent items
+ * first, not every item.
+ */
+
 // The Home page as the operator sees it: the sidebar on the --background
 // chrome and the content island with HomeView. No redesign: it repeats the
 // current page. Below 768 px the sidebar is a drawer (DRAWER_QUERY), so the

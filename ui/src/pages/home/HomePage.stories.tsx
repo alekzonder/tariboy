@@ -3,6 +3,12 @@ import { agentLink, agentLinks } from "@/fixtures/agents";
 import { taskActivityTotals } from "@/fixtures/activity";
 import { HomeView } from "./HomePage.view";
 
+/**
+ * Purpose: the markup of Home, the first screen of a workspace that has
+ * agents. Home shows what needs the operator now and whether the agents are
+ * in order. The full statement of the goal of the page is in
+ * `ui/src/mockups/home/Home.stories.tsx`.
+ */
 const meta = { component: HomeView } satisfies Meta<typeof HomeView>;
 export default meta;
 

@@ -4,6 +4,13 @@ import type { NeedsYouRow } from "@/lib/needsYou";
 import { NeedsYouContext } from "@/pages/terminals/needsYouContext";
 import { NeedsYouList } from "./NeedsYouList";
 
+/**
+ * Purpose: Needs you is the first section of Home. It lists the tasks and the
+ * letters that wait for an answer from the operator, so the operator can
+ * pick the next one and answer it in place. The goal of the page is in
+ * `ui/src/mockups/home/Home.stories.tsx`.
+ */
+
 // The real container, not the mockup copy: the rows come from props and the
 // context carries no host, so the story never reaches a daemon. The task
 // drawer and the answer card open only on a click.
