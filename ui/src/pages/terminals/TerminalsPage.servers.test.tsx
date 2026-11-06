@@ -114,9 +114,10 @@ describe("TerminalsPage host status", () => {
     renderAt("/terminals");
     fireEvent.click(await screen.findByRole("button", { name: "Connect prod" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Could not connect to prod: Error: SSH timed out",
-    );
+    // Home also shows alerts (its reads fail in jsdom), so match this one by text.
+    expect(
+      await screen.findByText("Could not connect to prod: Error: SSH timed out"),
+    ).toHaveAttribute("role", "alert");
   });
 
   it("hides Update in the agent sidebar when the remote version is current", async () => {
