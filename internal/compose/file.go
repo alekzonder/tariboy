@@ -330,88 +330,115 @@ func (f File) Validate() error {
 		}
 	}
 	for name, g := range f.Groups {
-		if !agent.ValidName(name) {
-			return fmt.Errorf("invalid group name %q", name)
-		}
-		if g.Lead != "" {
-			a, ok := f.Agents[g.Lead]
-			if !ok || a.Group != name {
-				return fmt.Errorf("group %q lead %q is not a member of that group", name, g.Lead)
-			}
-		}
-		if g.Budget != nil {
-			if _, err := g.Budget.NormalizedMode(); err != nil {
-				return fmt.Errorf("group %q budget: %w", name, err)
-			}
+		if err := f.validateGroup(name, g); err != nil {
+			return err
 		}
 	}
 	for name, a := range f.Agents {
-		if !agent.ValidName(name) {
-			return fmt.Errorf("invalid agent name %q", name)
-		}
-		if a.Image == "" {
-			return fmt.Errorf("agent %q has no image", name)
-		}
-		if a.Group != "" {
-			if !agent.ValidName(a.Group) {
-				return fmt.Errorf("agent %q references invalid group name %q", name, a.Group)
-			}
-			if _, ok := f.Groups[a.Group]; !ok {
-				return fmt.Errorf("agent %q references undeclared group %q", name, a.Group)
-			}
-		}
-		if a.Budget != nil {
-			if _, err := a.Budget.NormalizedMode(); err != nil {
-				return fmt.Errorf("agent %q budget: %w", name, err)
-			}
-		}
-		if a.Harness != nil {
-			if err := a.Harness.Validate(); err != nil {
-				return fmt.Errorf("agent %q %w", name, err)
-			}
-		}
-		if _, err := a.effectiveTimeoutSeconds(); err != nil {
-			return fmt.Errorf("agent %q %w", name, err)
-		}
-		if _, _, err := a.goalWaitCustomerTimeoutSeconds(); err != nil {
-			return fmt.Errorf("agent %q %w", name, err)
-		}
-		if _, _, err := a.goalDeliveryCooldownSeconds(); err != nil {
-			return fmt.Errorf("agent %q %w", name, err)
-		}
-		if a.Loop != nil {
-			if _, _, err := a.intervalSeconds(); err != nil {
-				return fmt.Errorf("agent %q loop %w", name, err)
-			}
-			if !validPolicy(a.Loop.OnTimeout) {
-				return fmt.Errorf("agent %q loop on_timeout %q must be restart|stop", name, a.Loop.OnTimeout)
-			}
-			if !validPolicy(a.Loop.OnError) {
-				return fmt.Errorf("agent %q loop on_error %q must be restart|stop", name, a.Loop.OnError)
-			}
-			if a.Loop.MaxIdleIterations != nil && *a.Loop.MaxIdleIterations < 0 {
-				return fmt.Errorf("agent %q loop max_idle_iterations %d must be >= 0", name, *a.Loop.MaxIdleIterations)
-			}
+		if err := f.validateAgent(name, a); err != nil {
+			return err
 		}
 	}
 	for prefix, queue := range f.TaskQueues {
-		if !taskQueuePrefixRE.MatchString(prefix) {
-			return fmt.Errorf("invalid task queue prefix %q", prefix)
+		if err := f.validateTaskQueue(prefix, queue); err != nil {
+			return err
 		}
-		if strings.TrimSpace(queue.Name) == "" {
-			return fmt.Errorf("task queue %q name is required", prefix)
+	}
+	return nil
+}
+
+func (f File) validateGroup(name string, g GroupSpec) error {
+	if !agent.ValidName(name) {
+		return fmt.Errorf("invalid group name %q", name)
+	}
+	if g.Lead != "" {
+		a, ok := f.Agents[g.Lead]
+		if !ok || a.Group != name {
+			return fmt.Errorf("group %q lead %q is not a member of that group", name, g.Lead)
 		}
-		if _, _, err := queue.WorkflowRef(); err != nil {
-			return fmt.Errorf("task queue %q workflow %q: %w", prefix, queue.Workflow, err)
+	}
+	if g.Budget != nil {
+		if _, err := g.Budget.NormalizedMode(); err != nil {
+			return fmt.Errorf("group %q budget: %w", name, err)
 		}
-		for pool, members := range queue.Pools {
-			if !poolRouteSegmentRE.MatchString(pool) {
-				return fmt.Errorf("task queue %q has unsafe pool route name %q", prefix, pool)
-			}
-			for _, name := range normalizeAgentNames(members) {
-				if _, exists := f.Agents[name]; !exists {
-					return fmt.Errorf("task queue %q pool %q references undeclared agent %q", prefix, pool, name)
-				}
+	}
+	return nil
+}
+
+func (f File) validateAgent(name string, a AgentSpec) error {
+	if !agent.ValidName(name) {
+		return fmt.Errorf("invalid agent name %q", name)
+	}
+	if a.Image == "" {
+		return fmt.Errorf("agent %q has no image", name)
+	}
+	if a.Group != "" {
+		if !agent.ValidName(a.Group) {
+			return fmt.Errorf("agent %q references invalid group name %q", name, a.Group)
+		}
+		if _, ok := f.Groups[a.Group]; !ok {
+			return fmt.Errorf("agent %q references undeclared group %q", name, a.Group)
+		}
+	}
+	if a.Budget != nil {
+		if _, err := a.Budget.NormalizedMode(); err != nil {
+			return fmt.Errorf("agent %q budget: %w", name, err)
+		}
+	}
+	if a.Harness != nil {
+		if err := a.Harness.Validate(); err != nil {
+			return fmt.Errorf("agent %q %w", name, err)
+		}
+	}
+	if _, err := a.effectiveTimeoutSeconds(); err != nil {
+		return fmt.Errorf("agent %q %w", name, err)
+	}
+	if _, _, err := a.goalWaitCustomerTimeoutSeconds(); err != nil {
+		return fmt.Errorf("agent %q %w", name, err)
+	}
+	if _, _, err := a.goalDeliveryCooldownSeconds(); err != nil {
+		return fmt.Errorf("agent %q %w", name, err)
+	}
+	if a.Loop != nil {
+		return validateAgentLoop(name, a)
+	}
+	return nil
+}
+
+// validateAgentLoop checks the loop block of an agent that has one.
+func validateAgentLoop(name string, a AgentSpec) error {
+	if _, _, err := a.intervalSeconds(); err != nil {
+		return fmt.Errorf("agent %q loop %w", name, err)
+	}
+	if !validPolicy(a.Loop.OnTimeout) {
+		return fmt.Errorf("agent %q loop on_timeout %q must be restart|stop", name, a.Loop.OnTimeout)
+	}
+	if !validPolicy(a.Loop.OnError) {
+		return fmt.Errorf("agent %q loop on_error %q must be restart|stop", name, a.Loop.OnError)
+	}
+	if a.Loop.MaxIdleIterations != nil && *a.Loop.MaxIdleIterations < 0 {
+		return fmt.Errorf("agent %q loop max_idle_iterations %d must be >= 0", name, *a.Loop.MaxIdleIterations)
+	}
+	return nil
+}
+
+func (f File) validateTaskQueue(prefix string, queue TaskQueueSpec) error {
+	if !taskQueuePrefixRE.MatchString(prefix) {
+		return fmt.Errorf("invalid task queue prefix %q", prefix)
+	}
+	if strings.TrimSpace(queue.Name) == "" {
+		return fmt.Errorf("task queue %q name is required", prefix)
+	}
+	if _, _, err := queue.WorkflowRef(); err != nil {
+		return fmt.Errorf("task queue %q workflow %q: %w", prefix, queue.Workflow, err)
+	}
+	for pool, members := range queue.Pools {
+		if !poolRouteSegmentRE.MatchString(pool) {
+			return fmt.Errorf("task queue %q has unsafe pool route name %q", prefix, pool)
+		}
+		for _, name := range normalizeAgentNames(members) {
+			if _, exists := f.Agents[name]; !exists {
+				return fmt.Errorf("task queue %q pool %q references undeclared agent %q", prefix, pool, name)
 			}
 		}
 	}

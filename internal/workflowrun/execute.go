@@ -51,72 +51,9 @@ type Result struct {
 // process group with combined output in RunDir/run.log, enforces the timeout,
 // reads RunDir/result.json, and classifies. Cancelling ctx kills the group.
 func Execute(ctx context.Context, spec Spec) Result {
-	var res Result
-	// fail records a run that ended before or instead of a normal exit. The
-	// reason also goes to the log when one is open, so a reader sees it there.
-	var logFile *os.File
-	fail := func(format string, args ...any) Result {
-		res.Verdict = failure(format, args...)
-		now := time.Now()
-		if res.Started.IsZero() {
-			res.Started = now
-		}
-		res.Finished = now
-		if logFile != nil {
-			_, _ = fmt.Fprintf(logFile, "error: %s\n", res.Verdict.Message)
-			tidy.Close(nil, logFile)
-		}
-		return res
-	}
-
-	for _, dir := range []string{spec.RunDir, spec.TaskDir} {
-		if err := ownerDir(dir); err != nil {
-			return fail("cannot create directory %s: %v", dir, err)
-		}
-	}
-	logPath, err := filepath.Abs(filepath.Join(spec.RunDir, "run.log"))
-	if err != nil {
-		return fail("cannot resolve the run log path: %v", err)
-	}
-	logFile, err = os.OpenFile(logPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0o600)
-	if err != nil {
-		logFile = nil
-		return fail("cannot create the run log %s: %v", logPath, err)
-	}
-	res.LogPath = logPath
-	if _, err := fmt.Fprintf(logFile, "script: %s\ncwd: %s\n", spec.ScriptPath, spec.Cwd); err != nil {
-		return fail("cannot write the run log %s: %v", logPath, err)
-	}
-
-	// A source run has no task, so it has no snapshot.
-	if spec.Kind != tasks.RunKindSource {
-		taskFile := filepath.Join(spec.RunDir, "task.json")
-		if err := writeOwnerFile(taskFile, spec.Snapshot); err != nil {
-			return fail("cannot write %s: %v", taskFile, err)
-		}
-	}
-	resultPath := filepath.Join(spec.RunDir, "result.json")
-	if err := os.Remove(resultPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fail("cannot remove the stale result file %s: %v", resultPath, err)
-	}
-
-	if info, err := os.Stat(spec.Cwd); err != nil {
-		return fail("the working directory %s is not usable: %v", spec.Cwd, err)
-	} else if !info.IsDir() {
-		return fail("the working directory %s is not a directory", spec.Cwd)
-	}
-	if !filepath.IsAbs(spec.ScriptPath) {
-		return fail("the script path %s is not absolute", spec.ScriptPath)
-	}
-	if info, err := os.Stat(spec.ScriptPath); err != nil {
-		return fail("the script %s is not usable: %v", spec.ScriptPath, err)
-	} else if !info.Mode().IsRegular() {
-		return fail("the script %s is not a regular file", spec.ScriptPath)
-	} else if info.Mode().Perm()&0o111 == 0 {
-		return fail("the script %s is not executable", spec.ScriptPath)
-	}
-	if ctx.Err() != nil {
-		return fail("the run was cancelled before it started")
+	e := &execution{spec: spec}
+	if err := e.prepare(ctx); err != nil {
+		return e.fail("%v", err)
 	}
 
 	timeout := spec.Timeout
@@ -128,46 +65,171 @@ func Execute(ctx context.Context, spec Spec) Result {
 
 	devNull, err := os.Open(os.DevNull)
 	if err != nil {
-		return fail("cannot open %s: %v", os.DevNull, err)
+		return e.fail("cannot open %s: %v", os.DevNull, err)
 	}
 	defer devNull.Close()
 
-	// The worker signals the process group itself, never through os/exec's
-	// context handling, which may signal after the process was reaped.
-	cmd := exec.Command(spec.ScriptPath)
-	cmd.Dir, cmd.Env = spec.Cwd, spec.Env
+	cmd := e.command(devNull)
+	e.res.Started = time.Now()
+	if err := cmd.Start(); err != nil {
+		return e.fail("cannot start the script %s: %v", spec.ScriptPath, err)
+	}
+	proc := startProcess(cmd.Process.Pid)
+	if !callOnStart(spec.OnStart, proc.pid) {
+		return e.abandon(cmd, proc)
+	}
+	killed := awaitProcessExit(runCtx, proc)
+	e.reap(cmd, proc)
+	tidy.Close(nil, e.logFile)
+	return e.judge(ctx, runCtx, cmd, killed)
+}
+
+// execution is the state of one Execute call: the result so far and, once it
+// is open, the run log.
+type execution struct {
+	spec    Spec
+	res     Result
+	logFile *os.File
+}
+
+func (e *execution) resultPath() string {
+	return filepath.Join(e.spec.RunDir, "result.json")
+}
+
+// fail records a run that ended before or instead of a normal exit. The
+// reason also goes to the log when one is open, so a reader sees it there.
+func (e *execution) fail(format string, args ...any) Result {
+	e.res.Verdict = failure(format, args...)
+	now := time.Now()
+	if e.res.Started.IsZero() {
+		e.res.Started = now
+	}
+	e.res.Finished = now
+	if e.logFile != nil {
+		_, _ = fmt.Fprintf(e.logFile, "error: %s\n", e.res.Verdict.Message)
+		tidy.Close(nil, e.logFile)
+	}
+	return e.res
+}
+
+// prepare does everything that must hold before the script starts. Its error
+// is the failure message of the run.
+func (e *execution) prepare(ctx context.Context) error {
+	if err := e.openLog(); err != nil {
+		return err
+	}
+	if err := e.writeInputs(); err != nil {
+		return err
+	}
+	if err := e.checkRunnable(); err != nil {
+		return err
+	}
+	if ctx.Err() != nil {
+		return errors.New("the run was cancelled before it started")
+	}
+	return nil
+}
+
+// openLog creates the run directories and the run log with its header.
+func (e *execution) openLog() error {
+	spec := e.spec
+	for _, dir := range []string{spec.RunDir, spec.TaskDir} {
+		if err := ownerDir(dir); err != nil {
+			return fmt.Errorf("cannot create directory %s: %v", dir, err)
+		}
+	}
+	logPath, err := filepath.Abs(filepath.Join(spec.RunDir, "run.log"))
+	if err != nil {
+		return fmt.Errorf("cannot resolve the run log path: %v", err)
+	}
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0o600)
+	if err != nil {
+		return fmt.Errorf("cannot create the run log %s: %v", logPath, err)
+	}
+	e.logFile = logFile
+	e.res.LogPath = logPath
+	if _, err := fmt.Fprintf(logFile, "script: %s\ncwd: %s\n", spec.ScriptPath, spec.Cwd); err != nil {
+		return fmt.Errorf("cannot write the run log %s: %v", logPath, err)
+	}
+	return nil
+}
+
+// writeInputs writes the task snapshot and removes any stale result file.
+func (e *execution) writeInputs() error {
+	// A source run has no task, so it has no snapshot.
+	if e.spec.Kind != tasks.RunKindSource {
+		taskFile := filepath.Join(e.spec.RunDir, "task.json")
+		if err := writeOwnerFile(taskFile, e.spec.Snapshot); err != nil {
+			return fmt.Errorf("cannot write %s: %v", taskFile, err)
+		}
+	}
+	resultPath := e.resultPath()
+	if err := os.Remove(resultPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("cannot remove the stale result file %s: %v", resultPath, err)
+	}
+	return nil
+}
+
+// checkRunnable checks the working directory and the script.
+func (e *execution) checkRunnable() error {
+	spec := e.spec
+	if info, err := os.Stat(spec.Cwd); err != nil {
+		return fmt.Errorf("the working directory %s is not usable: %v", spec.Cwd, err)
+	} else if !info.IsDir() {
+		return fmt.Errorf("the working directory %s is not a directory", spec.Cwd)
+	}
+	if !filepath.IsAbs(spec.ScriptPath) {
+		return fmt.Errorf("the script path %s is not absolute", spec.ScriptPath)
+	}
+	if info, err := os.Stat(spec.ScriptPath); err != nil {
+		return fmt.Errorf("the script %s is not usable: %v", spec.ScriptPath, err)
+	} else if !info.Mode().IsRegular() {
+		return fmt.Errorf("the script %s is not a regular file", spec.ScriptPath)
+	} else if info.Mode().Perm()&0o111 == 0 {
+		return fmt.Errorf("the script %s is not executable", spec.ScriptPath)
+	}
+	return nil
+}
+
+// command builds the script's process. The worker signals the process group
+// itself, never through os/exec's context handling, which may signal after the
+// process was reaped.
+func (e *execution) command(stdin *os.File) *exec.Cmd {
+	cmd := exec.Command(e.spec.ScriptPath)
+	cmd.Dir, cmd.Env = e.spec.Cwd, e.spec.Env
 	if cmd.Env == nil {
 		// A nil Env means "inherit" to os/exec; a run gets exactly spec.Env.
 		cmd.Env = []string{}
 	}
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = devNull, logFile, logFile
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, e.logFile, e.logFile
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	return cmd
+}
 
-	res.Started = time.Now()
-	if err := cmd.Start(); err != nil {
-		return fail("cannot start the script %s: %v", spec.ScriptPath, err)
+// reap kills what the script left in its group while the exited leader, not
+// yet reaped, still holds the group id, and then reaps the leader.
+func (e *execution) reap(cmd *exec.Cmd, proc *process) {
+	<-proc.exited
+	if err := syscall.Kill(-proc.pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+		_, _ = fmt.Fprintf(e.logFile, "error: cannot kill the process group %d: %v\n", proc.pid, err)
 	}
-	pid := cmd.Process.Pid
-	proc := startProcess(pid)
-	// reap kills what the script left in its group while the exited leader,
-	// not yet reaped, still holds the group id, and then reaps the leader.
-	reap := func() {
-		<-proc.exited
-		if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
-			_, _ = fmt.Fprintf(logFile, "error: cannot kill the process group %d: %v\n", pid, err)
-		}
-		_ = cmd.Wait() // reaper only: a non-zero exit is reported through the run result, not here
-		res.Finished = time.Now()
-	}
-	if !callOnStart(spec.OnStart, pid) {
-		proc.signal(syscall.SIGKILL)
-		reap()
-		_, _ = fmt.Fprintln(logFile, "error: run bookkeeping failed")
-		tidy.Close(nil, logFile)
-		res.Verdict = failure("run bookkeeping failed")
-		return res
-	}
-	killed := false
+	_ = cmd.Wait() // reaper only: a non-zero exit is reported through the run result, not here
+	e.res.Finished = time.Now()
+}
+
+// abandon kills a started script whose bookkeeping failed.
+func (e *execution) abandon(cmd *exec.Cmd, proc *process) Result {
+	proc.signal(syscall.SIGKILL)
+	e.reap(cmd, proc)
+	_, _ = fmt.Fprintln(e.logFile, "error: run bookkeeping failed")
+	tidy.Close(nil, e.logFile)
+	e.res.Verdict = failure("run bookkeeping failed")
+	return e.res
+}
+
+// awaitProcessExit waits for the script to exit, and stops it when runCtx ends first.
+// It reports whether the script was signalled.
+func awaitProcessExit(runCtx context.Context, proc *process) (killed bool) {
 	select {
 	case <-proc.exited:
 	case <-runCtx.Done():
@@ -184,25 +246,27 @@ func Execute(ctx context.Context, spec Spec) Result {
 			}
 		}
 	}
-	reap()
-	tidy.Close(nil, logFile)
+	return killed
+}
 
+// judge turns a reaped script into the result of the run.
+func (e *execution) judge(ctx, runCtx context.Context, cmd *exec.Cmd, killed bool) Result {
 	if st := cmd.ProcessState; st != nil && st.Exited() {
 		code := st.ExitCode()
-		res.ExitCode = &code
+		e.res.ExitCode = &code
 	}
 	if killed && ctx.Err() != nil {
-		res.Verdict = failure("the run was cancelled")
-		return res
+		e.res.Verdict = failure("the run was cancelled")
+		return e.res
 	}
-	res.TimedOut = killed && errors.Is(runCtx.Err(), context.DeadlineExceeded)
+	e.res.TimedOut = killed && errors.Is(runCtx.Err(), context.DeadlineExceeded)
 	var raw []byte
 	var resultErr error
-	if !res.TimedOut {
-		raw, resultErr = readResultFile(resultPath)
+	if !e.res.TimedOut {
+		raw, resultErr = readResultFile(e.resultPath())
 	}
-	res.Verdict = Classify(spec.Kind, res.ExitCode, res.TimedOut, raw, resultErr, spec.Declared)
-	return res
+	e.res.Verdict = Classify(e.spec.Kind, e.res.ExitCode, e.res.TimedOut, raw, resultErr, e.spec.Declared)
+	return e.res
 }
 
 // testHookTimeout, when set by a test, runs when the timeout fires, before the
