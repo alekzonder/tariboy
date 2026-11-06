@@ -3,22 +3,51 @@ package compose
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/stores"
+	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 )
 
 var taskQueuePrefixRE = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
 var poolRouteSegmentRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
+// TaskQueueSpec is one task queue. An empty description, owners or
+// responsible_agent leaves the daemon's value untouched, as an empty workflow
+// does; up never removes a pool, env key, secret or trigger the file omits.
 type TaskQueueSpec struct {
-	Name  string              `yaml:"name"`
-	Pools map[string][]string `yaml:"pools"`
+	Name             string              `yaml:"name"`
+	Description      string              `yaml:"description,omitempty"`
+	Owners           []string            `yaml:"owners,omitempty"`
+	ResponsibleAgent string              `yaml:"responsible_agent,omitempty"`
+	Pools            map[string][]string `yaml:"pools"`
 	// Workflow is "[STORE/]NAME[:TAG]", the workflow image the queue follows
 	// (see ParseWorkflowRef). Empty leaves an existing binding untouched.
 	Workflow string `yaml:"workflow,omitempty"`
+	// Triggers create tasks from letters to the queue; up creates the ones
+	// the queue lacks.
+	Triggers []TriggerSpec `yaml:"triggers,omitempty"`
+	// Env holds plain variables for workflow scripts, CUSTOMER_AGENT_POOL
+	// among them.
+	Env map[string]string `yaml:"env,omitempty"`
+	// Secrets names, for each secret, the variable of the compose process
+	// that holds its value. The file never holds a secret value.
+	Secrets map[string]SecretSpec `yaml:"secrets,omitempty"`
+}
+
+// TriggerSpec is one workflow trigger. An empty Action means create_task.
+type TriggerSpec struct {
+	Pattern        string `yaml:"pattern"`
+	CorrelationKey string `yaml:"correlation_key,omitempty"`
+	Action         string `yaml:"action,omitempty"`
+}
+
+// SecretSpec reads a secret value from the environment variable FromEnv.
+type SecretSpec struct {
+	FromEnv string `yaml:"from_env"`
 }
 
 // WorkflowRef is a parsed task_queues.<PREFIX>.workflow value. A Store prefix
@@ -115,15 +144,98 @@ func (f File) validateTaskQueue(prefix string, queue TaskQueueSpec) error {
 	if _, _, err := queue.WorkflowRef(); err != nil {
 		return fmt.Errorf("task queue %q workflow %q: %w", prefix, queue.Workflow, err)
 	}
-	for pool, members := range queue.Pools {
+	for _, pool := range sortedKeys(queue.Pools) {
 		if !poolRouteSegmentRE.MatchString(pool) {
 			return fmt.Errorf("task queue %q has unsafe pool route name %q", prefix, pool)
 		}
-		for _, name := range normalizeAgentNames(members) {
+		for _, name := range normalizeAgentNames(queue.Pools[pool]) {
 			if _, exists := f.Agents[name]; !exists {
 				return fmt.Errorf("task queue %q pool %q references undeclared agent %q", prefix, pool, name)
 			}
 		}
 	}
+	if queue.ResponsibleAgent != "" {
+		if _, exists := f.Agents[queue.ResponsibleAgent]; !exists {
+			return fmt.Errorf("task queue %q responsible_agent references undeclared agent %q", prefix, queue.ResponsibleAgent)
+		}
+	}
+	if err := validateQueueValues(queue); err != nil {
+		return fmt.Errorf("task queue %q %w", prefix, err)
+	}
+	if err := validateQueueTriggers(queue.Triggers); err != nil {
+		return fmt.Errorf("task queue %q %w", prefix, err)
+	}
 	return nil
+}
+
+// queueValueKeyRE is the daemon's rule for an env or secret key, and the
+// rule for the name of the variable a secret reads.
+var queueValueKeyRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+func validQueueValueKey(key string) bool {
+	return queueValueKeyRE.MatchString(key) && !strings.HasPrefix(key, "TARIBOY_")
+}
+
+// validateQueueValues checks the env and secrets keys as the daemon does. A
+// key is either env or a secret, and CUSTOMER_AGENT_POOL is env only.
+func validateQueueValues(queue TaskQueueSpec) error {
+	for _, key := range sortedKeys(queue.Env) {
+		if !validQueueValueKey(key) {
+			return fmt.Errorf("env key %q: want letters, digits and underscores, not starting with a digit or TARIBOY_", key)
+		}
+	}
+	for _, key := range sortedKeys(queue.Secrets) {
+		from := queue.Secrets[key].FromEnv
+		switch {
+		case !validQueueValueKey(key):
+			return fmt.Errorf("secret key %q: want letters, digits and underscores, not starting with a digit or TARIBOY_", key)
+		case key == tasks.CustomerAgentPoolEnv:
+			return fmt.Errorf("secret %q: CUSTOMER_AGENT_POOL is a plain env var; declare it in env", key)
+		case from == "":
+			return fmt.Errorf("secret %q needs from_env, the variable that holds its value", key)
+		case !queueValueKeyRE.MatchString(from):
+			return fmt.Errorf("secret %q from_env %q is not a valid environment variable name", key, from)
+		}
+		if _, dup := queue.Env[key]; dup {
+			return fmt.Errorf("key %q is declared in env and secrets", key)
+		}
+	}
+	return nil
+}
+
+func validateQueueTriggers(triggers []TriggerSpec) error {
+	seen := map[TriggerSpec]bool{}
+	for _, t := range triggers {
+		kind, name, ok := strings.Cut(t.Pattern, ":")
+		if !ok || !slices.Contains([]string{"agent", "user", "plugin", "system"}, kind) || name == "" {
+			return fmt.Errorf("trigger pattern %q: want KIND:NAME, KIND one of agent, user, plugin, system", t.Pattern)
+		}
+		if t.Action != "" && t.Action != "create_task" {
+			return fmt.Errorf("trigger action %q: want create_task", t.Action)
+		}
+		if seen[t.normalized()] {
+			return fmt.Errorf("trigger %s is declared twice", t)
+		}
+		seen[t.normalized()] = true
+	}
+	return nil
+}
+
+// normalized fills the default action, the form the daemon stores.
+func (t TriggerSpec) normalized() TriggerSpec {
+	if t.Action == "" {
+		t.Action = "create_task"
+	}
+	return t
+}
+
+// String is the trigger as status prints it: pattern, action and the
+// correlation key when set.
+func (t TriggerSpec) String() string {
+	t = t.normalized()
+	s := t.Pattern + " " + t.Action
+	if t.CorrelationKey != "" {
+		s += " correlation_key=" + t.CorrelationKey
+	}
+	return s
 }

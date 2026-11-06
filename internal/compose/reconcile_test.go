@@ -19,15 +19,63 @@ type taskQueueComposeCaller struct {
 	*fakeCaller
 	queues map[string]tasks.Queue
 	pools  map[string]map[string]tasks.AgentPool
+	// env and secrets hold the queue values by queue and key; a key is
+	// either env or a secret, as in the daemon's one table.
+	env       map[string]map[string]string
+	secrets   map[string]map[string]string
+	globalEnv map[string][]string
+	triggers  map[string][]tasks.QueueWorkflowTrigger
 }
 
 func newTaskQueueComposeCaller() *taskQueueComposeCaller {
-	return &taskQueueComposeCaller{fakeCaller: newFake(), queues: map[string]tasks.Queue{}, pools: map[string]map[string]tasks.AgentPool{}}
+	return &taskQueueComposeCaller{fakeCaller: newFake(), queues: map[string]tasks.Queue{}, pools: map[string]map[string]tasks.AgentPool{},
+		env: map[string]map[string]string{}, secrets: map[string]map[string]string{}, globalEnv: map[string][]string{},
+		triggers: map[string][]tasks.QueueWorkflowTrigger{}}
+}
+
+// applyQueueFields sets the optional queue fields a create or update body
+// carries; owners are normalized as the daemon does.
+func applyQueueFields(q *tasks.Queue, b map[string]any) {
+	if v, ok := b["name"].(string); ok {
+		q.Name = v
+	}
+	if v, ok := b["description"].(string); ok {
+		q.Description = v
+	}
+	if v, ok := b["owners"].([]string); ok {
+		q.Owners = normalizeAgentNames(v)
+	}
+	if v, ok := b["responsible_agent"].(string); ok {
+		q.ResponsibleAgent = v
+	}
+}
+
+func (f *taskQueueComposeCaller) setValue(route string, body any, secret bool) json.RawMessage {
+	parts := strings.Split(route, "/")
+	queue, key := parts[3], parts[5]
+	value := body.(map[string]any)["value"].(string)
+	set, other := f.env, f.secrets
+	if secret {
+		set, other = f.secrets, f.env
+	}
+	if set[queue] == nil {
+		set[queue] = map[string]string{}
+	}
+	set[queue][key] = value
+	delete(other[queue], key)
+	return mustJSON(map[string]any{"queue": queue, "key": key})
 }
 
 func (f *taskQueueComposeCaller) Call(method, route string, body any) (json.RawMessage, error) {
 	f.calls = append(f.calls, method+" "+route)
 	f.bodies = append(f.bodies, body)
+	if err := f.fail[method+" "+route]; err != nil {
+		return nil, err
+	}
+	queue := ""
+	if parts := strings.Split(route, "/"); len(parts) > 3 {
+		queue = parts[3]
+	}
 	switch {
 	case method == "GET" && route == "/api/task-queues":
 		items := []tasks.Queue{}
@@ -35,20 +83,54 @@ func (f *taskQueueComposeCaller) Call(method, route string, body any) (json.RawM
 			items = append(items, item)
 		}
 		return mustJSON(map[string]any{"queues": items, "count": len(items)}), nil
+	case method == "GET" && route == "/api/task-queues/"+queue:
+		q, ok := f.queues[queue]
+		if !ok {
+			return nil, &client.APIError{Code: "not_found", Msg: "queue not found"}
+		}
+		return mustJSON(q), nil
 	case method == "POST" && route == "/api/task-queues":
 		b := body.(map[string]any)
 		prefix := b["prefix"].(string)
-		q := tasks.Queue{Prefix: prefix, Name: b["name"].(string), Revision: 1}
+		q := tasks.Queue{Prefix: prefix, Revision: 1}
+		applyQueueFields(&q, b)
 		f.queues[prefix] = q
 		return mustJSON(q), nil
-	case method == "PATCH" && strings.HasPrefix(route, "/api/task-queues/") && !strings.Contains(route, "/pools/"):
-		prefix := strings.TrimPrefix(route, "/api/task-queues/")
+	case method == "PATCH" && route == "/api/task-queues/"+queue:
 		b := body.(map[string]any)
-		q := f.queues[prefix]
-		q.Name = b["name"].(string)
+		q := f.queues[queue]
+		if b["revision"] != q.Revision {
+			return nil, &client.APIError{Code: "revision_conflict", Msg: fmt.Sprintf("revision %v is stale; current %d", b["revision"], q.Revision)}
+		}
+		applyQueueFields(&q, b)
 		q.Revision++
-		f.queues[prefix] = q
+		f.queues[queue] = q
 		return mustJSON(q), nil
+	case method == "GET" && route == "/api/task-queues/"+queue+"/env":
+		items := []tasks.QueueEnvVar{}
+		for key, value := range f.env[queue] {
+			items = append(items, tasks.QueueEnvVar{Key: key, Value: value})
+		}
+		return mustJSON(map[string]any{"env": items, "count": len(items)}), nil
+	case method == "PUT" && strings.HasPrefix(route, "/api/task-queues/"+queue+"/env/"):
+		return f.setValue(route, body, false), nil
+	case method == "GET" && route == "/api/task-queues/"+queue+"/secrets":
+		items := []tasks.QueueSecretInfo{}
+		for key := range f.secrets[queue] {
+			items = append(items, tasks.QueueSecretInfo{Key: key})
+		}
+		return mustJSON(map[string]any{"secrets": items, "count": len(items), "global_env": f.globalEnv[queue]}), nil
+	case method == "PUT" && strings.HasPrefix(route, "/api/task-queues/"+queue+"/secrets/"):
+		return f.setValue(route, body, true), nil
+	case method == "GET" && route == "/api/task-queues/"+queue+"/workflow-triggers":
+		items := append([]tasks.QueueWorkflowTrigger{}, f.triggers[queue]...)
+		return mustJSON(map[string]any{"items": items, "count": len(items)}), nil
+	case method == "POST" && route == "/api/task-queues/"+queue+"/workflow-triggers":
+		b := body.(map[string]any)
+		item := tasks.QueueWorkflowTrigger{ID: int64(len(f.triggers[queue]) + 1), Queue: queue, Pattern: b["pattern"].(string),
+			CorrelationKey: b["correlation_key"].(string), Action: b["action"].(string), Enabled: true}
+		f.triggers[queue] = append(f.triggers[queue], item)
+		return mustJSON(item), nil
 	case method == "GET" && strings.HasSuffix(route, "/pools"):
 		queue := strings.Split(route, "/")[3]
 		items := []tasks.AgentPool{}

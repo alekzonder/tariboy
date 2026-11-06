@@ -5,17 +5,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/client"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
-// queuesPhase creates and renames the task queues through the typed native
+// queuesPhase creates and updates the task queues through the typed native
 // Tasks REST commands, whose daemon handlers are backed by
 // registry.TaskControl. Compose never reaches into task persistence directly.
-// Pools and workflow bindings follow in the queue bindings phase, once the
-// agents they name exist.
+// It sets the name, description, owners, plain env and secrets; pools,
+// CUSTOMER_AGENT_POOL, the responsible agent, the workflow binding and the
+// triggers follow in the queue bindings phase, once the agents exist.
 type queuesPhase struct{}
 
 func (queuesPhase) name() string { return "queues" }
@@ -24,24 +26,64 @@ func (queuesPhase) plan(p *planner, f File, live *liveState) error {
 	for _, prefix := range sortedKeys(f.TaskQueues) {
 		want := f.TaskQueues[prefix]
 		id := "queue:" + prefix
-		queue, exists := live.queues[prefix]
-		switch {
-		case !exists:
-			p.status(id, true, "task queue %-10s MISSING (want name=%s)", prefix, want.Name)
-			p.provide(id, p.add(Action{Resource: id, Kind: "create", Note: "creating task queue " + prefix, Fail: "create task queue " + prefix,
-				Fields: []Field{{Name: "name", To: want.Name}},
-				Call:   Call{"POST", "/api/task-queues", map[string]any{"prefix": prefix, "name": want.Name}}}))
-		case queue.Name != want.Name:
+		if queue, exists := live.queues[prefix]; exists {
 			p.resource(id).queue = prefix
-			p.status(id, true, "task queue %-10s name drift: have=%s want=%s", prefix, queue.Name, want.Name)
-			p.add(Action{Resource: id, Kind: "rename", Note: "updating task queue " + prefix, Fail: "update task queue " + prefix,
-				Fields: []Field{{Name: "name", From: queue.Name, To: want.Name}},
-				Call:   Call{"PATCH", "/api/task-queues/" + prefix, map[string]any{"name": want.Name, "revision": queue.Revision}}})
-		default:
-			p.resource(id).queue = prefix
+			p.planQueueUpdate(prefix, want, queue)
+		} else {
+			p.planQueueCreate(prefix, want)
 		}
+		p.planQueueEnv(prefix, want, live, false)
+		p.planQueueSecrets(prefix, want, live)
 	}
 	return nil
+}
+
+func (p *planner) planQueueCreate(prefix string, want TaskQueueSpec) {
+	id := "queue:" + prefix
+	p.status(id, true, "task queue %-10s MISSING (want name=%s)", prefix, want.Name)
+	body := map[string]any{"prefix": prefix, "name": want.Name}
+	fields := []Field{{Name: "name", To: want.Name}}
+	if desc := strings.TrimSpace(want.Description); desc != "" {
+		body["description"] = desc
+		fields = append(fields, Field{Name: "description", To: desc})
+	}
+	if owners := normalizeAgentNames(want.Owners); len(owners) > 0 {
+		body["owners"] = owners
+		fields = append(fields, Field{Name: "owners", To: "[" + strings.Join(owners, ", ") + "]"})
+	}
+	p.provide(id, p.add(Action{Resource: id, Kind: "create", Note: "creating task queue " + prefix, Fail: "create task queue " + prefix,
+		Fields: fields, Call: Call{"POST", "/api/task-queues", body}}))
+}
+
+// planQueueUpdate sends one PATCH with every declared field that differs:
+// name, description and owners. An empty description or owners list in the
+// file leaves the daemon's value.
+func (p *planner) planQueueUpdate(prefix string, want TaskQueueSpec, queue tasks.Queue) {
+	id := "queue:" + prefix
+	body := map[string]any{"revision": queue.Revision}
+	var fields []Field
+	if queue.Name != want.Name {
+		p.status(id, true, "task queue %-10s name drift: have=%s want=%s", prefix, queue.Name, want.Name)
+		body["name"] = want.Name
+		fields = append(fields, Field{Name: "name", From: queue.Name, To: want.Name})
+	}
+	// The daemon trims the description, so the file's value is compared trimmed.
+	if desc := strings.TrimSpace(want.Description); desc != "" && queue.Description != desc {
+		p.status(id, true, "task queue %-10s description drift: have=%q want=%q", prefix, queue.Description, desc)
+		body["description"] = desc
+		fields = append(fields, Field{Name: "description", From: queue.Description, To: desc})
+	}
+	if owners := normalizeAgentNames(want.Owners); len(owners) > 0 && !slices.Equal(normalizeAgentNames(queue.Owners), owners) {
+		have, to := "["+strings.Join(queue.Owners, ", ")+"]", "["+strings.Join(owners, ", ")+"]"
+		p.status(id, true, "task queue %-10s owners drift: have=%s want=%s", prefix, have, to)
+		body["owners"] = owners
+		fields = append(fields, Field{Name: "owners", From: have, To: to})
+	}
+	if len(fields) == 0 {
+		return
+	}
+	p.add(Action{Resource: id, Kind: "update", Note: "updating task queue " + prefix, Fail: "update task queue " + prefix,
+		Fields: fields, Call: Call{"PATCH", "/api/task-queues/" + prefix, body}})
 }
 
 // bindWorkflow resolves and binds the workflow of one queue at apply time. A
@@ -167,8 +209,8 @@ func (r *Runner) queueWorkflow(queue string) (tasks.QueueWorkflow, bool, error) 
 }
 
 // bindWorkflowError keeps the daemon's error code and message, and for a
-// missing secret names the secrets and how to set one. Compose never handles
-// a secret value: the operator sets it with the Tasks CLI.
+// missing secret names the secrets and how to set one: with the Tasks CLI, or
+// through secrets.KEY.from_env in the file.
 func bindWorkflowError(queue string, ref WorkflowRef, err error) error {
 	var apiErr *client.APIError
 	if !errors.As(err, &apiErr) || apiErr.Code != "workflow_secret_missing" {
