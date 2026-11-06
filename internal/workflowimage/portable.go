@@ -67,25 +67,71 @@ func writePortable(w io.Writer, root string, files []FileEntry, kind string, met
 // digest differs from the one the archive names is refused before anything is
 // written. The staged copy is always removed.
 func (r *Registry) Import(archive io.Reader, size int64, stagingRoot string, now time.Time) (Manifest, bool, error) {
-	if err := os.MkdirAll(stagingRoot, 0o700); err != nil {
-		return Manifest{}, false, err
-	}
-	tmp, err := os.MkdirTemp(stagingRoot, "import-")
+	src, meta, cleanup, err := stageArchive(archive, size, stagingRoot, "import-")
 	if err != nil {
 		return Manifest{}, false, err
 	}
-	defer os.RemoveAll(tmp)
-	dir := filepath.Join(tmp, "source")
+	defer cleanup()
+	return r.published(r.publish(src, meta.Digest, now))
+}
+
+// ArchiveInfo is what VerifyArchive proves about a workflow image archive.
+type ArchiveInfo struct {
+	Name    string
+	Version string
+	Digest  string
+}
+
+// VerifyArchive stages an archive written by Export under stagingRoot,
+// recomputes the digest of its content and compares it with the one the
+// archive names, as Import does, but writes nothing to a store. The staged
+// copy is always removed.
+func VerifyArchive(archive io.Reader, size int64, stagingRoot string) (ArchiveInfo, error) {
+	src, meta, cleanup, err := stageArchive(archive, size, stagingRoot, "verify-")
+	if err != nil {
+		return ArchiveInfo{}, err
+	}
+	defer cleanup()
+	_, entries, _, err := prepareSource(src)
+	if err != nil {
+		return ArchiveInfo{}, err
+	}
+	if digest := computeDigest(entries); digest != meta.Digest {
+		return ArchiveInfo{}, fmt.Errorf("%w: archive names %s, content is %s", ErrDigestMismatch, meta.Digest, digest)
+	}
+	return ArchiveInfo{Name: src.Name, Version: src.WorkflowVersion, Digest: meta.Digest}, nil
+}
+
+// stageArchive unpacks a workflow image archive into a new directory under
+// stagingRoot, restores the executable bits it lists and parses its
+// Workflowfile. cleanup removes the directory; it is nil on error.
+func stageArchive(archive io.Reader, size int64, stagingRoot, prefix string) (*workflowfile.File, archiveMetadata, func(), error) {
+	if err := os.MkdirAll(stagingRoot, 0o700); err != nil {
+		return nil, archiveMetadata{}, nil, err
+	}
+	tmp, err := os.MkdirTemp(stagingRoot, prefix)
+	if err != nil {
+		return nil, archiveMetadata{}, nil, err
+	}
+	src, meta, err := stageInto(archive, size, filepath.Join(tmp, "source"))
+	if err != nil {
+		os.RemoveAll(tmp)
+		return nil, archiveMetadata{}, nil, err
+	}
+	return src, meta, func() { os.RemoveAll(tmp) }, nil
+}
+
+func stageInto(archive io.Reader, size int64, dir string) (*workflowfile.File, archiveMetadata, error) {
 	pm, err := portablearchive.Stage(archive, size, dir, portablearchive.DefaultLimits())
 	if err != nil {
-		return Manifest{}, false, fmt.Errorf("%w: %v", ErrBadArchive, err)
+		return nil, archiveMetadata{}, fmt.Errorf("%w: %v", ErrBadArchive, err)
 	}
 	if pm.Kind != archiveKind {
-		return Manifest{}, false, fmt.Errorf("%w: archive kind is %q", ErrBadArchive, pm.Kind)
+		return nil, archiveMetadata{}, fmt.Errorf("%w: archive kind is %q", ErrBadArchive, pm.Kind)
 	}
 	var meta archiveMetadata
 	if err := safefs.DecodeStrictJSON(bytes.NewReader(pm.Metadata), &meta); err != nil || !IsDigest(meta.Digest) {
-		return Manifest{}, false, fmt.Errorf("%w: invalid metadata", ErrBadArchive)
+		return nil, archiveMetadata{}, fmt.Errorf("%w: invalid metadata", ErrBadArchive)
 	}
 	listed := make(map[string]bool, len(pm.Files))
 	for _, f := range pm.Files {
@@ -94,15 +140,15 @@ func (r *Registry) Import(archive io.Reader, size int64, stagingRoot string, now
 	for _, p := range meta.Executable {
 		// Stage checked every listed path, so a listed one is safe to join.
 		if !listed[p] {
-			return Manifest{}, false, fmt.Errorf("%w: executable %q is not in the archive", ErrBadArchive, p)
+			return nil, archiveMetadata{}, fmt.Errorf("%w: executable %q is not in the archive", ErrBadArchive, p)
 		}
 		if err := os.Chmod(filepath.Join(dir, filepath.FromSlash(p)), 0o700); err != nil {
-			return Manifest{}, false, err
+			return nil, archiveMetadata{}, err
 		}
 	}
 	src, err := workflowfile.Parse(dir)
 	if err != nil {
-		return Manifest{}, false, fmt.Errorf("%w: %v", ErrInvalid, err)
+		return nil, archiveMetadata{}, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
-	return r.published(r.publish(src, meta.Digest, now))
+	return src, meta, nil
 }

@@ -45,6 +45,9 @@ type Action struct {
 	Call      Call
 	Fields    []Field // what the action sets, without secret values
 	DependsOn []int   // indexes into Plan.Actions
+	// SkipReason makes Apply skip the action without a call; the report
+	// gives it as the reason, such as "skipped (archive)".
+	SkipReason string
 
 	// run replaces Call for an action that resolves its request at apply
 	// time, from the results of earlier actions, or reads the state around
@@ -167,10 +170,11 @@ func (p *planner) needs(keys ...string) []int {
 }
 
 // imageKey is the key of the build of the file image an agent image ref
-// names, or "" when the file does not build that image.
-func imageKey(f File, ref string) string {
+// names, or "" when the file does not build that image. An archive imports
+// every agent image, declared or not.
+func (p *planner) imageKey(f File, ref string) string {
 	name, _, _ := strings.Cut(ref, ":")
-	if _, ok := f.Images[name]; !ok {
+	if _, ok := f.Images[name]; !ok && p.r.archive == nil {
 		return ""
 	}
 	return "image:" + name

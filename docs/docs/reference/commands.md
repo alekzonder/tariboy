@@ -88,21 +88,23 @@ tariboy has four command surfaces:
 | `tariboy budget ls` | List configured budgets |
 | `tariboy budget set` | Set a cost budget (scope agent:\<name\>\|group:\<g\>\|global) |
 | `tariboy budget status` | Show current spend vs limit for each budget |
-| `tariboy compose archive` | Create a compose-only portable team archive; transfer runnable images separately |
+| `tariboy compose archive` | Deprecated alias of pack; removed in the next release |
 | `tariboy compose build` | Build the file's Stores, workflows and images |
 | `tariboy compose down` | Remove the file's agents and groups; --volumes also deletes their data |
 | `tariboy compose exec MEMBER [PROMPT...]` | Run an iteration of one of the file's agents now, with an optional prompt |
-| `tariboy compose import` | Preview and import compose-only team/runtime configuration |
+| `tariboy compose import` | Deprecated alias of unpack --archive FILE; removed in the next release |
 | `tariboy compose kill [MEMBERS...]` | Kill the current iteration of the file's agents, or the named agents and groups |
 | `tariboy compose logs [MEMBERS...]` | Print recent events of the file's agents, or the named agents and groups |
+| `tariboy compose pack` | Build the file's workflows and images, then write the file and their archives to one compose archive (-o FILE) |
 | `tariboy compose ps` | List the file's agents and their live state |
 | `tariboy compose restart [MEMBERS...]` | Restart the file's agents, or the named agents and groups |
 | `tariboy compose rm [MEMBERS...]` | Remove the file's stopped agents, or the named agents and groups |
 | `tariboy compose start [MEMBERS...]` | Start the file's agents, or the named agents and groups |
 | `tariboy compose status` | Compare the file with the daemon and report drift |
 | `tariboy compose stop [MEMBERS...]` | Stop the file's agents, or the named agents and groups |
+| `tariboy compose unpack` | Check a compose archive, then import its images and workflows without network and apply the file; --dry-run prints the plan |
 | `tariboy compose up` | Build, create and start the file's images, task queues, agents and groups phase by phase; start the daemon first; --dry-run prints the plan |
-| `tariboy compose validate` | Check the file's schema, references, local paths and tariboy version range; --daemon also checks the daemon version |
+| `tariboy compose validate` | Check the file's schema, references, local paths and tariboy version range; --archive checks a compose archive offline; --daemon also checks the daemon |
 | `tariboy context get NAME` | Read the agent's CONTEXT.md |
 | `tariboy context set NAME` | Overwrite the agent's CONTEXT.md |
 | `tariboy cp SRC` | Upload a file to the server: cp LOCAL_FILE; download: cp AGENT:SRC LOCAL_DST |
@@ -267,7 +269,13 @@ down:
   file has a `tariboy` version range, a verb that calls the daemon stops before
   any change when the daemon version is outside the range.
   `tariboy compose validate [-f FILE] [--daemon]` checks the file and changes
-  nothing; only `--daemon` makes it read the daemon version. See
+  nothing; only `--daemon` makes it read the daemon version.
+  `tariboy compose pack -o FILE` writes the file and its images and workflow
+  images to one compose archive. `tariboy compose unpack FILE` checks the
+  whole archive, then imports and applies it without network access or a
+  build. `tariboy compose validate --archive FILE` checks an archive offline.
+  `pack` and `unpack` need a running daemon. `compose archive` and
+  `compose import` are deprecated aliases of `pack` and `unpack`. See
   [Compose](/docs/binaries/compose). The compose flags may also come before
   the verb, as in `tariboy compose -f FILE up`.
 

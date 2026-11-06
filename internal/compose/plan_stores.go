@@ -18,6 +18,10 @@ type storesPhase struct{}
 func (storesPhase) name() string { return "stores" }
 
 func (storesPhase) plan(p *planner, f File, live *liveState) error {
+	if p.r.archive != nil {
+		p.planArchiveStores(f)
+		return nil
+	}
 	for _, name := range sortedKeys(f.Stores) {
 		p.planStore(name, f.Stores[name], live.sources)
 	}

@@ -74,7 +74,7 @@ func (r *Runner) Apply(p Plan) Report {
 	results := make([]json.RawMessage, len(p.Actions))
 	errs := make([]error, len(p.Actions))
 	for i, a := range p.Actions {
-		if blocked(a.DependsOn, outcomes) {
+		if a.SkipReason != "" || blocked(a.DependsOn, outcomes) {
 			outcomes[i] = OutcomeSkipped
 			continue
 		}
@@ -133,9 +133,18 @@ func report(p Plan, outcomes []Outcome, errs []error) Report {
 			}
 		}
 	}
+	reasons := map[string]string{}
+	for _, a := range p.Actions {
+		if a.SkipReason != "" {
+			reasons[a.Resource] = a.SkipReason
+		}
+	}
 	for i := range rep.Entries {
 		if e := &rep.Entries[i]; e.Outcome == OutcomeSkipped {
 			e.Err = "an action it depends on failed"
+			if reason, ok := reasons[e.Resource]; ok {
+				e.Err = reason
+			}
 		}
 	}
 	return rep

@@ -18,6 +18,10 @@ func (imagesPhase) plan(p *planner, f File, live *liveState) error {
 	if p.r.skipBuild {
 		return nil
 	}
+	if p.r.archive != nil {
+		p.planArchiveImages()
+		return nil
+	}
 	for _, name := range sortedKeys(f.Images) {
 		spec := f.Images[name]
 		key := "image:" + name
