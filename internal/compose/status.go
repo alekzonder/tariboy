@@ -18,9 +18,20 @@ import (
 // the output always ends with a one-line disclaimer; a bare "drift: N" must
 // never be read as a full convergence guarantee.
 //
+// After them it lists the agents, groups and task queues tied to the file
+// that the file does not declare ("not declared"); they are not drift.
+//
 // This is read-only: it never issues a mutating call.
 func (r *Runner) Status(f File) error {
-	plan, err := r.Plan(f)
+	live, err := r.readLive(f)
+	if err != nil {
+		return fmt.Errorf("status: %w", err)
+	}
+	plan, err := r.planFrom(f, live)
+	if err != nil {
+		return fmt.Errorf("status: %w", err)
+	}
+	undeclared, err := r.undeclared(f, live)
 	if err != nil {
 		return fmt.Errorf("status: %w", err)
 	}
@@ -36,6 +47,9 @@ func (r *Runner) Status(f File) error {
 		if err := r.statusQueueWorkflow(res.queue, f.TaskQueues[res.queue], &drift); err != nil {
 			return err
 		}
+	}
+	for _, line := range undeclared {
+		r.logf("%s", line)
 	}
 	r.logf("drift: %d", drift)
 	r.logf("note: model/plugins drift not checked (not exposed by agent.ps)")

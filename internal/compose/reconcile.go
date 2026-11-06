@@ -34,18 +34,17 @@ func (r *Runner) logf(format string, a ...any) {
 	}
 }
 
-// Up reconciles desired (the file) toward actual (the daemon): it builds the
-// declared images, plans the actions from one read of the live state, applies
-// them, and prints the per-resource report (spec §5.2). A failed action does
-// not stop the others, so a later Up converges the rest. The report already
-// shows each failure, so Up then returns only a count of the failed resources
-// (which unwraps to the action errors). Idempotent: a converged file plans no
-// mutating action.
+// Up reconciles desired (the file) toward actual (the daemon): it plans the
+// actions of every phase from one read of the live state, applies them in
+// phase order, and prints the per-resource report (spec §5.2). A failed
+// action does not stop the others: the actions that depend on it, in any
+// later phase, are skipped, so a later Up converges the rest. The report
+// already shows each failure, so Up then returns only a count of the failed
+// resources (which unwraps to the action errors). Idempotent: on a converged
+// file the only mutating calls are the image and workflow builds, which
+// report ok when they publish the digest the daemon already has.
 func (r *Runner) Up(f File) error {
 	if err := f.Validate(); err != nil {
-		return err
-	}
-	if err := r.Build(f); err != nil {
 		return err
 	}
 	plan, err := r.Plan(f)
@@ -121,8 +120,9 @@ func (r *Runner) Down(f File, volumes bool) error {
 	return nil
 }
 
-// Build publishes every declared image through the daemon. No-op when the file
-// declares no images or the test seam is set.
+// Build publishes every declared image through the daemon, for the build
+// verb; up builds in its images phase. No-op when the file declares no images
+// or the test seam is set.
 func (r *Runner) Build(f File) error {
 	if r.skipBuild {
 		return nil
