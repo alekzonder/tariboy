@@ -41,6 +41,11 @@ printf '{"platform":"%s","arch":"%s","home":"%s","free_disk_kb":%s,"writable_loc
 printf '"tmux":'; tool_json tmux
 printf ',"flock":'; tool_json flock
 printf ',"python3":'; tool_json python3
+printf ',"curl":'; tool_json curl
+printf ',"wget":'; tool_json wget
+printf ',"tar":'; tool_json tar
+printf ',"sha256sum":'; tool_json sha256sum
+printf ',"shasum":'; tool_json shasum
 printf ',"git":'; tool_json git
 printf ',"npx":'; tool_json npx
 printf ',"claude":'; tool_json claude
@@ -66,6 +71,18 @@ pub struct Result {
     pub tmux: Tool,
     pub flock: Tool,
     pub python3: Tool,
+    /// The server downloads and verifies the release archive with these: one
+    /// of curl or wget, tar, and one of sha256sum or shasum.
+    #[serde(default)]
+    pub curl: Tool,
+    #[serde(default)]
+    pub wget: Tool,
+    #[serde(default)]
+    pub tar: Tool,
+    #[serde(default)]
+    pub sha256sum: Tool,
+    #[serde(default)]
+    pub shasum: Tool,
     /// Not install blockers: the running daemon reports them as missing tools.
     #[serde(default)]
     pub git: Tool,
@@ -82,20 +99,25 @@ pub struct Result {
     pub install_supported: bool,
 }
 
-/// Prerequisite named when the server's `uname -s`/`uname -m` has no bundled build.
+/// Prerequisite named when the server's `uname -s`/`uname -m` has no published build.
 pub const PLATFORM_REQUIREMENT: &str = "Linux x86_64/aarch64 or macOS arm64";
 
 pub fn parse(stdout: &str) -> std::result::Result<Result, String> {
     let mut result: Result =
         serde_json::from_str(stdout).map_err(|error| format!("invalid preflight JSON: {error}"))?;
     let platform_supported =
-        crate::bundle::Platform::remote(&result.platform, &result.arch).is_some();
+        crate::bundle::server_archive(&result.platform, &result.arch, "").is_ok();
     // macOS ships no flock; the installer locks through python3 there.
     let flock_required = result.platform == "Linux";
+    let downloader = result.curl.available || result.wget.available;
+    let checksum = result.sha256sum.available || result.shasum.available;
     result.install_supported = platform_supported
         && result.writable_local
         && (result.flock.available || !flock_required)
-        && result.python3.available;
+        && result.python3.available
+        && downloader
+        && result.tar.available
+        && checksum;
     let mut prerequisites = Vec::new();
     if !platform_supported {
         prerequisites.push(PLATFORM_REQUIREMENT.to_string());
@@ -108,6 +130,15 @@ pub fn parse(stdout: &str) -> std::result::Result<Result, String> {
     }
     if !result.python3.available {
         prerequisites.push("python3".to_string());
+    }
+    if !downloader {
+        prerequisites.push("curl or wget".to_string());
+    }
+    if !result.tar.available {
+        prerequisites.push("tar".to_string());
+    }
+    if !checksum {
+        prerequisites.push("sha256sum or shasum".to_string());
     }
     for (name, tool) in [
         ("tmux", &result.tmux),
@@ -165,6 +196,11 @@ mod tests {
               "tmux":{{"available":{tmux},"version":"tmux 3.4"}},
               "flock":{{"available":true,"version":"flock 2.39"}},
               "python3":{{"available":true,"version":"Python 3.12.3"}},
+              "curl":{{"available":true,"version":"curl 8.5.0"}},
+              "wget":{{"available":true,"version":"GNU Wget 1.21.4"}},
+              "tar":{{"available":true,"version":"tar (GNU tar) 1.35"}},
+              "sha256sum":{{"available":true,"version":"sha256sum (GNU coreutils) 9.4"}},
+              "shasum":{{"available":true,"version":"5.84"}},
               "git":{{"available":true,"version":"git version 2.43.0"}},
               "npx":{{"available":true,"version":"10.8.2"}},
               "claude":{{"available":true,"version":"2.0"}},
@@ -258,6 +294,61 @@ mod tests {
         let result = parse(&json).unwrap();
         assert!(!result.install_supported);
         assert!(result.prerequisites.contains(&"python3".to_string()));
+    }
+
+    fn without(json: &str, tools: &[&str]) -> String {
+        tools.iter().fold(json.to_string(), |json, tool| {
+            json.replace(
+                &format!(r#""{tool}":{{"available":true"#),
+                &format!(r#""{tool}":{{"available":false"#),
+            )
+        })
+    }
+
+    #[test]
+    fn missing_download_tools_block_install_and_are_named() {
+        for (missing, prerequisite) in [
+            (&["curl", "wget"][..], "curl or wget"),
+            (&["tar"][..], "tar"),
+            (&["sha256sum", "shasum"][..], "sha256sum or shasum"),
+        ] {
+            let result = parse(&without(&fixture("Linux", "x86_64", true), missing)).unwrap();
+            assert!(!result.install_supported, "{missing:?}");
+            assert!(
+                result.prerequisites.contains(&prerequisite.to_string()),
+                "{missing:?}: {:?}",
+                result.prerequisites
+            );
+        }
+    }
+
+    #[test]
+    fn one_downloader_and_one_checksum_tool_are_enough() {
+        for missing in [&["curl", "sha256sum"][..], &["wget", "shasum"][..]] {
+            let result = parse(&without(&fixture("Linux", "x86_64", true), missing)).unwrap();
+            assert!(result.install_supported, "{missing:?}");
+            assert_eq!(
+                result.prerequisites,
+                vec!["codex", "opencode", "cursor agent"],
+                "{missing:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn fixed_script_reports_download_tools() {
+        let dir = tempfile::tempdir().unwrap();
+        let output = std::process::Command::new("/bin/sh")
+            .arg("-c")
+            .arg(SCRIPT)
+            .env("HOME", dir.path())
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let parsed = parse(&String::from_utf8(output.stdout).unwrap()).unwrap();
+        assert!(parsed.tar.available);
+        assert!(parsed.curl.available || parsed.wget.available);
+        assert!(parsed.sha256sum.available || parsed.shasum.available);
     }
 
     #[test]

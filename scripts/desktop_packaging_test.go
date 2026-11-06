@@ -199,42 +199,95 @@ func TestDesktopPlatformDefaultsToTheNativeHost(t *testing.T) {
 	}
 }
 
-func TestDesktopBinariesCleanManagedPayloadDirectoriesBeforeBuilding(t *testing.T) {
+// The package carries only the set its own platform runs; SSH servers download
+// theirs from the release, so no other platform's binaries ship in it.
+func TestDesktopBinariesBuildOnlyTheNativeSet(t *testing.T) {
 	packageDir, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("resolve test working directory: %v", err)
 	}
 	root := filepath.Dir(packageDir)
-	cmd := exec.Command(
-		"make", "-n", "-o", "desktop-version-check",
-		"DESKTOP_DARWIN_BIN=/", "DESKTOP_LINUX_BIN=/tmp/untrusted-desktop-bin",
-		"DESKTOP_LINUX_ARM64_BIN=/tmp/untrusted-desktop-bin",
-		"desktop-binaries",
-	)
-	cmd.Dir = root
+	for _, host := range []struct {
+		os, arch, set, goos, goarch, format string
+		others                              []string
+	}{
+		{"Linux", "x86_64", "linux-x86_64", "linux", "amd64", "ELF 64-bit.*x86-64", []string{"GOOS=darwin", "GOARCH=arm64", "Mach-O"}},
+		{"Darwin", "arm64", "darwin-arm64", "darwin", "arm64", "Mach-O 64-bit.*arm64", []string{"GOOS=linux", "ELF"}},
+	} {
+		t.Run(host.set, func(t *testing.T) {
+			cmd := exec.Command(
+				"make", "-n", "-o", "desktop-version-check",
+				"HOST_OS="+host.os, "HOST_ARCH="+host.arch,
+				"DESKTOP_NATIVE_BIN=/tmp/untrusted-desktop-bin",
+				"desktop-binaries",
+			)
+			cmd.Dir = root
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("dry-run Desktop payload build: %v\n%s", err, output)
+			}
+			text := string(output)
+			clean := findLine(text, "rm -rf desktop/src-tauri/resources/bin/darwin-arm64 desktop/src-tauri/resources/bin/linux-x86_64 desktop/src-tauri/resources/bin/linux-aarch64")
+			build := findLine(text, "GOOS="+host.goos+" GOARCH="+host.goarch)
+			if clean == "" || build == "" || strings.Index(text, clean) > strings.Index(text, build) {
+				t.Fatalf("managed payload directories are not cleaned before compilation:\n%s", output)
+			}
+			if !strings.Contains(build, "desktop/src-tauri/resources/bin/"+host.set+"/") {
+				t.Fatalf("desktop-binaries does not write the %s set:\n%s", host.set, output)
+			}
+			if !strings.Contains(text, host.format) {
+				t.Fatalf("desktop-binaries does not verify the %s format:\n%s", host.set, output)
+			}
+			rest := strings.Replace(text, clean, "", 1)
+			for _, other := range append(host.others, "linux-aarch64", "remote-install.sh", "SHA256SUMS") {
+				if strings.Contains(rest, other) {
+					t.Fatalf("desktop-binaries for %s still references %q:\n%s", host.set, other, output)
+				}
+			}
+		})
+	}
+}
+
+func TestDesktopBinariesRejectAHostWithoutANativeSet(t *testing.T) {
+	packageDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("resolve test working directory: %v", err)
+	}
+	cmd := exec.Command("make", "-o", "desktop-version-check", "HOST_OS=Linux", "HOST_ARCH=aarch64", "desktop-binaries")
+	cmd.Dir = filepath.Dir(packageDir)
+	output, err := cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(output), "Linux-aarch64") {
+		t.Fatalf("desktop-binaries accepted a host without a native set: %v\n%s", err, output)
+	}
+}
+
+// Every release publishes one server archive for each SSH server platform. The
+// archive is cross-compiled, so it does not depend on the Desktop payload.
+func TestServerArchivesBuildEveryServerPlatform(t *testing.T) {
+	packageDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("resolve test working directory: %v", err)
+	}
+	cmd := exec.Command("make", "-n", "-o", "desktop-version-check", "server-archives")
+	cmd.Dir = filepath.Dir(packageDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("dry-run Desktop payload build: %v\n%s", err, output)
+		t.Fatalf("dry-run server archives: %v\n%s", err, output)
 	}
-
 	text := string(output)
-	clean := findLine(text, "rm -rf desktop/src-tauri/resources/bin/darwin-arm64 desktop/src-tauri/resources/bin/linux-x86_64 desktop/src-tauri/resources/bin/linux-aarch64")
-	firstBuild := findLine(text, "build darwin/arm64")
-	if clean == "" || firstBuild == "" || strings.Index(text, clean) > strings.Index(text, firstBuild) {
-		t.Fatalf("managed payload directories are not cleaned before compilation:\n%s", output)
+	for _, fragment := range []string{
+		"linux-x86_64:linux:amd64", "linux-aarch64:linux:arm64", "darwin-arm64:darwin:arm64",
+		"ELF 64-bit.*x86-64", "ELF 64-bit.*ARM aarch64", "Mach-O 64-bit.*arm64",
+		"dist/server-archives/",
+		"remote-install.sh", "SHA256SUMS", "VERSION",
+		"tar -czf",
+	} {
+		if !strings.Contains(text, fragment) {
+			t.Errorf("server-archives does not contain %q", fragment)
+		}
 	}
-	if findLine(text, "GOOS=linux GOARCH=arm64") == "" || findLine(text, "ARM aarch64") == "" {
-		t.Fatalf("desktop-binaries does not build and verify the linux-aarch64 set:\n%s", output)
-	}
-	// macOS arm64 SSH servers receive the darwin set, so it needs the same
-	// installer and checksums as the Linux sets.
-	start := strings.Index(text, "for dir in desktop/src-tauri/resources/bin/darwin-arm64 ")
-	if start < 0 {
-		t.Fatalf("desktop-binaries does not ship the darwin-arm64 set as an upload set:\n%s", output)
-	}
-	uploadLoop, _, _ := strings.Cut(text[start:], "\ndone")
-	if !strings.Contains(uploadLoop, "remote-install.sh") || !strings.Contains(uploadLoop, "SHA256SUMS") {
-		t.Fatalf("desktop-binaries does not ship the darwin-arm64 set as an upload set:\n%s", output)
+	if strings.Contains(text, "resources/bin") {
+		t.Errorf("server-archives reads the Desktop payload:\n%s", output)
 	}
 }
 

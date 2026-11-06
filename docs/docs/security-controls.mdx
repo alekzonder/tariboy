@@ -194,6 +194,19 @@ and refuses regular files, directories, or symlinks not owned by the verified
 Tariboy app bundle. The bundle has five real payload files; `ttasks` is a
 managed alias whose source is `tariboy-tasks`.
 
+The Desktop package carries no server binaries. An SSH server downloads the
+archive of the Desktop version from the GitHub release over HTTPS, with the
+same trust as `tariboy update`. The server makes sure that the archive
+checksum matches the release `SHA256SUMS` before it unpacks the archive. It
+accepts only plain file names at the archive root, and only regular files.
+The release `SHA256SUMS` comes from the same GitHub release, so a person who
+can replace release files can also replace the checksums. Only the
+`remote-install.sh` built into Desktop switches the links; Desktop never runs
+the installer copy from the archive. Desktop sends the base URL to the remote
+shell only when it starts with `https://` and contains only letters, digits,
+and `._~:/-`. Plain HTTP is accepted only for `127.0.0.1`, for a local test
+mirror.
+
 Image builds resolve only the literal `$PLUGINS` root, source-relative paths,
 or explicit absolute paths. Prompt paths and plugin references reject traversal
 outside their roots.

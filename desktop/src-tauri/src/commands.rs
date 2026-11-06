@@ -1100,7 +1100,6 @@ pub fn host_update(app: AppHandle, id: String) -> Result<OperationResult, String
         .host_runtime
         .healthy_tunnel(&id)
         .ok_or_else(|| "host must have a healthy tunnel before update".to_string())?;
-    let bundle = state.bundle.clone();
     let operation = state.ssh_operations.begin(&id)?;
     let operation_id = operation.id.clone();
     let operations = state.ssh_operations.clone();
@@ -1122,7 +1121,7 @@ pub fn host_update(app: AppHandle, id: String) -> Result<OperationResult, String
                     message: "remote host no longer satisfies install prerequisites".into(),
                 });
             }
-            let server_bundle = remote_bundle(&bundle, &preflight)?;
+            let server_bundle = server_release(&preflight)?;
             let prepare_restart = |previous: &str| {
                 remote_restart_handoff_preflight(&running_version, previous, || {
                     active_remote_work(local_port)
@@ -1356,7 +1355,8 @@ fn establish_host_preflight(
 }
 
 /// Linux hosts whose CLI supports `update --cleanup` update themselves; macOS
-/// (which `tariboy update` does not serve) and older CLIs get the upload path.
+/// (which `tariboy update` does not serve) and older CLIs get the download
+/// path of the Desktop installer.
 fn use_server_update(
     platform: &str,
     probe: &Result<provision::ServerUpdateProbe, ssh::SshError>,
@@ -1364,16 +1364,20 @@ fn use_server_update(
     platform == "Linux" && matches!(probe, Ok(probe) if probe.capable)
 }
 
-/// remote_bundle picks the packaged set matching the server's `uname -s`/`uname -m`.
-fn remote_bundle(
-    bundle: &bundle::Bundle,
+/// server_release names the published archive of this Desktop version for the
+/// server's `uname -s`/`uname -m`; the server downloads it.
+fn server_release(
     preflight: &preflight::Result,
-) -> Result<bundle::PlatformBundle, ssh::SshError> {
-    bundle
-        .remote(&preflight.platform, &preflight.arch)
-        .map_err(|error| ssh::SshError {
-        code: "bundle_missing".into(),
-        message: format!("remote bundle is not ready: {error}"),
+) -> Result<provision::ServerRelease, ssh::SshError> {
+    let archive = bundle::server_archive(&preflight.platform, &preflight.arch, bundle::VERSION)
+        .map_err(|message| ssh::SshError {
+            code: "unsupported_host".into(),
+            message,
+        })?;
+    Ok(provision::ServerRelease {
+        version: bundle::VERSION.to_string(),
+        archive,
+        base_url: provision::release_base_url(&|key| std::env::var(key).ok()),
     })
 }
 
@@ -1382,7 +1386,6 @@ fn run_host_install(
     operation: &ssh::Operation,
     host: &hosts::HostRecord,
     control_dir: &std::path::Path,
-    bundle: &bundle::Bundle,
     sink: ssh::OutputSink,
 ) -> Result<(preflight::Result, provision::Result), ssh::SshError> {
     let (preflight, master) =
@@ -1391,12 +1394,12 @@ fn run_host_install(
         return Err(ssh::SshError {
             code: "unsupported_host".into(),
             message: format!(
-                "remote installation requires Linux x86_64/aarch64 or macOS arm64, writable ~/.local, python3 and, on Linux, flock (found {}/{})",
+                "remote installation requires Linux x86_64/aarch64 or macOS arm64, writable ~/.local, python3, curl or wget, tar, sha256sum or shasum and, on Linux, flock (found {}/{})",
                 preflight.platform, preflight.arch
             ),
         });
     }
-    let server_bundle = remote_bundle(bundle, &preflight)?;
+    let server_bundle = server_release(&preflight)?;
     let installed = provision::run(
         transport,
         operation,
@@ -1416,7 +1419,6 @@ pub fn host_provision(app: AppHandle, id: String) -> Result<OperationResult, Str
     if host.kind != hosts::HostKind::Ssh {
         return Err("only SSH hosts can be provisioned".into());
     }
-    let bundle = state.bundle.clone();
     let operation = state.ssh_operations.begin(&id)?;
     let operation_id = operation.id.clone();
     let operations = state.ssh_operations.clone();
@@ -1429,7 +1431,6 @@ pub fn host_provision(app: AppHandle, id: String) -> Result<OperationResult, Str
             &operation,
             &host,
             &control_dir,
-            &bundle,
             sink,
         ) {
             Ok((preflight, installed)) => {
@@ -2152,7 +2153,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let log = dir.path().join("ssh-argv.log");
         let preflight_stdin = dir.path().join("preflight.sh");
-        let json = r#"{"platform":"Linux","arch":"x86_64","home":"/home/u","free_disk_kb":1000,"writable_local":true,"tmux":{"available":true,"version":"tmux 3"},"flock":{"available":true,"version":"flock 2"},"python3":{"available":true,"version":"Python 3.12"},"claude":{"available":true,"version":"1"},"codex":{"available":false,"version":""},"opencode":{"available":false,"version":""},"cursor":{"available":false,"version":""}}"#;
+        let json = r#"{"platform":"Linux","arch":"x86_64","home":"/home/u","free_disk_kb":1000,"writable_local":true,"tmux":{"available":true,"version":"tmux 3"},"flock":{"available":true,"version":"flock 2"},"python3":{"available":true,"version":"Python 3.12"},"curl":{"available":true,"version":"curl 8"},"tar":{"available":true,"version":"tar 1"},"sha256sum":{"available":true,"version":"9"},"claude":{"available":true,"version":"1"},"codex":{"available":false,"version":""},"opencode":{"available":false,"version":""},"cursor":{"available":false,"version":""}}"#;
         let behavior = format!(
             r#"if [ "${{1:-}}" = "-G" ]; then
   printf 'hostname prod\nproxyjump jump\nidentityfile ~/.ssh/id_ed25519\n'

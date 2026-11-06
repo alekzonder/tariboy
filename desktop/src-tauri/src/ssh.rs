@@ -200,14 +200,6 @@ pub struct ControlCommand<'a> {
     pub timeout: Duration,
 }
 
-pub struct UploadCommand<'a> {
-    pub alias: &'a str,
-    pub socket: &'a Path,
-    pub local_files: &'a [PathBuf],
-    pub remote_dir: &'a str,
-    pub timeout: Duration,
-}
-
 impl Transport {
     pub fn new(bins: Binaries) -> Self {
         Self { bins }
@@ -492,66 +484,6 @@ impl Transport {
         }
         Ok(output.stdout)
     }
-
-    pub fn upload(
-        &self,
-        operation: &Operation,
-        request: UploadCommand<'_>,
-        sink: OutputSink,
-    ) -> Result<(), SshError> {
-        validate_scp_alias(request.alias)?;
-        validate_remote_upload_dir(request.remote_dir)?;
-        if request.local_files.is_empty() {
-            return Err(SshError {
-                code: "invalid_upload".into(),
-                message: "SCP upload requires at least one local file".into(),
-            });
-        }
-        for path in request.local_files {
-            if !path.is_file() {
-                return Err(SshError {
-                    code: "invalid_upload".into(),
-                    message: format!("local upload file is missing: {}", path.display()),
-                });
-            }
-        }
-        let mut args = vec![
-            // Compression: the release bundle is ~100 MB of Go binaries, which
-            // compress well, and the upload is the slowest step of an update.
-            "-C".to_string(),
-            "-o".to_string(),
-            format!("ControlPath={}", request.socket.display()),
-            "--".to_string(),
-        ];
-        args.extend(
-            request
-                .local_files
-                .iter()
-                .map(|path| path.display().to_string()),
-        );
-        args.push(format!("{}:{}", request.alias, request.remote_dir));
-        let scoped_sink: OutputSink = {
-            let operation_id = operation.id.clone();
-            let host_id = operation.host_id.clone();
-            Arc::new(move |mut event| {
-                event.operation_id.clone_from(&operation_id);
-                event.host_id.clone_from(&host_id);
-                sink(event);
-            })
-        };
-        let output = run_bounded(
-            &self.bins.scp,
-            &args,
-            None,
-            request.timeout,
-            &operation.cancel,
-            Some(scoped_sink),
-        )?;
-        if !output.success {
-            return Err(classify_failure(&output.combined()));
-        }
-        Ok(())
-    }
 }
 
 pub struct MasterSession {
@@ -785,39 +717,6 @@ fn validate_alias(alias: &str) -> Result<(), SshError> {
         return Err(SshError {
             code: "invalid_alias".into(),
             message: "SSH alias must be non-empty and must not start with '-'".into(),
-        });
-    }
-    Ok(())
-}
-
-fn validate_scp_alias(alias: &str) -> Result<(), SshError> {
-    validate_alias(alias)?;
-    if !alias
-        .bytes()
-        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'@'))
-    {
-        return Err(SshError {
-            code: "invalid_alias".into(),
-            message: "SSH alias contains characters that are unsafe for SCP".into(),
-        });
-    }
-    Ok(())
-}
-
-fn validate_remote_upload_dir(path: &str) -> Result<(), SshError> {
-    let prefix = "~/.local/lib/tariboy/.stage-";
-    let suffix = path
-        .strip_prefix(prefix)
-        .and_then(|value| value.strip_suffix('/'));
-    if suffix.map_or(true, |value| {
-        value.is_empty()
-            || !value
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-    }) {
-        return Err(SshError {
-            code: "invalid_upload".into(),
-            message: "remote upload directory is outside the staging area".into(),
         });
     }
     Ok(())
@@ -1061,83 +960,6 @@ mod tests {
         let bins = Binaries::system();
         assert_eq!(bins.ssh, PathBuf::from("/usr/bin/ssh"));
         assert_eq!(bins.scp, PathBuf::from("/usr/bin/scp"));
-    }
-
-    #[test]
-    fn upload_uses_system_scp_with_control_socket_and_literal_arguments() {
-        let dir = tempfile::tempdir().unwrap();
-        let log = dir.path().join("scp.log");
-        let scp = testbin::executable(dir.path(), "scp", &testbin::argv_logger(&log, "exit 0"));
-        let first = dir.path().join("tariboy");
-        let second = dir.path().join("SHA256SUMS");
-        fs::write(&first, b"bin").unwrap();
-        fs::write(&second, b"sum").unwrap();
-        let transport = Transport::new(Binaries {
-            ssh: dir.path().join("ssh"),
-            scp,
-        });
-        let operations = Operations::default();
-        let operation = operations.begin("host-1").unwrap();
-        let socket = dir.path().join("control.sock");
-
-        transport
-            .upload(
-                &operation,
-                UploadCommand {
-                    alias: "prod-host",
-                    socket: &socket,
-                    local_files: &[first.clone(), second.clone()],
-                    remote_dir: "~/.local/lib/tariboy/.stage-abc123/",
-                    timeout: Duration::from_secs(1),
-                },
-                Arc::new(|_| {}),
-            )
-            .unwrap();
-
-        assert_eq!(
-            testbin::invocations(&log),
-            vec![vec![
-                "-C",
-                "-o",
-                &format!("ControlPath={}", socket.display()),
-                "--",
-                &first.display().to_string(),
-                &second.display().to_string(),
-                "prod-host:~/.local/lib/tariboy/.stage-abc123/",
-            ]]
-        );
-    }
-
-    #[test]
-    fn upload_rejects_scp_metacharacters_and_non_staging_destinations() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("binary");
-        fs::write(&file, b"bin").unwrap();
-        let transport = Transport::new(Binaries {
-            ssh: dir.path().join("ssh"),
-            scp: dir.path().join("scp"),
-        });
-        let operations = Operations::default();
-        let operation = operations.begin("host-1").unwrap();
-        for (alias, remote_dir) in [
-            ("host;touch-pwned", "~/.local/lib/tariboy/.stage-safe/"),
-            ("host", "~/.local/bin/"),
-            ("host", "~/.local/lib/tariboy/.stage-../"),
-        ] {
-            assert!(transport
-                .upload(
-                    &operation,
-                    UploadCommand {
-                        alias,
-                        socket: &dir.path().join("sock"),
-                        local_files: std::slice::from_ref(&file),
-                        remote_dir,
-                        timeout: Duration::from_secs(1),
-                    },
-                    Arc::new(|_| {}),
-                )
-                .is_err());
-        }
     }
 
     #[test]

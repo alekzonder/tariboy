@@ -168,6 +168,7 @@ fn safe_error_code(value: &str) -> Option<&str> {
         "host_registry_failed",
         "host_unreachable",
         "invalid_alias",
+        "invalid_release_url",
         "invalid_upload",
         "invalid_version",
         "legacy_active_work",
@@ -186,7 +187,7 @@ fn safe_error_code(value: &str) -> Option<&str> {
 }
 
 fn safe_lifecycle(value: &str) -> Option<&str> {
-    const VALUES: [&str; 29] = [
+    const VALUES: [&str; 30] = [
         "adopted",
         "authenticate",
         "cancelled",
@@ -196,6 +197,7 @@ fn safe_lifecycle(value: &str) -> Option<&str> {
         "degraded",
         "disconnected",
         "down",
+        "download",
         "error",
         "exited",
         "failed",

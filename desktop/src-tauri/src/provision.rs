@@ -1,32 +1,37 @@
-//! Transactional installation of the bundled Linux release through one
-//! authenticated OpenSSH ControlMaster.
+//! Transactional installation of a published server release through one
+//! authenticated OpenSSH ControlMaster. The server downloads the release
+//! archive itself; the Desktop app sends only fixed scripts.
 
-use crate::bundle::PlatformBundle;
-use crate::ssh::{self, ControlCommand, Operation, OutputEvent, OutputSink, UploadCommand};
+use crate::ssh::{self, ControlCommand, Operation, OutputEvent, OutputSink};
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
-/// Upload budgets. A release bundle is around 100 MB and `scp` gets no second
-/// chance, so the deadline is derived from the payload instead of being fixed:
-/// a fixed two-minute cap aborted ordinary uplinks mid-transfer and surfaced as
-/// a failed "Upload release" step. The floor rate is a deliberately pessimistic
-/// slow-link, worst-case-incompressible assumption; the cap still bounds a
-/// stalled transfer.
-const UPLOAD_MIN_TIMEOUT: Duration = Duration::from_secs(120);
-const UPLOAD_MAX_TIMEOUT: Duration = Duration::from_secs(30 * 60);
-const UPLOAD_FLOOR_BYTES_PER_SEC: u64 = 128 * 1024;
+/// The GitHub releases root the server archives live under, the same default
+/// `tariboy update` uses. TARIBOY_UPDATE_BASE_URL overrides both.
+pub const DEFAULT_RELEASE_BASE_URL: &str = "https://github.com/alekzonder/tariboy/releases";
 
-/// The time budget for uploading `files`, from their total size on disk.
-/// Unreadable files contribute nothing; the transfer itself reports them.
-fn upload_timeout(files: &[PathBuf]) -> Duration {
-    let bytes = files
-        .iter()
-        .filter_map(|path| std::fs::metadata(path).ok())
-        .map(|meta| meta.len())
-        .sum::<u64>();
-    let transfer = Duration::from_secs(bytes / UPLOAD_FLOOR_BYTES_PER_SEC);
-    (UPLOAD_MIN_TIMEOUT + transfer).min(UPLOAD_MAX_TIMEOUT)
+/// The budget for the server to fetch and unpack a release of about 100 MB.
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+
+const DOWNLOAD_SCRIPT: &[u8] = include_bytes!("remote-download.sh");
+
+/// The published release a server downloads and installs.
+#[derive(Debug, Clone)]
+pub struct ServerRelease {
+    pub version: String,
+    /// The archive name, for example `tariboy_<version>_linux-x86_64.tar.gz`.
+    pub archive: String,
+    pub base_url: String,
+}
+
+/// release_base_url honours $TARIBOY_UPDATE_BASE_URL, the override
+/// `tariboy update` reads, for a mirror or a test server.
+pub fn release_base_url(getenv: &dyn Fn(&str) -> Option<String>) -> String {
+    getenv("TARIBOY_UPDATE_BASE_URL")
+        .filter(|value| !value.is_empty())
+        .map(|value| value.trim_end_matches('/').to_string())
+        .unwrap_or_else(|| DEFAULT_RELEASE_BASE_URL.to_string())
 }
 
 const CREATE_STAGE_SCRIPT: &[u8] = br#"set -eu
@@ -162,14 +167,6 @@ trait Remote {
         timeout: Duration,
         sink: OutputSink,
     ) -> std::result::Result<String, ssh::SshError>;
-
-    fn upload(
-        &self,
-        local_files: &[PathBuf],
-        remote_dir: &str,
-        timeout: Duration,
-        sink: OutputSink,
-    ) -> std::result::Result<(), ssh::SshError>;
 }
 
 struct SshRemote<'a> {
@@ -200,26 +197,6 @@ impl Remote for SshRemote<'_> {
             sink,
         )
     }
-
-    fn upload(
-        &self,
-        local_files: &[PathBuf],
-        remote_dir: &str,
-        timeout: Duration,
-        sink: OutputSink,
-    ) -> std::result::Result<(), ssh::SshError> {
-        self.transport.upload(
-            self.operation,
-            UploadCommand {
-                alias: self.alias,
-                socket: self.socket,
-                local_files,
-                remote_dir,
-                timeout,
-            },
-            sink,
-        )
-    }
 }
 
 pub fn run(
@@ -227,7 +204,7 @@ pub fn run(
     operation: &Operation,
     alias: &str,
     socket: &Path,
-    bundle: &PlatformBundle,
+    bundle: &ServerRelease,
     remote_port: u16,
     sink: OutputSink,
 ) -> std::result::Result<Result, ssh::SshError> {
@@ -245,7 +222,7 @@ pub fn stage(
     operation: &Operation,
     alias: &str,
     socket: &Path,
-    bundle: &PlatformBundle,
+    bundle: &ServerRelease,
     sink: OutputSink,
 ) -> std::result::Result<StagedRelease, ssh::SshError> {
     let remote = SshRemote {
@@ -260,10 +237,10 @@ pub fn stage(
 fn stage_with(
     remote: &dyn Remote,
     operation: &Operation,
-    bundle: &PlatformBundle,
+    bundle: &ServerRelease,
     sink: OutputSink,
 ) -> std::result::Result<StagedRelease, ssh::SshError> {
-    validate_version(&bundle.version)?;
+    validate_release(bundle)?;
     let staging = format!(".stage-{}", uuid::Uuid::new_v4().simple());
     phase(operation, &sink, "stage");
     remote.run(
@@ -273,15 +250,7 @@ fn stage_with(
         sink.clone(),
     )?;
     let result = (|| {
-        phase(operation, &sink, "upload");
-        let mut files = bundle.files_for_upload();
-        files.push(bundle.file("remote-install.sh"));
-        remote.upload(
-            &files,
-            &format!("~/.local/lib/tariboy/{staging}/"),
-            upload_timeout(&files),
-            sink.clone(),
-        )?;
+        download(remote, operation, bundle, &staging, &sink)?;
         phase(operation, &sink, "stage_release");
         let output = remote.run(
             &[
@@ -665,11 +634,11 @@ fn update_on_server_with(
 fn run_with(
     remote: &dyn Remote,
     operation: &Operation,
-    bundle: &PlatformBundle,
+    bundle: &ServerRelease,
     remote_port: u16,
     sink: OutputSink,
 ) -> std::result::Result<Result, ssh::SshError> {
-    validate_version(&bundle.version)?;
+    validate_release(bundle)?;
     let staging = format!(".stage-{}", uuid::Uuid::new_v4().simple());
     phase(operation, &sink, "stage");
     remote.run(
@@ -680,15 +649,7 @@ fn run_with(
     )?;
 
     let result = (|| {
-        phase(operation, &sink, "upload");
-        let mut files = bundle.files_for_upload();
-        files.push(bundle.file("remote-install.sh"));
-        remote.upload(
-            &files,
-            &format!("~/.local/lib/tariboy/{staging}/"),
-            upload_timeout(&files),
-            sink.clone(),
-        )?;
+        download(remote, operation, bundle, &staging, &sink)?;
 
         phase(operation, &sink, "verify_install");
         remote.run(
@@ -729,6 +690,33 @@ fn run_with(
         );
     }
     result
+}
+
+/// download has the server fetch, verify and unpack the release archive into
+/// `staging`. The script validates every argument again on the server.
+fn download(
+    remote: &dyn Remote,
+    operation: &Operation,
+    bundle: &ServerRelease,
+    staging: &str,
+    sink: &OutputSink,
+) -> std::result::Result<(), ssh::SshError> {
+    phase(operation, sink, "download");
+    remote.run(
+        &[
+            "sh".into(),
+            "-s".into(),
+            "--".into(),
+            bundle.version.clone(),
+            staging.to_string(),
+            bundle.archive.clone(),
+            bundle.base_url.clone(),
+        ],
+        DOWNLOAD_SCRIPT,
+        DOWNLOAD_TIMEOUT,
+        sink.clone(),
+    )?;
+    Ok(())
 }
 
 fn shell_args(value: &str) -> Vec<String> {
@@ -776,6 +764,29 @@ fn invalid_status(message: &str) -> ssh::SshError {
     }
 }
 
+/// validate_release applies the argument rules of remote-download.sh before
+/// the arguments reach the remote shell.
+fn validate_release(bundle: &ServerRelease) -> std::result::Result<(), ssh::SshError> {
+    validate_version(&bundle.version)?;
+    let url = &bundle.base_url;
+    let rest = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://127.0.0.1:"));
+    if !matches!(rest, Some(rest) if !rest.is_empty())
+        || !url
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._~:/-".contains(&byte))
+    {
+        return Err(ssh::SshError {
+            code: "invalid_release_url".into(),
+            message: format!(
+                "release base URL must be https:// (or http://127.0.0.1: for tests) with only letters, digits and ._~:/-, found {url:?}"
+            ),
+        });
+    }
+    Ok(())
+}
+
 fn validate_version(version: &str) -> std::result::Result<(), ssh::SshError> {
     if version.is_empty()
         || version.len() > 128
@@ -808,7 +819,7 @@ mod tests {
         wrong_restart_version: Mutex<Option<String>>,
         activation_previous: Mutex<Option<String>>,
         status: Mutex<String>,
-        upload_timeout: Mutex<Option<Duration>>,
+        download_timeout: Mutex<Option<Duration>>,
         links_version: Mutex<String>,
     }
 
@@ -825,11 +836,11 @@ mod tests {
             self.calls.lock().unwrap().clone()
         }
 
-        fn upload_timeout(&self) -> Duration {
-            self.upload_timeout
+        fn download_timeout(&self) -> Duration {
+            self.download_timeout
                 .lock()
                 .unwrap()
-                .expect("upload was called")
+                .expect("download was called")
         }
     }
 
@@ -838,11 +849,14 @@ mod tests {
             &self,
             args: &[String],
             stdin: &[u8],
-            _timeout: Duration,
+            timeout: Duration,
             _sink: OutputSink,
         ) -> std::result::Result<String, ssh::SshError> {
             let kind = if stdin == CREATE_STAGE_SCRIPT {
                 "stage"
+            } else if stdin == DOWNLOAD_SCRIPT {
+                *self.download_timeout.lock().unwrap() = Some(timeout);
+                "download"
             } else if stdin == CLEANUP_STAGE_SCRIPT {
                 "cleanup"
             } else if stdin == include_bytes!("remote-install.sh") {
@@ -925,45 +939,14 @@ mod tests {
                 Ok(String::new())
             }
         }
-
-        fn upload(
-            &self,
-            files: &[PathBuf],
-            remote_dir: &str,
-            timeout: Duration,
-            _sink: OutputSink,
-        ) -> std::result::Result<(), ssh::SshError> {
-            *self.upload_timeout.lock().unwrap() = Some(timeout);
-            self.calls.lock().unwrap().push(format!(
-                "upload:{}:{}",
-                files
-                    .iter()
-                    .map(|path| path.file_name().unwrap().to_string_lossy())
-                    .collect::<Vec<_>>()
-                    .join(","),
-                remote_dir
-            ));
-            if self.fail.lock().unwrap().as_deref() == Some("upload") {
-                return Err(ssh::SshError {
-                    code: "test_failure".into(),
-                    message: "upload".into(),
-                });
-            }
-            Ok(())
-        }
     }
 
-    fn fixture() -> (tempfile::TempDir, PlatformBundle, Operation, OutputSink) {
+    fn fixture() -> (tempfile::TempDir, ServerRelease, Operation, OutputSink) {
         let dir = tempfile::tempdir().unwrap();
-        for name in BINARIES {
-            std::fs::write(dir.path().join(name), b"bin").unwrap();
-        }
-        for name in ["SHA256SUMS", "VERSION", "remote-install.sh"] {
-            std::fs::write(dir.path().join(name), b"data").unwrap();
-        }
-        let bundle = PlatformBundle {
-            dir: dir.path().to_path_buf(),
+        let bundle = ServerRelease {
             version: "0.9.0".into(),
+            archive: "tariboy_0.9.0_linux-x86_64.tar.gz".into(),
+            base_url: DEFAULT_RELEASE_BASE_URL.into(),
         };
         let (_tx, rx) = std::sync::mpsc::sync_channel(1);
         let operation = Operation {
@@ -976,70 +959,64 @@ mod tests {
         (dir, bundle, operation, sink)
     }
 
-    fn grow(bundle: &PlatformBundle, name: &str, bytes: u64) {
-        let file = std::fs::OpenOptions::new()
-            .write(true)
-            .open(bundle.file(name))
-            .unwrap();
-        file.set_len(bytes).unwrap();
-    }
-
     #[test]
-    fn upload_timeout_scales_with_payload_and_stays_bounded() {
-        let small = upload_timeout(&[]);
-        assert_eq!(small, UPLOAD_MIN_TIMEOUT);
-
-        let hundred_megabytes = duration_for_bytes(100 * 1024 * 1024);
-        assert!(
-            hundred_megabytes >= Duration::from_secs(900),
-            "a 100 MiB payload must survive a slow uplink, got {hundred_megabytes:?}"
-        );
-
+    fn release_base_url_defaults_to_github_and_honours_the_override() {
         assert_eq!(
-            duration_for_bytes(64 * 1024 * 1024 * 1024),
-            UPLOAD_MAX_TIMEOUT
+            release_base_url(&|_| None),
+            "https://github.com/alekzonder/tariboy/releases"
+        );
+        assert_eq!(
+            release_base_url(&|_| Some(String::new())),
+            DEFAULT_RELEASE_BASE_URL
+        );
+        assert_eq!(
+            release_base_url(&|key| (key == "TARIBOY_UPDATE_BASE_URL")
+                .then(|| "https://mirror.example/releases/".to_string())),
+            "https://mirror.example/releases"
         );
     }
 
-    fn duration_for_bytes(bytes: u64) -> Duration {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("payload");
-        let file = std::fs::File::create(&path).unwrap();
-        file.set_len(bytes).unwrap();
-        upload_timeout(&[path])
+    // The remote login shell parses the arguments, so an unsafe base URL must
+    // never reach SSH.
+    #[test]
+    fn rejects_unsafe_release_urls_before_running_ssh() {
+        for base_url in [
+            "http://example.com",
+            "ftp://example.com",
+            "https://example.com/$(id)",
+            "https://example.com/a;b",
+            "https://example.com/a b",
+            "https://",
+            "",
+        ] {
+            let (_dir, mut bundle, operation, sink) = fixture();
+            bundle.base_url = base_url.into();
+            let remote = FakeRemote::default();
+            let error = run_with(&remote, &operation, &bundle, 9990, sink.clone()).unwrap_err();
+            assert_eq!(error.code, "invalid_release_url", "{base_url}");
+            let error = stage_with(&remote, &operation, &bundle, sink).unwrap_err();
+            assert_eq!(error.code, "invalid_release_url", "{base_url}");
+            assert!(remote.calls().is_empty(), "{base_url}");
+        }
+        let (_dir, mut bundle, operation, sink) = fixture();
+        bundle.base_url = "http://127.0.0.1:8080/releases".into();
+        assert!(stage_with(&FakeRemote::default(), &operation, &bundle, sink).is_ok());
     }
 
     #[test]
-    fn install_and_update_uploads_budget_time_for_the_whole_bundle() {
-        for large in [false, true] {
-            let (_dir, bundle, operation, sink) = fixture();
-            if large {
-                grow(&bundle, "tariboyd", 200 * 1024 * 1024);
-            }
-            let expected = upload_timeout(&{
-                let mut files = bundle.files_for_upload();
-                files.push(bundle.file("remote-install.sh"));
-                files
-            });
+    fn install_and_update_download_on_the_server_with_one_budget() {
+        let (_dir, bundle, operation, sink) = fixture();
+        let install = FakeRemote {
+            status: Mutex::new(r#"{"version":"0.9.0","http_addr":"127.0.0.1:9990"}"#.into()),
+            ..FakeRemote::default()
+        };
+        run_with(&install, &operation, &bundle, 9990, sink.clone()).unwrap();
+        assert_eq!(install.download_timeout(), DOWNLOAD_TIMEOUT);
 
-            let install = FakeRemote {
-                status: Mutex::new(r#"{"version":"0.9.0","http_addr":"127.0.0.1:9990"}"#.into()),
-                ..FakeRemote::default()
-            };
-            run_with(&install, &operation, &bundle, 9990, sink.clone()).unwrap();
-            assert_eq!(install.upload_timeout(), expected);
-
-            let update = FakeRemote::default();
-            stage_with(&update, &operation, &bundle, sink).unwrap();
-            assert_eq!(update.upload_timeout(), expected);
-
-            if large {
-                assert!(
-                    expected > Duration::from_secs(1600),
-                    "a 200 MiB bundle must not be cut off at the small-payload floor"
-                );
-            }
-        }
+        let update = FakeRemote::default();
+        stage_with(&update, &operation, &bundle, sink).unwrap();
+        assert_eq!(update.download_timeout(), DOWNLOAD_TIMEOUT);
+        assert_eq!(DOWNLOAD_TIMEOUT, Duration::from_secs(600));
     }
 
     #[test]
@@ -1060,21 +1037,26 @@ mod tests {
         assert_eq!(result.version, "0.9.0");
         assert_eq!(
             *phases.lock().unwrap(),
-            ["stage", "upload", "verify_install", "status"]
+            ["stage", "download", "verify_install", "status"]
         );
         let calls = remote.calls();
         assert_eq!(calls.len(), 4);
         assert!(calls[0].starts_with("run:stage:sh|-s|--|.stage-"));
-        assert!(calls[1].starts_with(
-            "upload:tariboyd,tariboy,tariboy-tasks,tariboy-mail,tariboy-scripts,tariboy-shim,tariboy-plugin-telegram,SHA256SUMS,VERSION,remote-install.sh:~/.local/lib/tariboy/.stage-"
-        ));
-        assert!(calls[2].contains("run:verify_install:sh|-s|--|0.9.0|.stage-"));
+        let staging = calls[0].rsplit('|').next().unwrap();
+        assert_eq!(
+            calls[1],
+            format!("run:download:sh|-s|--|0.9.0|{staging}|tariboy_0.9.0_linux-x86_64.tar.gz|https://github.com/alekzonder/tariboy/releases")
+        );
+        assert_eq!(
+            calls[2],
+            format!("run:verify_install:sh|-s|--|0.9.0|{staging}")
+        );
         assert_eq!(calls[3], "run:status:sh|-s|--|0.9.0|9990");
     }
 
     #[test]
-    fn upload_and_verification_failures_roll_back_only_staging() {
-        for step in ["upload", "verify_install"] {
+    fn download_and_verification_failures_roll_back_only_staging() {
+        for step in ["download", "verify_install"] {
             let (_dir, bundle, operation, sink) = fixture();
             let remote = FakeRemote::failing(step);
             assert!(run_with(&remote, &operation, &bundle, 9990, sink).is_err());
@@ -1096,7 +1078,7 @@ mod tests {
 
         let calls = remote.calls();
         assert!(calls[0].starts_with("run:stage:"));
-        assert!(calls[1].starts_with("upload:"));
+        assert!(calls[1].starts_with("run:download:sh|-s|--|0.9.0|.stage-"));
         assert!(calls[2].contains("run:stage_release:sh|-s|--|0.9.0|.stage-"));
         assert!(calls[2].ends_with("|stage"));
         assert!(calls.iter().all(|call| !call.contains("activate")));
@@ -1810,10 +1792,15 @@ exec /bin/mv "$@""#,
     /// macos_like_path exposes every system tool except the two macOS lacks:
     /// util-linux `flock` and coreutils `sha256sum`.
     fn macos_like_path(dir: &Path) -> String {
+        path_without(dir, &["flock", "sha256sum"])
+    }
+
+    /// path_without exposes every system tool except `hidden` through `dir`.
+    fn path_without(dir: &Path, hidden: &[&str]) -> String {
         for system in ["/usr/bin", "/bin"] {
             for entry in fs::read_dir(system).unwrap().flatten() {
                 let name = entry.file_name();
-                if name == "flock" || name == "sha256sum" {
+                if hidden.iter().any(|hidden| name == *hidden) {
                     continue;
                 }
                 let link = dir.join(&name);
@@ -1953,6 +1940,283 @@ exec /bin/mv "$@""#,
                 fs::read_link(home.path().join(".local/bin").join(name)).unwrap(),
                 root.join("next").join(name)
             );
+        }
+    }
+
+    const DOWNLOAD_VERSION: &str = "1.2.3";
+    const DOWNLOAD_ARCHIVE: &str = "tariboy_1.2.3_linux-x86_64.tar.gz";
+
+    /// serve_releases answers GET requests with files under `root` and 404
+    /// otherwise, like a GitHub releases mirror on 127.0.0.1.
+    fn serve_releases(root: &Path) -> String {
+        use std::io::{BufRead, BufReader, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let root = root.to_path_buf();
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut request = String::new();
+                if reader.read_line(&mut request).is_err() {
+                    continue;
+                }
+                loop {
+                    let mut header = String::new();
+                    if reader.read_line(&mut header).unwrap_or(0) == 0 || header == "\r\n" {
+                        break;
+                    }
+                }
+                let path = request.split_whitespace().nth(1).unwrap_or("/");
+                let mut stream = stream;
+                match fs::read(root.join(path.trim_start_matches('/'))) {
+                    Ok(body) => {
+                        let _ = write!(
+                            stream,
+                            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                            body.len()
+                        );
+                        let _ = stream.write_all(&body);
+                    }
+                    Err(_) => {
+                        let _ = stream.write_all(
+                            b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                        );
+                    }
+                }
+            }
+        });
+        format!("http://{address}")
+    }
+
+    fn sha256(path: &Path) -> String {
+        let output = Command::new("sha256sum").arg(path).output().unwrap();
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .split_whitespace()
+            .next()
+            .unwrap()
+            .to_string()
+    }
+
+    /// publish_release writes a server archive and the release SHA256SUMS
+    /// under `root/download/v<version>/`. `entries` overrides the archive
+    /// member names; `sums` overrides the release checksum file.
+    fn publish_release(root: &Path, entries: Option<&[&str]>, sums: Option<&str>) {
+        let payload = tempfile::tempdir().unwrap();
+        write_release(payload.path(), DOWNLOAD_VERSION, true);
+        fs::copy(
+            concat!(env!("CARGO_MANIFEST_DIR"), "/src/remote-install.sh"),
+            payload.path().join("remote-install.sh"),
+        )
+        .unwrap();
+        let release = root.join(format!("download/v{DOWNLOAD_VERSION}"));
+        fs::create_dir_all(&release).unwrap();
+        let archive = release.join(DOWNLOAD_ARCHIVE);
+        let mut names = BINARIES.to_vec();
+        names.extend(["VERSION", "SHA256SUMS", "remote-install.sh"]);
+        let renamed = entries.unwrap_or(&names);
+        // python3 tarfile writes member names tar itself would sanitize.
+        let script = r#"import sys, tarfile
+src, out = sys.argv[1], sys.argv[2]
+names = sys.argv[3].split(",")
+renamed = sys.argv[4].split(",")
+with tarfile.open(out, "w:gz") as archive:
+    for index, name in enumerate(names):
+        archive.add(src + "/" + name, arcname=renamed[index] if index < len(renamed) else name)
+"#;
+        let status = Command::new("python3")
+            .args(["-c", script])
+            .arg(payload.path())
+            .arg(&archive)
+            .arg(names.join(","))
+            .arg(renamed.join(","))
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let sums = sums
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("{}  {DOWNLOAD_ARCHIVE}\n", sha256(&archive)));
+        fs::write(release.join("SHA256SUMS"), sums).unwrap();
+    }
+
+    fn download_home() -> (tempfile::TempDir, std::path::PathBuf) {
+        let home = tempfile::tempdir().unwrap();
+        let stage = home.path().join(".local/lib/tariboy/.stage-dl");
+        fs::create_dir_all(&stage).unwrap();
+        (home, stage)
+    }
+
+    fn run_download(
+        home: &Path,
+        archive: &str,
+        base_url: &str,
+        path: Option<&str>,
+    ) -> std::process::Output {
+        let mut command = Command::new("/bin/sh");
+        command
+            .arg(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/src/remote-download.sh"
+            ))
+            .args([DOWNLOAD_VERSION, ".stage-dl", archive, base_url])
+            .env("HOME", home);
+        if let Some(path) = path {
+            command.env("PATH", path);
+        }
+        command.output().unwrap()
+    }
+
+    fn stderr(output: &std::process::Output) -> String {
+        String::from_utf8_lossy(&output.stderr).into_owned()
+    }
+
+    fn stage_entries(stage: &Path) -> Vec<String> {
+        let mut entries = fs::read_dir(stage)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        entries.sort();
+        entries
+    }
+
+    #[test]
+    fn download_stages_a_verified_archive_the_installer_accepts() {
+        let releases = tempfile::tempdir().unwrap();
+        publish_release(releases.path(), None, None);
+        let base_url = serve_releases(releases.path());
+        for hidden in [&[][..], &["curl"][..], &["sha256sum"][..]] {
+            let (home, stage) = download_home();
+            let tools = tempfile::tempdir().unwrap();
+            let path = path_without(tools.path(), hidden);
+            let output = run_download(home.path(), DOWNLOAD_ARCHIVE, &base_url, Some(&path));
+            assert!(output.status.success(), "{hidden:?}: {}", stderr(&output));
+            let mut expected = BINARIES
+                .iter()
+                .map(|name| name.to_string())
+                .collect::<Vec<_>>();
+            expected.extend(["SHA256SUMS", "VERSION", "remote-install.sh"].map(String::from));
+            expected.sort();
+            assert_eq!(stage_entries(&stage), expected, "{hidden:?}");
+
+            let install = Command::new("sh")
+                .arg(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/src/remote-install.sh"
+                ))
+                .args([DOWNLOAD_VERSION, ".stage-dl"])
+                .env("HOME", home.path())
+                .output()
+                .unwrap();
+            assert!(install.status.success(), "{}", stderr(&install));
+            let release = home
+                .path()
+                .join(".local/lib/tariboy")
+                .join(DOWNLOAD_VERSION);
+            for name in BINARIES {
+                assert_eq!(
+                    fs::read_link(home.path().join(".local/bin").join(name)).unwrap(),
+                    release.join(name)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn download_rejects_a_checksum_mismatch_or_a_missing_checksum() {
+        for (sums, message) in [
+            (
+                format!("{}  {DOWNLOAD_ARCHIVE}\n", "0".repeat(64)),
+                "checksum mismatch",
+            ),
+            (format!("{}  other.tar.gz\n", "0".repeat(64)), "no checksum"),
+        ] {
+            let releases = tempfile::tempdir().unwrap();
+            publish_release(releases.path(), None, Some(&sums));
+            let base_url = serve_releases(releases.path());
+            let (home, stage) = download_home();
+            let output = run_download(home.path(), DOWNLOAD_ARCHIVE, &base_url, None);
+            assert!(!output.status.success());
+            assert!(stderr(&output).contains(message), "{}", stderr(&output));
+            assert!(stage_entries(&stage).iter().all(|name| name == ".download"));
+        }
+    }
+
+    #[test]
+    fn download_names_the_url_of_an_unpublished_release() {
+        let releases = tempfile::tempdir().unwrap();
+        let base_url = serve_releases(releases.path());
+        let (home, _stage) = download_home();
+        let output = run_download(home.path(), DOWNLOAD_ARCHIVE, &base_url, None);
+        assert!(!output.status.success());
+        let message = stderr(&output);
+        assert!(
+            message.contains(&format!(
+                "{base_url}/download/v{DOWNLOAD_VERSION}/SHA256SUMS"
+            )),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn download_rejects_archive_entries_outside_the_stage_root() {
+        let mut names = BINARIES.to_vec();
+        names.extend(["VERSION", "SHA256SUMS", "remote-install.sh"]);
+        for unsafe_name in ["nested/tariboyd", "../tariboyd", "..", ".hidden"] {
+            let mut entries = names.clone();
+            entries[0] = unsafe_name;
+            let releases = tempfile::tempdir().unwrap();
+            publish_release(releases.path(), Some(&entries), None);
+            let base_url = serve_releases(releases.path());
+            let (home, stage) = download_home();
+            let output = run_download(home.path(), DOWNLOAD_ARCHIVE, &base_url, None);
+            assert!(!output.status.success(), "{unsafe_name}");
+            assert!(
+                stderr(&output).contains("unsafe archive entry"),
+                "{unsafe_name}: {}",
+                stderr(&output)
+            );
+            assert!(!stage.join("tariboy").exists(), "{unsafe_name}");
+            assert!(!home.path().join(".local/lib/tariboy/tariboyd").exists());
+        }
+    }
+
+    #[test]
+    fn download_requires_curl_or_wget() {
+        let (home, _stage) = download_home();
+        let tools = tempfile::tempdir().unwrap();
+        let path = path_without(tools.path(), &["curl", "wget"]);
+        let output = run_download(
+            home.path(),
+            DOWNLOAD_ARCHIVE,
+            "https://example.com",
+            Some(&path),
+        );
+        assert!(!output.status.success());
+        assert!(
+            stderr(&output).contains("curl or wget"),
+            "{}",
+            stderr(&output)
+        );
+    }
+
+    #[test]
+    fn download_rejects_invalid_arguments_before_any_request() {
+        let (home, _stage) = download_home();
+        for (archive, base_url) in [
+            (DOWNLOAD_ARCHIVE, "http://example.com/releases"),
+            (DOWNLOAD_ARCHIVE, "ftp://example.com"),
+            (DOWNLOAD_ARCHIVE, "https://example.com/$(id)"),
+            (DOWNLOAD_ARCHIVE, "https://example.com/a b"),
+            (DOWNLOAD_ARCHIVE, ""),
+            ("tariboy_9.9.9_linux-x86_64.tar.gz", "https://example.com"),
+            ("tariboy_1.2.3_windows-x86_64.tar.gz", "https://example.com"),
+            (
+                "../tariboy_1.2.3_linux-x86_64.tar.gz",
+                "https://example.com",
+            ),
+        ] {
+            let output = run_download(home.path(), archive, base_url, Some(""));
+            assert_eq!(output.status.code(), Some(64), "{archive} {base_url}");
         }
     }
 }

@@ -15,10 +15,10 @@ EXPECTED_VERSION="$(cat "$RELEASE_VERSION_FILE")"
 EXPECTED_NUMERIC_VERSION="${EXPECTED_VERSION%%-*}"
 RELEASE_DIR="${1:-}"
 EXPECTED_DMG="Tariboy_${VERSION}_aarch64.dmg"
-SERVER_ARCHES="x86_64 aarch64"
+SERVER_PLATFORMS="linux-x86_64 linux-aarch64 darwin-arm64"
 EXPECTED_SERVER_ARCHIVES=""
-for arch in $SERVER_ARCHES; do
-  archive="tariboy_${VERSION}_linux-${arch}.tar.gz"
+for platform in $SERVER_PLATFORMS; do
+  archive="tariboy_${VERSION}_${platform}.tar.gz"
   EXPECTED_SERVER_ARCHIVES="$EXPECTED_SERVER_ARCHIVES $archive"
 done
 SERVER_PAYLOAD="tariboyd tariboy tariboy-tasks tariboy-mail tariboy-scripts tariboy-shim tariboy-plugin-telegram"
@@ -205,44 +205,43 @@ APP_EXE="$APP/Contents/MacOS/$EXE_NAME"
 binary_contains "$APP_EXE" "$VERSION" || {
   echo "FAIL: desktop executable does not embed $VERSION" >&2; exit 1; }
 
-for platform in darwin-arm64 linux-x86_64 linux-aarch64; do
-  expected_format="$(elf_format "$platform")"
-  for binary in tariboyd tariboy tariboy-tasks tariboy-mail tariboy-scripts tariboy-shim tariboy-plugin-telegram; do
-    path="$APP/Contents/Resources/bin/$platform/$binary"
-    [ -x "$path" ] || { echo "FAIL: missing bundled binary: $path" >&2; exit 1; }
-    description="$(file "$path")"
-    grep "$expected_format" <<<"$description" >/dev/null || {
-      echo "FAIL: wrong architecture or format: $path" >&2; exit 1; }
-    binary_contains "$path" "$VERSION" || {
-      echo "FAIL: $path does not embed $VERSION" >&2; exit 1; }
-    if [ "$platform" = "darwin-arm64" ]; then
-      reported="$("$path" --version)"
-      [ "$reported" = "$VERSION" ] || {
-        echo "FAIL: $path reports $reported, expected $VERSION" >&2; exit 1; }
-    fi
-  done
-  for alias in ttasks tmail tscripts; do
-    alias_path="$APP/Contents/Resources/bin/$platform/$alias"
-    [ ! -e "$alias_path" ] && [ ! -L "$alias_path" ] || {
-      echo "FAIL: $alias must be an installed alias, not a bundled payload" >&2; exit 1; }
-  done
-  [ "$(tr -d '\r\n' < "$APP/Contents/Resources/bin/$platform/VERSION")" = "$VERSION" ] || {
-    echo "FAIL: $platform/VERSION does not equal $VERSION" >&2; exit 1; }
-  # Every set is uploadable to an SSH server of its platform.
-  (cd "$APP/Contents/Resources/bin/$platform" && shasum -a 256 -c SHA256SUMS) || {
-    echo "FAIL: $platform/SHA256SUMS does not verify" >&2; exit 1; }
-  cmp -s "$APP/Contents/Resources/bin/$platform/remote-install.sh" "$ROOT/desktop/src-tauri/src/remote-install.sh" || {
-    echo "FAIL: $platform/remote-install.sh is not the source installer" >&2; exit 1; }
+# The app carries only its own darwin-arm64 set; servers download theirs.
+actual_sets="$(find "$APP/Contents/Resources/bin" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | LC_ALL=C sort)"
+[ "$actual_sets" = "darwin-arm64" ] || {
+  echo "FAIL: app must bundle only the darwin-arm64 set; found:" >&2
+  printf '%s\n' "$actual_sets" >&2
+  exit 1
+}
+platform=darwin-arm64
+expected_format="$(elf_format "$platform")"
+for binary in $SERVER_PAYLOAD; do
+  path="$APP/Contents/Resources/bin/$platform/$binary"
+  [ -x "$path" ] || { echo "FAIL: missing bundled binary: $path" >&2; exit 1; }
+  description="$(file "$path")"
+  grep "$expected_format" <<<"$description" >/dev/null || {
+    echo "FAIL: wrong architecture or format: $path" >&2; exit 1; }
+  binary_contains "$path" "$VERSION" || {
+    echo "FAIL: $path does not embed $VERSION" >&2; exit 1; }
+  reported="$("$path" --version)"
+  [ "$reported" = "$VERSION" ] || {
+    echo "FAIL: $path reports $reported, expected $VERSION" >&2; exit 1; }
 done
+for alias in ttasks tmail tscripts; do
+  alias_path="$APP/Contents/Resources/bin/$platform/$alias"
+  [ ! -e "$alias_path" ] && [ ! -L "$alias_path" ] || {
+    echo "FAIL: $alias must be an installed alias, not a bundled payload" >&2; exit 1; }
+done
+[ "$(tr -d '\r\n' < "$APP/Contents/Resources/bin/$platform/VERSION")" = "$VERSION" ] || {
+  echo "FAIL: $platform/VERSION does not equal $VERSION" >&2; exit 1; }
 
-# The server archives are the payloads `tariboy update` installs, so each must
-# carry the complete install layout the fixed installer requires.
+# The server archives are the payloads SSH servers download and install, so
+# each must carry the complete install layout the fixed installer requires.
 ARCHIVE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tariboy-alpha-archive.XXXXXX")"
 EXPECTED_ARCHIVE_FILES="$(printf '%s\n' $SERVER_PAYLOAD VERSION SHA256SUMS remote-install.sh | LC_ALL=C sort)"
-for arch in $SERVER_ARCHES; do
-  archive="tariboy_${VERSION}_linux-${arch}.tar.gz"
-  unpacked="$ARCHIVE_DIR/$arch"
-  expected_format="$(elf_format "linux-$arch")"
+for platform in $SERVER_PLATFORMS; do
+  archive="tariboy_${VERSION}_${platform}.tar.gz"
+  unpacked="$ARCHIVE_DIR/$platform"
+  expected_format="$(elf_format "$platform")"
   mkdir "$unpacked"
   tar -xzf "$RELEASE_DIR/$archive" -C "$unpacked"
   actual_archive_files="$(find "$unpacked" -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort)"
