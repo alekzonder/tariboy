@@ -141,13 +141,15 @@ func TestRunInstallsRelease(t *testing.T) {
 		t.Fatalf("Run: %v\n%s", err, out.String())
 	}
 
-	link, err := os.Readlink(filepath.Join(home, ".local", "bin", "tariboyd"))
-	if err != nil {
-		t.Fatalf("read tariboyd link: %v", err)
-	}
-	want := filepath.Join(home, ".local", "lib", "tariboy", testVersion, "tariboyd")
-	if link != want {
-		t.Fatalf("tariboyd -> %q, want %q", link, want)
+	for name, payload := range map[string]string{"tariboyd": "tariboyd", "tariboy-scripts": "tariboy-scripts", "tscripts": "tariboy-scripts"} {
+		link, err := os.Readlink(filepath.Join(home, ".local", "bin", name))
+		if err != nil {
+			t.Fatalf("read %s link: %v", name, err)
+		}
+		want := filepath.Join(home, ".local", "lib", "tariboy", testVersion, payload)
+		if link != want {
+			t.Fatalf("%s -> %q, want %q", name, link, want)
+		}
 	}
 	installed, err := os.ReadFile(filepath.Join(home, ".local", "lib", "tariboy", testVersion, "VERSION"))
 	if err != nil {
@@ -340,6 +342,9 @@ func managedHome(t *testing.T, version string) string {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(filepath.Join(release, "tariboy-mail"), filepath.Join(bin, "tmail")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(release, "tariboy-scripts"), filepath.Join(bin, "tscripts")); err != nil {
 		t.Fatal(err)
 	}
 	writeSums(t, release)

@@ -26,6 +26,10 @@ tariboy has four command surfaces:
 4. **Mail** — `tariboy-mail`, installed as `tmail`, reads, sends and answers
    letters for an identity-bound agent or an operator. `tariboy mail …` runs the
    same client, always in operator mode.
+5. **Scripts** — `tariboy-scripts`, installed as `tscripts`, runs and inspects
+   the durable scripts of an identity-bound agent. It has no operator mode. The
+   skill launcher `scripts/scripts.sh` stays a thin launcher,
+   `exec tscripts "$@"`, like `tasks.sh` and `mail.sh`.
 
 ## Operator commands
 
@@ -376,12 +380,12 @@ Run inside an agent; the socket comes from `$TARIBOY_TOOLS_SOCKET`.
 | `scripts/schedule.sh add --kind cron\|oneshot --spec S [--message JSON]` | Schedule a future letter; without a recipient it writes to you |
 | `scripts/schedule.sh ls` | List your schedules |
 | `scripts/schedule.sh cancel ID` | Cancel a schedule |
-| `scripts/scripts.sh ls` | List your scripts |
-| `scripts/scripts.sh run NAME [--description TEXT] -- COMMAND` | Queue exactly one local run |
-| `scripts/scripts.sh schedule NAME --every SECONDS -- COMMAND` | Run now and repeat after each completion; a run that exits `111` (`TARIBOY_QUIET_EXIT`) stays quiet |
-| `scripts/scripts.sh runs SCRIPT_ID` / `logs RUN_ID` | Inspect run history and bounded logs |
-| `scripts/scripts.sh rerun SCRIPT_ID` | Run a completed one-shot or idle recurring definition immediately |
-| `scripts/scripts.sh cancel SCRIPT_OR_RUN_ID` / `rm SCRIPT_ID` | Cancel work or remove inactive history |
+| `tscripts ls` | List your scripts |
+| `tscripts run NAME [--description TEXT] -- COMMAND` | Queue exactly one local run |
+| `tscripts schedule NAME --every SECONDS -- COMMAND` | Run now and repeat after each completion; a run that exits `111` (`TARIBOY_QUIET_EXIT`) stays quiet |
+| `tscripts runs SCRIPT_ID` / `logs RUN_ID` | Inspect run history and bounded logs |
+| `tscripts rerun SCRIPT_ID` | Run a completed one-shot or idle recurring definition immediately |
+| `tscripts cancel SCRIPT_OR_RUN_ID` / `rm SCRIPT_ID` | Cancel work or remove inactive history |
 | `scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR` | Build a schema-v2 image from a daemon-readable source directory (`image-creator` only); relative paths start at the managed workdir |
 
 ## Mail (`tmail …`)

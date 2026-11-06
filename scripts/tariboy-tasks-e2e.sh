@@ -20,7 +20,7 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 
 # Compile the current source without modifying workspace artifacts.
 cd "$ROOT"
-for name in tariboyd tariboy tariboy-tasks tariboy-mail tariboy-shim tariboy-plugin-telegram; do
+for name in tariboyd tariboy tariboy-tasks tariboy-mail tariboy-scripts tariboy-shim tariboy-plugin-telegram; do
   go build -trimpath -o "$BIN/$name" "./cmd/$name"
 done
 
@@ -41,15 +41,28 @@ done
 [ -S "$SOCK" ] || fail "isolated daemon did not start"
 
 IMAGE_SOURCE="$RUNTIME/tasks-image"
-mkdir -p "$IMAGE_SOURCE/skills/tasks/scripts"
+mkdir -p "$IMAGE_SOURCE/skills/tasks/scripts" "$IMAGE_SOURCE/skills/scripts/scripts"
 cat >"$IMAGE_SOURCE/Tariboyfile.yaml" <<'YAML'
 schema_version: 2
 plugins:
   - name: tasks
+  - name: scripts
 skills:
   - dir: ./skills/tasks
+  - dir: ./skills/scripts
 prompts: []
 YAML
+cat >"$IMAGE_SOURCE/skills/scripts/SKILL.md" <<'MARKDOWN'
+---
+name: scripts
+description: Exercise the tscripts launcher.
+---
+MARKDOWN
+cat >"$IMAGE_SOURCE/skills/scripts/scripts/scripts.sh" <<'SH'
+#!/bin/sh
+exec tscripts "$@"
+SH
+chmod 0700 "$IMAGE_SOURCE/skills/scripts/scripts/scripts.sh"
 cat >"$IMAGE_SOURCE/skills/tasks/SKILL.md" <<'MARKDOWN'
 ---
 name: tasks
@@ -133,6 +146,44 @@ if printf '%s' "$AGENT" | grep -q '"queue":"OPS"'; then
 fi
 TARIBOY_TOOLS_SOCKET="$RUNTIME/worker.sock" ttasks list --queue AGT --sort priority | grep -q "$AGT_KEY" || fail "agent list missed its AGT task"
 [ "$(TARIBOY_TOOLS_SOCKET="$RUNTIME/worker.sock" ttasks list --subtree "$OPS_KEY")" = "no tasks match" ] || fail "agent list --subtree exposed an invisible tree"
+
+echo "--- tscripts runs, schedules, reruns and removes agent scripts"
+test "$(readlink "$RUNTIME/bin/tscripts")" = "$BIN/tariboy-scripts" || fail "runtime alias tscripts does not select the bundled payload"
+tscripts() { TARIBOY_TOOLS_SOCKET="$RUNTIME/worker.sock" "$RUNTIME/bin/tscripts" "$@"; }
+# jget EXPR prints a Python expression over the JSON document d on stdin.
+jget() { python3 -c 'import json, sys; d = json.load(sys.stdin); print(eval(sys.argv[1]))' "$1"; }
+# wait_runs ID EXPR waits up to 20 s until EXPR holds for the runs of script ID.
+wait_runs() {
+  for _ in $(seq 1 200); do
+    [ "$(tscripts runs "$1" --json | jget "$2")" = True ] && return 0
+    sleep 0.1
+  done
+  tscripts runs "$1" >&2 || true
+  fail "runs of $1 never matched: $2"
+}
+ONCE="$(tscripts run e2e-once --description "e2e once" -- echo hello-from-tscripts --json)"
+ONCE_ID="$(printf '%s' "$ONCE" | jget 'd["script"]["id"]')"
+ONCE_RUN="$(printf '%s' "$ONCE" | jget 'd["run"]["id"]')"
+wait_runs "$ONCE_ID" "any(r['id'] == '$ONCE_RUN' and r['status'] == 'succeeded' for r in d['runs'])"
+LOGS="$(tscripts logs "$ONCE_RUN")"
+printf '%s\n' "$LOGS" | grep -q 'hello-from-tscripts' || { printf '%s\n' "$LOGS" >&2; fail "tscripts logs missed the run output"; }
+EVERY_ID="$(tscripts schedule e2e-quiet --every 1 -- 'exit 111' --json | jget 'd["script"]["id"]')"
+wait_runs "$EVERY_ID" "any(r.get('exit_code') == 111 for r in d['runs'])"
+[ "$(tscripts ls --json | jget "[s['state'] for s in d['scripts'] if s['id'] == '$EVERY_ID']")" = "['active']" ] \
+  || fail "a quiet exit 111 stopped the schedule"
+RERUN="$(tscripts rerun "$ONCE_ID" --json | jget 'd["id"]')"
+[ "$RERUN" != "$ONCE_RUN" ] || fail "tscripts rerun did not start a new run"
+wait_runs "$ONCE_ID" "any(r['id'] == '$RERUN' and r['status'] == 'succeeded' for r in d['runs'])"
+tscripts cancel "$EVERY_ID" | grep -q '^cancelled: true$' || fail "tscripts cancel did not cancel the schedule"
+tscripts rm "$ONCE_ID" | grep -q '^removed: true$' || fail "tscripts rm did not remove the one-shot script"
+tscripts rm "$EVERY_ID" | grep -q '^removed: true$' || fail "tscripts rm did not remove the schedule"
+[ "$(tscripts ls --json | jget "[s['id'] for s in d['scripts'] if s['id'] in ('$ONCE_ID', '$EVERY_ID')]")" = "[]" ] \
+  || fail "tscripts ls still shows removed scripts"
+set +e
+tscripts schedule e2e-refused --every 5 --quiet-exit 3 -- true >"$RUNTIME/quiet.stdout" 2>"$RUNTIME/quiet.stderr"
+CODE=$?
+set -e
+[ "$CODE" -eq 2 ] && grep -q -- '--quiet-exit is not supported' "$RUNTIME/quiet.stderr" || fail "schedule --quiet-exit exit=$CODE, want 2 and a refusal"
 
 echo "--- unreachable agent socket never falls back to operator mode"
 set +e

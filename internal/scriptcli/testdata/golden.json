@@ -1,0 +1,1580 @@
+[
+  {
+    "name": "run text",
+    "argv": [
+      "run",
+      "ci",
+      "--",
+      "make",
+      "test"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "run": {
+            "agent": "worker",
+            "created_at": "2026-11-06T10:00:00Z",
+            "finished_at": null,
+            "id": "run-1",
+            "log_path": "/r/run-1.log",
+            "script_id": "scr-1",
+            "started_at": null,
+            "status": "queued"
+          },
+          "script": {
+            "agent": "worker",
+            "command": "make test",
+            "created_at": "2026-11-06T10:00:00Z",
+            "description": "ci",
+            "id": "scr-1",
+            "interval_seconds": 0,
+            "mode": "once",
+            "name": "ci",
+            "next_run_at": null,
+            "state": "active"
+          }
+        }
+      }
+    },
+    "request": {
+      "method": "POST",
+      "route": "/tools/script/run",
+      "body": {
+        "name": "ci",
+        "description": "ci",
+        "command": "make test"
+      }
+    },
+    "stdout": "run: map[agent:worker created_at:2026-11-06T10:00:00Z finished_at:<nil> id:run-1 log_path:/r/run-1.log script_id:scr-1 started_at:<nil> status:queued]\nscript: map[agent:worker command:make test created_at:2026-11-06T10:00:00Z description:ci id:scr-1 interval_seconds:0 mode:once name:ci next_run_at:<nil> state:active]\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "run json flag last",
+    "argv": [
+      "run",
+      "ci",
+      "--description",
+      "CI check",
+      "--",
+      "make test",
+      "--json"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "run": {
+            "agent": "worker",
+            "id": "run-1",
+            "pid": 42,
+            "status": "running"
+          },
+          "script": {
+            "description": "CI check",
+            "id": "scr-1",
+            "name": "ci"
+          }
+        }
+      }
+    },
+    "request": {
+      "method": "POST",
+      "route": "/tools/script/run",
+      "body": {
+        "name": "ci",
+        "description": "CI check",
+        "command": "make test"
+      }
+    },
+    "stdout": "{\"run\":{\"agent\":\"worker\",\"id\":\"run-1\",\"pid\":42,\"status\":\"running\"},\"script\":{\"description\":\"CI check\",\"id\":\"scr-1\",\"name\":\"ci\"}}\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "run description equals",
+    "argv": [
+      "run",
+      "ci",
+      "--description=nightly build",
+      "--",
+      "true"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "script": {
+            "id": "scr-1"
+          }
+        }
+      }
+    },
+    "request": {
+      "method": "POST",
+      "route": "/tools/script/run",
+      "body": {
+        "name": "ci",
+        "description": "nightly build",
+        "command": "true"
+      }
+    },
+    "stdout": "script: map[id:scr-1]\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "run description without value",
+    "argv": [
+      "run",
+      "ci",
+      "--description",
+      "--",
+      "true"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "script": {
+            "id": "scr-1"
+          }
+        }
+      }
+    },
+    "request": {
+      "method": "POST",
+      "route": "/tools/script/run",
+      "body": {
+        "name": "ci",
+        "description": "true",
+        "command": "true"
+      }
+    },
+    "stdout": "script: map[id:scr-1]\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "run description twice",
+    "argv": [
+      "run",
+      "ci",
+      "--description",
+      "a",
+      "--description",
+      "b",
+      "--",
+      "true"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "script": {
+            "id": "scr-1"
+          }
+        }
+      }
+    },
+    "request": {
+      "method": "POST",
+      "route": "/tools/script/run",
+      "body": {
+        "name": "ci",
+        "description": "b",
+        "command": "true"
+      }
+    },
+    "stdout": "script: map[id:scr-1]\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "run json after separator",
+    "argv": [
+      "run",
+      "ci",
+      "--",
+      "tool",
+      "--json"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "script": {
+            "id": "scr-1",
+            "name": "ci"
+          }
+        }
+      }
+    },
+    "request": {
+      "method": "POST",
+      "route": "/tools/script/run",
+      "body": {
+        "name": "ci",
+        "description": "ci",
+        "command": "tool"
+      }
+    },
+    "stdout": "{\"script\":{\"id\":\"scr-1\",\"name\":\"ci\"}}\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "run second separator kept in command",
+    "argv": [
+      "run",
+      "ci",
+      "--",
+      "a",
+      "--",
+      "b"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "script": {
+            "id": "scr-1"
+          }
+        }
+      }
+    },
+    "request": {
+      "method": "POST",
+      "route": "/tools/script/run",
+      "body": {
+        "name": "ci",
+        "description": "ci",
+        "command": "a -- b"
+      }
+    },
+    "stdout": "script: map[id:scr-1]\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "schedule text",
+    "argv": [
+      "schedule",
+      "watch",
+      "--every",
+      "60",
+      "--",
+      "./check.sh"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "run": {
+            "id": "run-2",
+            "status": "queued"
+          },
+          "script": {
+            "id": "scr-2",
+            "interval_seconds": 60,
+            "mode": "schedule",
+            "name": "watch",
+            "state": "active"
+          }
+        }
+      }
+    },
+    "request": {
+      "method": "POST",
+      "route": "/tools/script/schedule",
+      "body": {
+        "name": "watch",
+        "description": "watch",
+        "command": "./check.sh",
+        "interval_seconds": 60
+      }
+    },
+    "stdout": "run: map[id:run-2 status:queued]\nscript: map[id:scr-2 interval_seconds:60 mode:schedule name:watch state:active]\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "schedule json",
+    "argv": [
+      "--json",
+      "schedule",
+      "watch",
+      "--every=30",
+      "--description",
+      "Watch PR",
+      "--",
+      "exit 111"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "script": {
+            "name": "watch",
+            "id": "scr-2",
+            "interval_seconds": 30
+          },
+          "run": {
+            "status": "queued",
+            "id": "run-2"
+          }
+        }
+      }
+    },
+    "request": {
+      "method": "POST",
+      "route": "/tools/script/schedule",
+      "body": {
+        "name": "watch",
+        "description": "Watch PR",
+        "command": "exit 111",
+        "interval_seconds": 30
+      }
+    },
+    "stdout": "{\"script\":{\"name\":\"watch\",\"id\":\"scr-2\",\"interval_seconds\":30},\"run\":{\"status\":\"queued\",\"id\":\"run-2\"}}\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "schedule every with spaces and plus",
+    "argv": [
+      "schedule",
+      "w",
+      "--every",
+      " +5 ",
+      "--",
+      "true"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "script": {
+            "id": "scr-3"
+          }
+        }
+      }
+    },
+    "request": {
+      "method": "POST",
+      "route": "/tools/script/schedule",
+      "body": {
+        "name": "w",
+        "description": "w",
+        "command": "true",
+        "interval_seconds": 5
+      }
+    },
+    "stdout": "script: map[id:scr-3]\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "schedule quiet-exit after separator",
+    "argv": [
+      "schedule",
+      "w",
+      "--every",
+      "5",
+      "--",
+      "cmd",
+      "--quiet-exit"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "script": {
+            "id": "scr-3"
+          }
+        }
+      }
+    },
+    "request": {
+      "method": "POST",
+      "route": "/tools/script/schedule",
+      "body": {
+        "name": "w",
+        "description": "w",
+        "command": "cmd --quiet-exit",
+        "interval_seconds": 5
+      }
+    },
+    "stdout": "script: map[id:scr-3]\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "ls text",
+    "argv": [
+      "ls"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "count": 2,
+          "scripts": [
+            {
+              "id": "scr-1",
+              "latest_run": {
+                "exit_code": 0,
+                "id": "run-1",
+                "status": "succeeded"
+              },
+              "name": "ci",
+              "state": "done"
+            },
+            {
+              "id": "scr-2",
+              "name": "watch",
+              "next_run_at": "2026-11-06T10:01:00Z",
+              "state": "active"
+            }
+          ]
+        }
+      }
+    },
+    "request": {
+      "method": "GET",
+      "route": "/tools/script/ls"
+    },
+    "stdout": "count: 2\nscripts: [map[id:scr-1 latest_run:map[exit_code:0 id:run-1 status:succeeded] name:ci state:done] map[id:scr-2 name:watch next_run_at:2026-11-06T10:01:00Z state:active]]\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "ls json",
+    "argv": [
+      "ls",
+      "--json"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "scripts": [
+            {
+              "id": "scr-1",
+              "latest_run": {
+                "exit_code": 0,
+                "id": "run-1"
+              },
+              "name": "ci"
+            }
+          ],
+          "count": 1
+        }
+      }
+    },
+    "request": {
+      "method": "GET",
+      "route": "/tools/script/ls"
+    },
+    "stdout": "{\"scripts\":[{\"id\":\"scr-1\",\"latest_run\":{\"exit_code\":0,\"id\":\"run-1\"},\"name\":\"ci\"}],\"count\":1}\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "ls empty",
+    "argv": [
+      "ls"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "count": 0,
+          "scripts": []
+        }
+      }
+    },
+    "request": {
+      "method": "GET",
+      "route": "/tools/script/ls"
+    },
+    "stdout": "count: 0\nscripts: []\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "ls tools json env",
+    "argv": [
+      "ls"
+    ],
+    "tools_json": "1",
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "count": 0,
+          "scripts": []
+        }
+      }
+    },
+    "request": {
+      "method": "GET",
+      "route": "/tools/script/ls"
+    },
+    "stdout": "{\"count\":0,\"scripts\":[]}\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "ls tools json env not one",
+    "argv": [
+      "ls"
+    ],
+    "tools_json": "true",
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "count": 0,
+          "scripts": []
+        }
+      }
+    },
+    "request": {
+      "method": "GET",
+      "route": "/tools/script/ls"
+    },
+    "stdout": "count: 0\nscripts: []\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "ls json twice",
+    "argv": [
+      "--json",
+      "ls",
+      "--json"
+    ],
+    "stdout": "",
+    "stderr": "tools script: unknown command ls --json\n",
+    "exit": 2
+  },
+  {
+    "name": "ls extra argument",
+    "argv": [
+      "ls",
+      "all"
+    ],
+    "stdout": "",
+    "stderr": "tools script: unknown command ls all\n",
+    "exit": 2
+  },
+  {
+    "name": "rerun text",
+    "argv": [
+      "rerun",
+      "scr-1"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "agent": "worker",
+          "id": "run-3",
+          "script_id": "scr-1",
+          "status": "queued"
+        }
+      }
+    },
+    "request": {
+      "method": "POST",
+      "route": "/tools/script/rerun",
+      "body": {
+        "id": "scr-1"
+      }
+    },
+    "stdout": "agent: worker\nid: run-3\nscript_id: scr-1\nstatus: queued\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "rerun json",
+    "argv": [
+      "rerun",
+      "scr-1",
+      "--json"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "id": "run-3",
+          "script_id": "scr-1",
+          "status": "queued"
+        }
+      }
+    },
+    "request": {
+      "method": "POST",
+      "route": "/tools/script/rerun",
+      "body": {
+        "id": "scr-1"
+      }
+    },
+    "stdout": "{\"id\":\"run-3\",\"script_id\":\"scr-1\",\"status\":\"queued\"}\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "rerun extra positional",
+    "argv": [
+      "rerun",
+      "scr-1",
+      "scr-2"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "id": "run-3"
+        }
+      }
+    },
+    "request": {
+      "method": "POST",
+      "route": "/tools/script/rerun",
+      "body": {
+        "id": "scr-1"
+      }
+    },
+    "stdout": "id: run-3\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "cancel text",
+    "argv": [
+      "cancel",
+      "scr-2"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "cancelled": true,
+          "id": "scr-2"
+        }
+      }
+    },
+    "request": {
+      "method": "POST",
+      "route": "/tools/script/cancel",
+      "body": {
+        "id": "scr-2"
+      }
+    },
+    "stdout": "cancelled: true\nid: scr-2\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "cancel json",
+    "argv": [
+      "--json",
+      "cancel",
+      "scr-2"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "cancelled": true,
+          "id": "scr-2"
+        }
+      }
+    },
+    "request": {
+      "method": "POST",
+      "route": "/tools/script/cancel",
+      "body": {
+        "id": "scr-2"
+      }
+    },
+    "stdout": "{\"cancelled\":true,\"id\":\"scr-2\"}\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "rm text",
+    "argv": [
+      "rm",
+      "scr-1"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "id": "scr-1",
+          "removed": true
+        }
+      }
+    },
+    "request": {
+      "method": "POST",
+      "route": "/tools/script/rm",
+      "body": {
+        "id": "scr-1"
+      }
+    },
+    "stdout": "id: scr-1\nremoved: true\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "rm json",
+    "argv": [
+      "rm",
+      "--json",
+      "scr-1"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "id": "scr-1",
+          "removed": true
+        }
+      }
+    },
+    "request": {
+      "method": "POST",
+      "route": "/tools/script/rm",
+      "body": {
+        "id": "scr-1"
+      }
+    },
+    "stdout": "{\"id\":\"scr-1\",\"removed\":true}\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "runs text",
+    "argv": [
+      "runs",
+      "scr-2"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "count": 2,
+          "runs": [
+            {
+              "exit_code": 111,
+              "id": "run-2",
+              "status": "succeeded"
+            },
+            {
+              "id": "run-4",
+              "pid": 77,
+              "status": "running"
+            }
+          ]
+        }
+      }
+    },
+    "request": {
+      "method": "GET",
+      "route": "/tools/script/runs/scr-2"
+    },
+    "stdout": "count: 2\nruns: [map[exit_code:111 id:run-2 status:succeeded] map[id:run-4 pid:77 status:running]]\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "runs json",
+    "argv": [
+      "runs",
+      "scr-2",
+      "--json"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "runs": [
+            {
+              "exit_code": 111,
+              "id": "run-2"
+            }
+          ],
+          "count": 1
+        }
+      }
+    },
+    "request": {
+      "method": "GET",
+      "route": "/tools/script/runs/scr-2"
+    },
+    "stdout": "{\"runs\":[{\"exit_code\":111,\"id\":\"run-2\"}],\"count\":1}\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "logs text",
+    "argv": [
+      "logs",
+      "run-1"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "log": "line 1\nпривет <b> & \"q\" \\ \t😀\n",
+          "run": {
+            "exit_code": 0,
+            "id": "run-1",
+            "status": "succeeded"
+          }
+        }
+      }
+    },
+    "request": {
+      "method": "GET",
+      "route": "/tools/script/logs/run-1"
+    },
+    "stdout": "log: line 1\nпривет <b> & \"q\" \\ \t😀\n\nrun: map[exit_code:0 id:run-1 status:succeeded]\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "logs json",
+    "argv": [
+      "logs",
+      "run-1",
+      "--json"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "run": {
+            "id": "run-1"
+          },
+          "log": "line 1\nпривет <b> & \"q\" \\ \t\r\b\f\u0001\u007f😀\n"
+        }
+      }
+    },
+    "request": {
+      "method": "GET",
+      "route": "/tools/script/logs/run-1"
+    },
+    "stdout": "{\"run\":{\"id\":\"run-1\"},\"log\":\"line 1\\n\\u043f\\u0440\\u0438\\u0432\\u0435\\u0442 <b> & \\\"q\\\" \\\\ \\t\\r\\b\\f\\u0001\\u007f\\ud83d\\ude00\\n\"}\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "help short",
+    "argv": [
+      "-h"
+    ],
+    "stdout": "usage: scripts.sh <run|schedule|ls|runs|logs|rerun|cancel|rm> ... [--json]\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "help long",
+    "argv": [
+      "--help"
+    ],
+    "stdout": "usage: scripts.sh <run|schedule|ls|runs|logs|rerun|cancel|rm> ... [--json]\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "help with json",
+    "argv": [
+      "--json",
+      "-h"
+    ],
+    "stdout": "usage: scripts.sh <run|schedule|ls|runs|logs|rerun|cancel|rm> ... [--json]\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "help with extra argument",
+    "argv": [
+      "-h",
+      "ls"
+    ],
+    "stdout": "",
+    "stderr": "tools script: unknown command -h ls\n",
+    "exit": 2
+  },
+  {
+    "name": "unknown command",
+    "argv": [
+      "status",
+      "x"
+    ],
+    "stdout": "",
+    "stderr": "tools script: unknown command status x\n",
+    "exit": 2
+  },
+  {
+    "name": "no arguments",
+    "argv": [],
+    "stdout": "",
+    "stderr": "tools script: unknown command \n",
+    "exit": 2
+  },
+  {
+    "name": "run without separator",
+    "argv": [
+      "run",
+      "ci",
+      "make"
+    ],
+    "stdout": "",
+    "stderr": "tools script run: NAME [options] -- COMMAND required\n",
+    "exit": 2
+  },
+  {
+    "name": "run name only",
+    "argv": [
+      "run",
+      "ci"
+    ],
+    "stdout": "",
+    "stderr": "tools script run: NAME [options] -- COMMAND required\n",
+    "exit": 2
+  },
+  {
+    "name": "run alone",
+    "argv": [
+      "run"
+    ],
+    "stdout": "",
+    "stderr": "tools script run: NAME [options] -- COMMAND required\n",
+    "exit": 2
+  },
+  {
+    "name": "run separator as name",
+    "argv": [
+      "run",
+      "--",
+      "x"
+    ],
+    "stdout": "",
+    "stderr": "tools script run: NAME [options] -- COMMAND required\n",
+    "exit": 2
+  },
+  {
+    "name": "run empty command",
+    "argv": [
+      "run",
+      "ci",
+      "--"
+    ],
+    "stdout": "",
+    "stderr": "tools script run: command is required after --\n",
+    "exit": 2
+  },
+  {
+    "name": "run blank command",
+    "argv": [
+      "run",
+      "ci",
+      "--",
+      " ",
+      ""
+    ],
+    "stdout": "",
+    "stderr": "tools script run: command is required after --\n",
+    "exit": 2
+  },
+  {
+    "name": "run positional before separator",
+    "argv": [
+      "run",
+      "ci",
+      "extra",
+      "--",
+      "true"
+    ],
+    "stdout": "",
+    "stderr": "tools script run: unexpected argument \"extra\" before --\n",
+    "exit": 2
+  },
+  {
+    "name": "run unknown flag",
+    "argv": [
+      "run",
+      "ci",
+      "--foo=1",
+      "--",
+      "true"
+    ],
+    "stdout": "",
+    "stderr": "unknown flag --foo\n",
+    "exit": 2
+  },
+  {
+    "name": "run quiet-exit unknown",
+    "argv": [
+      "run",
+      "ci",
+      "--quiet-exit",
+      "3",
+      "--",
+      "true"
+    ],
+    "stdout": "",
+    "stderr": "unknown flag --quiet-exit\n",
+    "exit": 2
+  },
+  {
+    "name": "run every unknown",
+    "argv": [
+      "run",
+      "ci",
+      "--every",
+      "3",
+      "--",
+      "true"
+    ],
+    "stdout": "",
+    "stderr": "unknown flag --every\n",
+    "exit": 2
+  },
+  {
+    "name": "schedule without every",
+    "argv": [
+      "schedule",
+      "w",
+      "--",
+      "true"
+    ],
+    "stdout": "",
+    "stderr": "tools script schedule: --every must be a positive number of seconds\n",
+    "exit": 2
+  },
+  {
+    "name": "schedule every zero",
+    "argv": [
+      "schedule",
+      "w",
+      "--every",
+      "0",
+      "--",
+      "true"
+    ],
+    "stdout": "",
+    "stderr": "tools script schedule: --every must be a positive number of seconds\n",
+    "exit": 2
+  },
+  {
+    "name": "schedule every negative",
+    "argv": [
+      "schedule",
+      "w",
+      "--every",
+      "-5",
+      "--",
+      "true"
+    ],
+    "stdout": "",
+    "stderr": "tools script schedule: --every must be a positive number of seconds\n",
+    "exit": 2
+  },
+  {
+    "name": "schedule every text",
+    "argv": [
+      "schedule",
+      "w",
+      "--every",
+      "abc",
+      "--",
+      "true"
+    ],
+    "stdout": "",
+    "stderr": "tools script schedule: --every must be a positive number of seconds\n",
+    "exit": 2
+  },
+  {
+    "name": "schedule every without value",
+    "argv": [
+      "schedule",
+      "w",
+      "--every",
+      "--",
+      "true"
+    ],
+    "stdout": "",
+    "stderr": "tools script schedule: --every must be a positive number of seconds\n",
+    "exit": 2
+  },
+  {
+    "name": "schedule every empty",
+    "argv": [
+      "schedule",
+      "w",
+      "--every=",
+      "--",
+      "true"
+    ],
+    "stdout": "",
+    "stderr": "tools script schedule: --every must be a positive number of seconds\n",
+    "exit": 2
+  },
+  {
+    "name": "schedule quiet-exit",
+    "argv": [
+      "schedule",
+      "w",
+      "--every",
+      "5",
+      "--quiet-exit",
+      "3",
+      "--",
+      "true"
+    ],
+    "stdout": "",
+    "stderr": "tools script schedule: --quiet-exit is not supported; a recurring command exits with $TARIBOY_QUIET_EXIT (111) to stay quiet\n",
+    "exit": 2
+  },
+  {
+    "name": "schedule quiet-exit equals",
+    "argv": [
+      "schedule",
+      "w",
+      "--quiet-exit=3",
+      "--",
+      "true"
+    ],
+    "stdout": "",
+    "stderr": "tools script schedule: --quiet-exit is not supported; a recurring command exits with $TARIBOY_QUIET_EXIT (111) to stay quiet\n",
+    "exit": 2
+  },
+  {
+    "name": "schedule quiet-exit before unknown flag",
+    "argv": [
+      "schedule",
+      "w",
+      "--foo",
+      "--quiet-exit",
+      "--",
+      "true"
+    ],
+    "stdout": "",
+    "stderr": "tools script schedule: --quiet-exit is not supported; a recurring command exits with $TARIBOY_QUIET_EXIT (111) to stay quiet\n",
+    "exit": 2
+  },
+  {
+    "name": "schedule unknown flag",
+    "argv": [
+      "schedule",
+      "w",
+      "--every",
+      "5",
+      "--foo",
+      "--",
+      "true"
+    ],
+    "stdout": "",
+    "stderr": "unknown flag --foo\n",
+    "exit": 2
+  },
+  {
+    "name": "schedule positional before separator",
+    "argv": [
+      "schedule",
+      "w",
+      "x",
+      "--every",
+      "5",
+      "--",
+      "true"
+    ],
+    "stdout": "",
+    "stderr": "tools script schedule: unexpected argument \"x\" before --\n",
+    "exit": 2
+  },
+  {
+    "name": "schedule empty command",
+    "argv": [
+      "schedule",
+      "w",
+      "--every",
+      "5",
+      "--"
+    ],
+    "stdout": "",
+    "stderr": "tools script schedule: command is required after --\n",
+    "exit": 2
+  },
+  {
+    "name": "schedule without separator",
+    "argv": [
+      "schedule",
+      "w",
+      "--every",
+      "5"
+    ],
+    "stdout": "",
+    "stderr": "tools script schedule: NAME [options] -- COMMAND required\n",
+    "exit": 2
+  },
+  {
+    "name": "rerun without id",
+    "argv": [
+      "rerun"
+    ],
+    "stdout": "",
+    "stderr": "tools script rerun: <id> is required\n",
+    "exit": 2
+  },
+  {
+    "name": "cancel without id",
+    "argv": [
+      "cancel"
+    ],
+    "stdout": "",
+    "stderr": "tools script cancel: <id> is required\n",
+    "exit": 2
+  },
+  {
+    "name": "rm without id",
+    "argv": [
+      "rm"
+    ],
+    "stdout": "",
+    "stderr": "tools script rm: <id> is required\n",
+    "exit": 2
+  },
+  {
+    "name": "runs without id",
+    "argv": [
+      "runs"
+    ],
+    "stdout": "",
+    "stderr": "tools script runs: <id> is required\n",
+    "exit": 2
+  },
+  {
+    "name": "logs without id",
+    "argv": [
+      "logs"
+    ],
+    "stdout": "",
+    "stderr": "tools script logs: <id> is required\n",
+    "exit": 2
+  },
+  {
+    "name": "rerun unknown flag",
+    "argv": [
+      "rerun",
+      "--force",
+      "scr-1"
+    ],
+    "stdout": "",
+    "stderr": "unknown flag --force\n",
+    "exit": 2
+  },
+  {
+    "name": "logs separator flag",
+    "argv": [
+      "logs",
+      "--",
+      "run-1"
+    ],
+    "stdout": "",
+    "stderr": "unknown flag --\n",
+    "exit": 2
+  },
+  {
+    "name": "socket unset",
+    "argv": [
+      "ls"
+    ],
+    "socket": "unset",
+    "stdout": "",
+    "stderr": "tools: TARIBOY_TOOLS_SOCKET is not set (are you running inside an agent?)\n",
+    "exit": 2
+  },
+  {
+    "name": "socket unset usage error first",
+    "argv": [
+      "run",
+      "ci"
+    ],
+    "socket": "unset",
+    "stdout": "",
+    "stderr": "tools script run: NAME [options] -- COMMAND required\n",
+    "exit": 2
+  },
+  {
+    "name": "socket empty",
+    "argv": [
+      "rm",
+      "scr-1"
+    ],
+    "socket": "empty",
+    "stdout": "",
+    "stderr": "tools: agent socket is not reachable\n",
+    "exit": 2
+  },
+  {
+    "name": "socket missing",
+    "argv": [
+      "runs",
+      "scr-1"
+    ],
+    "socket": "missing",
+    "stdout": "",
+    "stderr": "tools: agent socket is not reachable\n",
+    "exit": 2
+  },
+  {
+    "name": "daemon error",
+    "argv": [
+      "rm",
+      "scr-9"
+    ],
+    "response": {
+      "status": 404,
+      "body": {
+        "error": {
+          "code": "not_found",
+          "message": "script scr-9 not found"
+        },
+        "ok": false
+      }
+    },
+    "request": {
+      "method": "POST",
+      "route": "/tools/script/rm",
+      "body": {
+        "id": "scr-9"
+      }
+    },
+    "stdout": "",
+    "stderr": "script scr-9 not found\n",
+    "exit": 1
+  },
+  {
+    "name": "daemon error json",
+    "argv": [
+      "--json",
+      "logs",
+      "run-9"
+    ],
+    "response": {
+      "status": 404,
+      "body": {
+        "error": {
+          "code": "not_found",
+          "message": "run run-9 not found"
+        },
+        "ok": false
+      }
+    },
+    "request": {
+      "method": "GET",
+      "route": "/tools/script/logs/run-9"
+    },
+    "stdout": "",
+    "stderr": "run run-9 not found\n",
+    "exit": 1
+  },
+  {
+    "name": "daemon error without detail",
+    "argv": [
+      "ls"
+    ],
+    "response": {
+      "status": 500,
+      "body": {
+        "ok": false
+      }
+    },
+    "request": {
+      "method": "GET",
+      "route": "/tools/script/ls"
+    },
+    "stdout": "",
+    "stderr": "daemon returned failure without error detail\n",
+    "exit": 1
+  },
+  {
+    "name": "daemon error without message",
+    "argv": [
+      "ls"
+    ],
+    "response": {
+      "status": 500,
+      "body": {
+        "error": {
+          "code": "internal"
+        },
+        "ok": false
+      }
+    },
+    "request": {
+      "method": "GET",
+      "route": "/tools/script/ls"
+    },
+    "stdout": "",
+    "stderr": "daemon returned failure without error detail\n",
+    "exit": 1
+  },
+  {
+    "name": "string result text",
+    "argv": [
+      "ls"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": "a \"b\" <é>\n"
+      }
+    },
+    "request": {
+      "method": "GET",
+      "route": "/tools/script/ls"
+    },
+    "stdout": "a \\\"b\\\" <\\u00e9>\\n\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "string result json",
+    "argv": [
+      "ls",
+      "--json"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": "a \"b\" <é>\n"
+      }
+    },
+    "request": {
+      "method": "GET",
+      "route": "/tools/script/ls"
+    },
+    "stdout": "\"a \\\"b\\\" <\\u00e9>\\n\"\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "array result text",
+    "argv": [
+      "ls"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": [
+          1,
+          "x",
+          null,
+          true,
+          {
+            "b": 1,
+            "a": "é"
+          }
+        ]
+      }
+    },
+    "request": {
+      "method": "GET",
+      "route": "/tools/script/ls"
+    },
+    "stdout": "[1,\"x\",null,true,{\"b\":1,\"a\":\"\\u00e9\"}]\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "null result text",
+    "argv": [
+      "ls"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": null
+      }
+    },
+    "request": {
+      "method": "GET",
+      "route": "/tools/script/ls"
+    },
+    "stdout": "null\n",
+    "stderr": "",
+    "exit": 0
+  },
+  {
+    "name": "nested values text",
+    "argv": [
+      "ls"
+    ],
+    "response": {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "result": {
+          "z": {
+            "b": [
+              false,
+              null,
+              "s p"
+            ],
+            "a": {}
+          },
+          "a": [],
+          "m": "é<&>"
+        }
+      }
+    },
+    "request": {
+      "method": "GET",
+      "route": "/tools/script/ls"
+    },
+    "stdout": "a: []\nm: é<&>\nz: map[a:map[] b:[false <nil> s p]]\n",
+    "stderr": "",
+    "exit": 0
+  }
+]

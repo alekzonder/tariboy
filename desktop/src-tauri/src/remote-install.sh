@@ -36,7 +36,7 @@ switched=
 release_created=false
 committed=false
 sources="tariboyd tariboy tariboy-shim tariboy-plugin-telegram"
-managed_links="tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-mail:tariboy-mail tmail:tariboy-mail tariboy-shim:tariboy-shim tariboy-plugin-telegram:tariboy-plugin-telegram"
+managed_links="tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-mail:tariboy-mail tmail:tariboy-mail tariboy-scripts:tariboy-scripts tscripts:tariboy-scripts tariboy-shim:tariboy-shim tariboy-plugin-telegram:tariboy-plugin-telegram"
 # macOS ships `shasum` instead of coreutils `sha256sum`; both read SHA256SUMS.
 verify_checksums() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -52,6 +52,9 @@ if test "$mode" != activate || test -e "$binary_source/tariboy-tasks" || test -L
 fi
 if test "$mode" != activate || test -e "$binary_source/tariboy-mail" || test -L "$binary_source/tariboy-mail"; then
   sources="$sources tariboy-mail"
+fi
+if test "$mode" != activate || test -e "$binary_source/tariboy-scripts" || test -L "$binary_source/tariboy-scripts"; then
+  sources="$sources tariboy-scripts"
 fi
 if test -f "$binary_source/tariboy-store"; then
   sources="$sources tariboy-store"

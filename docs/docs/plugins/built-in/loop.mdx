@@ -58,7 +58,7 @@ prompts:
 
 The prompt tells agents to wait for dispatched subagents and terminal-tool jobs,
 inspect their final results, and resolve failures before completing the iteration.
-Manager-owned durable `scripts/scripts.sh run` and `scripts/scripts.sh schedule` jobs remain non-blocking because their
+Manager-owned durable `tscripts run` and `tscripts schedule` jobs remain non-blocking because their
 results are intentionally delivered in a later iteration. The prompt also
 explains when the idle form is appropriate.
 

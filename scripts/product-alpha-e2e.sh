@@ -137,7 +137,7 @@ REMOTE_CLEANUP
 trap cleanup EXIT
 trap 'exit 130' HUP INT TERM
 
-for name in tariboyd tariboy tariboy-tasks tariboy-mail tariboy-shim tariboy-plugin-telegram; do
+for name in tariboyd tariboy tariboy-tasks tariboy-mail tariboy-scripts tariboy-shim tariboy-plugin-telegram; do
   [ -f "desktop/src-tauri/resources/bin/linux-x86_64/$name" ] ||
     fail "missing packaged Linux binary: $name"
 done
@@ -152,6 +152,7 @@ scp desktop/src-tauri/resources/bin/linux-x86_64/tariboyd \
   desktop/src-tauri/resources/bin/linux-x86_64/tariboy \
   desktop/src-tauri/resources/bin/linux-x86_64/tariboy-tasks \
   desktop/src-tauri/resources/bin/linux-x86_64/tariboy-mail \
+  desktop/src-tauri/resources/bin/linux-x86_64/tariboy-scripts \
   desktop/src-tauri/resources/bin/linux-x86_64/tariboy-shim \
   desktop/src-tauri/resources/bin/linux-x86_64/tariboy-plugin-telegram \
   desktop/src-tauri/resources/bin/linux-x86_64/SHA256SUMS \
@@ -200,7 +201,7 @@ for command in curl python3 tmux; do
 done
 
 HOME=$home sh "$stage/remote-install.sh" "$version" ".stage-alpha-$stamp"
-for name in tariboyd tariboy tariboy-tasks tariboy-mail tariboy-shim tariboy-plugin-telegram; do
+for name in tariboyd tariboy tariboy-tasks tariboy-mail tariboy-scripts tariboy-shim tariboy-plugin-telegram; do
   test "$("$release/$name" --version)" = "$version"
   test "$(readlink "$home/.local/bin/$name")" = "$release/$name"
 done
@@ -208,6 +209,8 @@ test "$(readlink "$home/.local/bin/ttasks")" = "$release/tariboy-tasks"
 test "$("$home/.local/bin/ttasks" --version)" = "$version"
 test "$(readlink "$home/.local/bin/tmail")" = "$release/tariboy-mail"
 test "$("$home/.local/bin/tmail" --version)" = "$version"
+test "$(readlink "$home/.local/bin/tscripts")" = "$release/tariboy-scripts"
+test "$("$home/.local/bin/tscripts" --version)" = "$version"
 test ! -e "$release/ttasks"
 test ! -L "$release/ttasks"
 

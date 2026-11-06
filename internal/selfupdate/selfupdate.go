@@ -60,6 +60,7 @@ var payloadBinaries = []string{
 	"tariboy",
 	"tariboy-tasks",
 	"tariboy-mail",
+	"tariboy-scripts",
 	"tariboy-shim",
 	"tariboy-plugin-telegram",
 }

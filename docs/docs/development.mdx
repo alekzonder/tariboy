@@ -94,9 +94,10 @@ stable warning; neither the inherited nor resolved path nor shell startup
 output may be logged, audited, or included in support bundles.
 
 After resolving the account baseline, a packaged daemon prepends its shared
-runtime `bin` directory, which contains a `ttasks` symlink to the sibling
-`tariboy-tasks` payload. This makes the bundled client available to fresh
-Desktop agents without the optional CLI installation. The alias is refreshed
+runtime `bin` directory, which contains the `ttasks`, `tmail` and `tscripts`
+symlinks to the sibling `tariboy-tasks`, `tariboy-mail` and `tariboy-scripts`
+payloads. This makes the bundled clients available to fresh
+Desktop agents without the optional CLI installation. Each alias is refreshed
 atomically and retained across restart handoff.
 
 The final iteration environment preserves this precedence:
@@ -402,14 +403,18 @@ building an agent image.
 `make install` installs the resulting commands under `$HOME/.local/bin`; it is
 not required for normal unit-test work.
 
-The Tasks mode E2E inside `backend-check` builds its five required binaries in
-temporary directories, so the check never regenerates workspace `bin/`.
+The Tasks mode E2E inside `backend-check` builds its seven required binaries in
+temporary directories, so the check never regenerates workspace `bin/`. It also
+tests `tscripts` on the isolated agent: `run`, `logs`, `schedule` with the
+quiet exit `111`, `rerun`, `cancel`, `rm`, the refusal of
+`schedule --quiet-exit`, and the runtime `bin/tscripts` link.
 
-`make server-install` builds all six real server binaries, stages and verifies
+`make server-install` builds all eight real server binaries, stages and verifies
 their checksums, publishes a versioned release under
 `$HOME/.local/lib/tariboy/<version>`, and transactionally switches the matching
-`$HOME/.local/bin` links. `ttasks` is an additional alias for
-`tariboy-tasks`. It does not start or restart the daemon.
+`$HOME/.local/bin` links. `ttasks`, `tmail` and `tscripts` are additional
+aliases for `tariboy-tasks`, `tariboy-mail` and `tariboy-scripts`. It does not
+start or restart the daemon.
 
 Native Tasks changes normally need focused tests under `internal/tasks`, the
 operator route/OpenAPI registry tests under `internal/commands`, and the agent

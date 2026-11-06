@@ -23,7 +23,7 @@ runtime prompt entries explicitly. Neither kind starts a supervised subprocess.
 | [`workdir`](/docs/plugins/built-in/workdir) | Instruction-only | Yes | Prompt only | None |
 | [`goal`](/docs/plugins/built-in/goal) | Optional | Yes | `scripts/goal.sh set <TASK-KEY>` | Selected task and AI usage attribution on the iteration lease |
 | [`schedule`](/docs/plugins/built-in/schedule) | Optional | No | `scripts/schedule.sh …` | Schedules and the letters they send |
-| [`scripts`](/docs/plugins/built-in/scripts) | Optional | Yes | `scripts/scripts.sh …` | Script records and logs |
+| [`scripts`](/docs/plugins/built-in/scripts) | Optional | Yes | `tscripts …` | Script records and logs |
 | [`image-creator`](/docs/plugins/built-in/image-creator) | Optional | No | `scripts/image_creator.sh build` | Built image in the host image store |
 | [`tasks`](/docs/plugins/built-in/tasks) | Optional | Yes | Bare `tasks` command | Native Tasks in SQLite |
 | [`assessments`](/docs/plugins/built-in/assessments) | Optional | No | `tariboy assessment add` | Assessments in SQLite |
