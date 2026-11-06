@@ -193,11 +193,11 @@ func sortedKeys(m map[string]int64) []string {
 func printReport(out io.Writer, r metrics.MetricsReport) error {
 	fmt.Fprintf(out, "period %s .. %s\n", r.Since, r.Until)
 	w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "SLICE\tNAME\tVERSION\tITERATIONS\tTOKENS\tCOST_USD\tDONE\tMIXED\tLEAD_MEDIAN\tLEAD_AVG\tREWORK\tREJECTED\tQUESTIONS\tQUALITY")
+	fmt.Fprintln(w, "SLICE\tNAME\tVERSION\tITERATIONS\tTOKENS\tCOST_USD\tNO_TASK_COST_USD\tDONE\tMIXED\tLEAD_MEDIAN\tLEAD_AVG\tREWORK\tREJECTED\tQUESTIONS\tQUALITY")
 	row := func(kind string, s metrics.MetricsSlice) {
 		t := s.Tasks
-		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%d\t%.6g\t%d\t%d\t%s\t%s\t%d\t%d\t%d\t%s\n", kind, cellOr(s.Name), cellOr(s.Version),
-			s.Usage.Iterations, tokensTotal(s.Usage.Tokens), s.Usage.CostUSD, t.Done, t.Mixed,
+		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%d\t%.6g\t%.6g\t%d\t%d\t%s\t%s\t%d\t%d\t%d\t%s\n", kind, cellOr(s.Name), cellOr(s.Version),
+			s.Usage.Iterations, tokensTotal(s.Usage.Tokens), s.Usage.CostUSD, s.UsageWithoutTask.CostUSD, t.Done, t.Mixed,
 			formatDuration(t.LeadTimeMedianS), formatDuration(t.LeadTimeAvgS), t.Sum.ReworkRounds, t.Sum.RejectedAdvances,
 			t.Sum.CustomerQuestions, qualityCell(t.Quality))
 	}

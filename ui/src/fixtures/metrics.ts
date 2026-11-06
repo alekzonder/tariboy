@@ -42,6 +42,11 @@ export const metricsSlice = (over: Partial<MetricsSlice> = {}): MetricsSlice => 
     cost_usd: 12.4,
     tokens: { input: 3_000_000, output: 400_000, cache_write: 200_000, cache_read: 5_000_000 },
   },
+  usage_without_task: {
+    iterations: 4,
+    cost_usd: 1.86,
+    tokens: { input: 450_000, output: 60_000, cache_write: 30_000, cache_read: 750_000 },
+  },
   ...over,
 });
 

@@ -28,6 +28,7 @@ describe("compareRows", () => {
       ["Quality: Task fit", "higher"],
       ["Runs in period", null],
       ["Cost in period", null],
+      ["Cost without task", null],
     ]);
     const values = Object.fromEntries(rows.map((r) => [r.label, fmtCell(r, "a")]));
     expect(values).toEqual({
@@ -45,6 +46,7 @@ describe("compareRows", () => {
       "Quality: Task fit": "90 · 10 scores",
       "Runs in period": "23",
       "Cost in period": "$12.40",
+      "Cost without task": "$1.86",
     });
   });
 

@@ -248,10 +248,11 @@ type MetricsTaskStats struct {
 // MetricsSlice is the usage and the task aggregates of one agent, image version or
 // workflow version, or of the whole server.
 type MetricsSlice struct {
-	Name    string           `json:"name,omitempty"`
-	Version string           `json:"version,omitempty"`
-	Usage   MetricsUsage     `json:"usage"`
-	Tasks   MetricsTaskStats `json:"tasks"`
+	Name             string           `json:"name,omitempty"`
+	Version          string           `json:"version,omitempty"`
+	Usage            MetricsUsage     `json:"usage"`
+	UsageWithoutTask MetricsUsage     `json:"usage_without_task" jsonschema:"description=the part of usage whose requests have no task; iterations counts iterations with at least one such request and cannot be subtracted from usage.iterations"`
+	Tasks            MetricsTaskStats `json:"tasks"`
 }
 
 // MetricsReport is the server report over a period (metrics.server).

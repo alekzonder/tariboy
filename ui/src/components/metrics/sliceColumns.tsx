@@ -51,7 +51,7 @@ export const MIXED_TASKS: Column<MetricsSlice> = {
   cell: (s) => s.tasks.mixed_tasks,
 };
 
-/** The columns every slice table shares, from Lead time to Cost in period. */
+/** The columns every slice table shares, from Lead time to Cost without task. */
 export const SLICE_COLUMNS: Column<MetricsSlice>[] = [
   {
     id: "lead_time",
@@ -95,5 +95,11 @@ export const SLICE_COLUMNS: Column<MetricsSlice>[] = [
     label: "Cost in period",
     value: (s) => s.usage.cost_usd,
     cell: (s) => fmtMoney(s.usage.cost_usd),
+  },
+  {
+    id: "cost_no_task",
+    label: "Cost without task",
+    value: (s) => s.usage_without_task.cost_usd,
+    cell: (s) => fmtMoney(s.usage_without_task.cost_usd),
   },
 ];

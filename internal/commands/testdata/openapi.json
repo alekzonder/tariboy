@@ -4421,12 +4421,17 @@
           "usage": {
             "$ref": "#/components/schemas/MetricsUsage"
           },
+          "usage_without_task": {
+            "$ref": "#/components/schemas/MetricsUsage",
+            "description": "the part of usage whose requests have no task; iterations counts iterations with at least one such request and cannot be subtracted from usage.iterations"
+          },
           "version": {
             "type": "string"
           }
         },
         "required": [
           "usage",
+          "usage_without_task",
           "tasks"
         ],
         "type": "object"

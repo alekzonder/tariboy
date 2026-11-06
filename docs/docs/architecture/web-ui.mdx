@@ -655,6 +655,13 @@ group the versions of one name, newest version first. **Compare versions** and
 the `⇄` button of a version row open `/metrics/compare`. From `⇄`, B is the
 version of the row and A is the nearest older version.
 
+The **AI usage in this period** cards include **Without a task**: the cost of
+the AI requests without a task (`usage_without_task.cost_usd`). Its second
+line gives the part of **Cost**, for example `15% of cost`. If **Cost** is 0,
+the card has no second line. The Agents, Images, and Workflows tables have the
+column **Cost without task** after **Cost in period**. The comparison page has
+the row **Cost without task** after **Cost in period**.
+
 `/metrics/compare` shows the two versions side by side with the difference
 B − A, the percentage of A, and the word `better`, `worse`, or `no change`.
 An arrow before the word shows the sign of B − A: up for an increase, down
