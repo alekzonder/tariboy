@@ -25,6 +25,7 @@ func TestStoreCommandsRegisteredWithRoutes(t *testing.T) {
 		"store.list":    {Method: http.MethodGet, Path: "/api/stores"},
 		"store.show":    {Method: http.MethodGet, Path: "/api/stores/{name}"},
 		"store.refresh": {Method: http.MethodPost, Path: "/api/stores/{name}/refresh"},
+		"store.ref":     {Method: http.MethodPost, Path: "/api/stores/{name}/ref"},
 		"store.remove":  {Method: http.MethodDelete, Path: "/api/stores/{name}"},
 	}
 	reg := BuildRegistry()
@@ -52,7 +53,7 @@ func TestStoreCommandLifecycleReturnsHTTPShapes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantStore := map[string]any{"name": "team", "source": source, "path": source}
+	wantStore := map[string]any{"name": "team", "source": source, "path": source, "ref": "", "commit": ""}
 	if got := jsonObject(t, added); !reflect.DeepEqual(got, wantStore) {
 		t.Fatalf("add = %#v, want %#v", got, wantStore)
 	}
@@ -325,6 +326,48 @@ func TestStoreAutoCommandPersistsPolicy(t *testing.T) {
 		t.Fatal("unknown image was accepted")
 	} else if userErr, ok := err.(api.UserError); !ok || userErr.Status != http.StatusBadRequest {
 		t.Fatalf("unknown image error = %#v", err)
+	}
+}
+
+func TestStoreRefSetsCommitAndReportsErrorCodes(t *testing.T) {
+	t.Parallel()
+	c, dirs := storesFixture(t)
+	commits := gitStoreFixture(t, c)
+	set, err := cmdHandler(t, "store.ref")(c, registry.Params{"name": "repo", "ref": "v1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := jsonObject(t, set); got["ref"] != "v1" || got["commit"] != commits.v1 {
+		t.Fatalf("store.ref v1 = %#v, want commit %s", got, commits.v1)
+	}
+	if _, err := cmdHandler(t, "store.add")(c, registry.Params{"name": "team", "source": dirs.store}); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name, ref, code string
+		status          int
+	}{
+		{"repo", "nope", "store_ref_not_found", http.StatusBadRequest},
+		{"repo", "-x", "bad_store_ref", http.StatusBadRequest},
+		{"team", "main", "bad_store", http.StatusBadRequest},
+		{"ghost", "main", "store_not_found", http.StatusNotFound},
+	} {
+		_, err := cmdHandler(t, "store.ref")(c, registry.Params{"name": test.name, "ref": test.ref})
+		userErr, ok := err.(api.UserError)
+		if !ok || userErr.Code != test.code || userErr.Status != test.status {
+			t.Fatalf("store.ref %s %q = %#v, want %s", test.name, test.ref, err, test.code)
+		}
+	}
+	shown, err := cmdHandler(t, "store.show")(c, registry.Params{"name": "repo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := jsonObject(t, shown); got["ref"] != "v1" || got["commit"] != commits.v1 {
+		t.Fatalf("store.show after failed store.ref = %#v", got)
+	}
+	_, err = cmdHandler(t, "store.add")(c, registry.Params{"name": "other", "source": dirs.store, "ref": "v1"})
+	if userErr, ok := err.(api.UserError); !ok || userErr.Code != "bad_store" {
+		t.Fatalf("store.add local with ref = %#v, want bad_store", err)
 	}
 }
 

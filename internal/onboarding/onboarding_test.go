@@ -102,7 +102,7 @@ func TestRunKeepsExistingStoreAndBasicImage(t *testing.T) {
 			f := newFixture(t)
 			ctx := context.Background()
 			// "mine" carries the default source under another name.
-			if _, err := f.svc.Catalog.Add(ctx, name, f.source); err != nil {
+			if _, err := f.svc.Catalog.Add(ctx, name, f.source, ""); err != nil {
 				t.Fatal(err)
 			}
 			if err := plantImage(t, f.svc.Images, image.Ref{Name: StarterImage, Tag: "1.0.0"}); err != nil {
@@ -284,7 +284,7 @@ func TestStatusDoesNotWaitForTheCatalogLock(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(f.source, "images", "basic", "Tariboyfile.yaml"), []byte("schema_version: 2\nplugins: []\nprompts: []\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.svc.Catalog.Add(ctx, DefaultStoreName, f.source); err != nil {
+	if _, err := f.svc.Catalog.Add(ctx, DefaultStoreName, f.source, ""); err != nil {
 		t.Fatal(err)
 	}
 	_, release, err := f.svc.Catalog.PrepareBuild(DefaultStoreName + "/" + StarterImage)

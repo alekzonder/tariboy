@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
@@ -30,14 +31,23 @@ var (
 	ErrNotFound = errors.New("Store not found")
 	ErrUnsafe   = errors.New("unsafe Store path")
 	ErrRefresh  = errors.New("Store refresh failed")
+	// ErrBadRef marks a malformed ref string; it also matches ErrInvalid.
+	ErrBadRef = fmt.Errorf("%w ref", ErrInvalid)
+	// ErrRefNotFound marks a ref that is no branch, tag or commit of the Store.
+	ErrRefNotFound = errors.New("Store ref not found")
 
 	errDatabaseUnavailable = errors.New("Store database is unavailable")
 )
 
+// Store is a registered Store. Ref is the branch, tag or commit its managed
+// clone is checked out at ("" is the default branch); Commit is the checked-out
+// commit, "" for a local Store that is no Git checkout.
 type Store struct {
 	Name   string `json:"name"`
 	Source string `json:"source"`
 	Path   string `json:"path"`
+	Ref    string `json:"ref"`
+	Commit string `json:"commit"`
 }
 
 type StoreImage struct {
@@ -54,6 +64,8 @@ type Detail struct {
 	Name      string          `json:"name"`
 	Source    string          `json:"source"`
 	Path      string          `json:"path"`
+	Ref       string          `json:"ref"`
+	Commit    string          `json:"commit"`
 	Images    []StoreImage    `json:"images"`
 	Workflows []StoreWorkflow `json:"workflows"`
 	Auto      AutoBuild       `json:"auto"`
@@ -89,7 +101,9 @@ func New(db *storedb.Store, baseDir string) *Catalog {
 	return c
 }
 
-func (c *Catalog) Add(ctx context.Context, name, source string) (Store, error) {
+// Add registers a Store. A non-empty ref checks a Git Store's managed clone out
+// at that branch, tag or commit; a local Store takes no ref.
+func (c *Catalog) Add(ctx context.Context, name, source, ref string) (Store, error) {
 	catalogMu.Lock()
 	defer catalogMu.Unlock()
 	if err := validName(name); err != nil {
@@ -98,6 +112,12 @@ func (c *Catalog) Add(ctx context.Context, name, source string) (Store, error) {
 	kind, normalized, err := classifySource(source)
 	if err != nil {
 		return Store{}, err
+	}
+	if err := validRef(ref); err != nil {
+		return Store{}, err
+	}
+	if ref != "" && kind == sourceLocal {
+		return Store{}, fmt.Errorf("%w: a ref needs a Git Store; check the branch out in the local directory instead", ErrInvalid)
 	}
 	if _, err := c.get(name); err == nil {
 		return Store{}, fmt.Errorf("%w: %s", ErrExists, name)
@@ -110,14 +130,14 @@ func (c *Catalog) Add(ctx context.Context, name, source string) (Store, error) {
 		}
 	} else {
 		normalized = strings.TrimSpace(source)
-		if err := c.clone(ctx, name, normalized); err != nil {
+		if err := c.clone(ctx, name, normalized, ref); err != nil {
 			return Store{}, err
 		}
 	}
 	if c.DB == nil {
 		return Store{}, errDatabaseUnavailable
 	}
-	if _, err := c.DB.ExecContext(ctx, `INSERT INTO image_stores(name,source) VALUES(?,?)`, name, normalized); err != nil {
+	if _, err := c.DB.ExecContext(ctx, `INSERT INTO image_stores(name,source,ref) VALUES(?,?,?)`, name, normalized, ref); err != nil {
 		if kind == sourceGit {
 			if rmErr := c.removeManaged(name); rmErr != nil && !errors.Is(rmErr, fs.ErrNotExist) {
 				err = errors.Join(err, fmt.Errorf("remove managed clone of store %s: %w", name, rmErr))
@@ -125,7 +145,7 @@ func (c *Catalog) Add(ctx context.Context, name, source string) (Store, error) {
 		}
 		return Store{}, err
 	}
-	return c.store(name, normalized), nil
+	return withCommit(ctx, c.store(name, normalized, ref)), nil
 }
 
 func (c *Catalog) List(ctx context.Context) ([]Store, error) {
@@ -134,20 +154,26 @@ func (c *Catalog) List(ctx context.Context) ([]Store, error) {
 	if c.DB == nil {
 		return nil, errDatabaseUnavailable
 	}
-	rows, err := c.DB.QueryContext(ctx, `SELECT name,source FROM image_stores ORDER BY name`)
+	rows, err := c.DB.QueryContext(ctx, `SELECT name,source,ref FROM image_stores ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	result := []Store{}
 	for rows.Next() {
-		var name, source string
-		if err := rows.Scan(&name, &source); err != nil {
+		var name, source, ref string
+		if err := rows.Scan(&name, &source, &ref); err != nil {
 			return nil, err
 		}
-		result = append(result, c.store(name, source))
+		result = append(result, c.store(name, source, ref))
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range result {
+		result[i] = withCommit(ctx, result[i])
+	}
+	return result, nil
 }
 
 func (c *Catalog) Detail(ctx context.Context, name string) (Detail, error) {
@@ -168,25 +194,117 @@ func (c *Catalog) Refresh(ctx context.Context, name string) (Detail, error) {
 		return Detail{}, err
 	}
 	// A managed clone is daemon-owned: discard local edits so it always
-	// matches upstream. A local Store is user work and only fast-forwards.
-	var commands [][]string
+	// matches the remote ref. A local Store is user work and only fast-forwards.
 	if kind == sourceGit {
-		commands = [][]string{
-			{"fetch", "--prune"},
-			{"reset", "--hard", "@{upstream}"},
-			{"clean", "-fd"},
+		if err := fetchAndCheckout(ctx, store.Path, name, store.Ref); err != nil {
+			return Detail{}, err
 		}
 	} else if git, err := isGitCheckout(ctx, store.Path); err != nil {
 		return Detail{}, err
 	} else if git {
-		commands = [][]string{{"pull", "--ff-only", "--no-autostash"}}
-	}
-	for _, args := range commands {
-		if err := run(ctx, store.Path, "git", args...); err != nil {
+		if err := run(ctx, store.Path, "git", "pull", "--ff-only", "--no-autostash"); err != nil {
 			return Detail{}, fmt.Errorf("%w: %s: %w", ErrRefresh, name, err)
 		}
 	}
 	return c.detail(ctx, name)
+}
+
+// SetRef checks a Git Store's managed clone out at ref ("" is the default
+// branch) and stores ref for later refreshes. A failure before the checkout
+// leaves the tree and the stored ref unchanged.
+func (c *Catalog) SetRef(ctx context.Context, name, ref string) (Detail, error) {
+	catalogMu.Lock()
+	defer catalogMu.Unlock()
+	if err := validRef(ref); err != nil {
+		return Detail{}, err
+	}
+	store, err := c.get(name)
+	if err != nil {
+		return Detail{}, err
+	}
+	if kind, _, err := classifySource(store.Source); err != nil {
+		return Detail{}, err
+	} else if kind != sourceGit {
+		return Detail{}, fmt.Errorf("%w: Store %s is local; only a Git Store takes a ref", ErrInvalid, name)
+	}
+	if err := fetchAndCheckout(ctx, store.Path, name, ref); err != nil {
+		return Detail{}, err
+	}
+	if _, err := c.DB.ExecContext(ctx, `UPDATE image_stores SET ref=? WHERE name=?`, ref, name); err != nil {
+		return Detail{}, err
+	}
+	return c.detail(ctx, name)
+}
+
+// fetchAndCheckout fetches the managed clone in dir and checks out ref. The
+// fetch and the ref lookup do not touch the tree, so an unknown ref keeps it.
+func fetchAndCheckout(ctx context.Context, dir, name, ref string) error {
+	if err := run(ctx, dir, "git", "fetch", "--prune", "--force", "--tags", "origin"); err != nil {
+		return fmt.Errorf("%w: %s: %w", ErrRefresh, name, err)
+	}
+	return checkoutRef(ctx, dir, name, ref)
+}
+
+func checkoutRef(ctx context.Context, dir, name, ref string) error {
+	commit, err := resolveRef(ctx, dir, ref)
+	if err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	for _, args := range [][]string{{"checkout", "--quiet", "--force", "--detach", commit}, {"clean", "-fd"}} {
+		if err := run(ctx, dir, "git", args...); err != nil {
+			return fmt.Errorf("%w: %s: %w", ErrRefresh, name, err)
+		}
+	}
+	return nil
+}
+
+var commitRef = regexp.MustCompile(`^[0-9a-fA-F]{7,40}$`)
+
+// resolveRef finds the commit of ref in the clone at dir: a remote branch, then
+// a tag, then a commit id of 7 to 40 hex digits. "" is the remote's default
+// branch.
+func resolveRef(ctx context.Context, dir, ref string) (string, error) {
+	candidates := []string{"refs/remotes/origin/HEAD"}
+	if ref != "" {
+		candidates = []string{"refs/remotes/origin/" + ref, "refs/tags/" + ref}
+		if commitRef.MatchString(ref) {
+			candidates = append(candidates, ref)
+		}
+	}
+	for _, candidate := range candidates {
+		commit, err := output(ctx, dir, "git", "rev-parse", "--verify", "--quiet", candidate+"^{commit}")
+		if err == nil {
+			return commit, nil
+		}
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+	}
+	if ref == "" {
+		ref = "default branch"
+	}
+	return "", fmt.Errorf("%w: %s", ErrRefNotFound, ref)
+}
+
+// validRef rejects a ref that git could read as an option or a range before
+// any git command sees it. "" is the default branch.
+func validRef(ref string) error {
+	if ref == "" {
+		return nil
+	}
+	if len(ref) > 255 || strings.HasPrefix(ref, "-") || strings.Contains(ref, "..") || strings.IndexFunc(ref, unicode.IsSpace) >= 0 {
+		return fmt.Errorf("%w %q", ErrBadRef, ref)
+	}
+	return nil
+}
+
+// withCommit fills s.Commit from the Git checkout at s.Path. A Store that is
+// no Git checkout, or a failing git, leaves it empty.
+func withCommit(ctx context.Context, s Store) Store {
+	if git, err := isGitCheckout(ctx, s.Path); err == nil && git {
+		s.Commit, _ = output(ctx, s.Path, "git", "rev-parse", "HEAD")
+	}
+	return s
 }
 
 func (c *Catalog) Remove(ctx context.Context, name string) error {
@@ -344,7 +462,8 @@ func (c *Catalog) detail(ctx context.Context, name string) (Detail, error) {
 	if err != nil {
 		return Detail{}, err
 	}
-	return Detail{Name: store.Name, Source: store.Source, Path: store.Path, Images: images, Workflows: workflows, Auto: auto}, nil
+	store = withCommit(ctx, store)
+	return Detail{Name: store.Name, Source: store.Source, Path: store.Path, Ref: store.Ref, Commit: store.Commit, Images: images, Workflows: workflows, Auto: auto}, nil
 }
 
 func (c *Catalog) get(name string) (Store, error) {
@@ -354,23 +473,23 @@ func (c *Catalog) get(name string) (Store, error) {
 	if c.DB == nil {
 		return Store{}, errDatabaseUnavailable
 	}
-	var source string
-	err := c.DB.QueryRow(`SELECT source FROM image_stores WHERE name=?`, name).Scan(&source)
+	var source, ref string
+	err := c.DB.QueryRow(`SELECT source,ref FROM image_stores WHERE name=?`, name).Scan(&source, &ref)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Store{}, fmt.Errorf("%w: %s", ErrNotFound, name)
 	}
 	if err != nil {
 		return Store{}, err
 	}
-	return c.store(name, source), nil
+	return c.store(name, source, ref), nil
 }
 
-func (c *Catalog) store(name, source string) Store {
+func (c *Catalog) store(name, source, ref string) Store {
 	path := source
 	if kind, _, _ := classifySource(source); kind == sourceGit {
 		path = c.managedPath(name)
 	}
-	return Store{Name: name, Source: source, Path: path}
+	return Store{Name: name, Source: source, Path: path, Ref: ref}
 }
 
 func (c *Catalog) managedPath(name string) string { return filepath.Join(c.BaseDir, "stores", name) }
@@ -405,7 +524,7 @@ func (c *Catalog) removeManaged(name string) error {
 	return root.RemoveAll(rel)
 }
 
-func (c *Catalog) clone(ctx context.Context, name, source string) error {
+func (c *Catalog) clone(ctx context.Context, name, source, ref string) error {
 	root := filepath.Join(c.BaseDir, "stores")
 	if err := secureDirectory(root); err != nil {
 		return err
@@ -423,6 +542,11 @@ func (c *Catalog) clone(ctx context.Context, name, source string) error {
 	defer os.RemoveAll(stage)
 	if err := run(ctx, "", "git", "clone", "--", source, stage); err != nil {
 		return fmt.Errorf("clone Store: %w", err)
+	}
+	if ref != "" {
+		if err := checkoutRef(ctx, stage, name, ref); err != nil {
+			return err
+		}
 	}
 	if err := os.Chmod(stage, 0o700); err != nil {
 		return err

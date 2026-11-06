@@ -559,6 +559,13 @@ Capabilities gate routes and compatibility shims, but do not package skills or
 contribute prompt text automatically. Schema-v1 images retain the historical
 core union and render the matching skill instructions for compatibility.
 
+The plugin list of an agent can change between iterations with
+`agent plugins`. The engine reads the agent row again before each iteration,
+so tool access and the instant mail hooks use the new list. The launch gate
+writes the `i-am-done` and `tasks` shims from that list before every launch
+and removes the shim of a plugin that is no longer in it. It writes only the
+files that changed. The running iteration keeps its plugins.
+
 Before each iteration's prompt or message preparation, the launch gate first
 honors a pending image assignment. Without one, it checks whether the active
 ordinary mutable-build ref now resolves to a different digest and stages that

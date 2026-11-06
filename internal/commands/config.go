@@ -2,7 +2,9 @@ package commands
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -11,6 +13,9 @@ import (
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/fsbrowser"
+	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/paths"
+	"github.com/alekzonder/tariboy/internal/plugincaps"
 	"github.com/alekzonder/tariboy/internal/registry"
 )
 
@@ -406,6 +411,81 @@ func agentEnv() registry.Command {
 			return AgentEnvResult{Name: a.Name, Env: envView(a.Env)}, nil
 		},
 	})
+}
+
+// agentPlugins gets or replaces the agent's plugin list. The loop reads it
+// before each iteration, so a new value applies from the next iteration and
+// the running one keeps its plugins. A schema-v2 image carries the skills of
+// its plugins, so the list may only hold plugins of the agent's active image;
+// a new image (agent.image.set or a rebuild of its ref) resets the list.
+func agentPlugins() registry.Command {
+	return registry.WithResult[AgentPluginsResult](registry.Command{
+		Path:    "agent.plugins",
+		Summary: "Get or replace the agent plugin list (omit value to read); applies from the next iteration",
+		Args: []registry.Arg{
+			{Name: "name", Type: registry.String, Required: true, Help: "agent name"},
+			{Name: "value", Type: registry.String, Help: "comma-separated plugins that replace the list, each a plugin of the agent's image (omit to read)", Schema: map[string]any{"oneOf": []any{
+				map[string]any{"type": "string"},
+				map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			}}},
+		},
+		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/plugins"},
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
+			if err != nil {
+				return nil, err
+			}
+			if p.Has("value") {
+				requested, err := parseAgentPlugins(p.Params["value"])
+				if err != nil {
+					return nil, api.UserError{Code: "bad_plugins", Msg: err.Error(), Status: http.StatusBadRequest}
+				}
+				if a.Plugins, err = validAgentPlugins(c, a, requested); err != nil {
+					return nil, err
+				}
+				if err := agentStore(c).Update(a); err != nil {
+					return nil, err
+				}
+			}
+			return AgentPluginsResult{Name: a.Name, Plugins: append([]string{}, a.Plugins...)}, nil
+		},
+	})
+}
+
+// validAgentPlugins checks requested against the agent's active image, as
+// agent.run does: a schema-v2 list is exact and must be a subset of the image
+// plugins; a schema-v1 list joins the core plugins.
+func validAgentPlugins(c *registry.Ctx, a agent.Agent, requested []string) ([]string, error) {
+	ref, err := image.ParseRef(a.ImageRef)
+	if err != nil {
+		return nil, api.UserError{Code: "bad_ref", Msg: err.Error(), Status: http.StatusBadRequest}
+	}
+	manifest, err := imageStore(c).InspectPinned(ref, a.ImageDigest)
+	if err != nil {
+		return nil, api.UserError{Code: "image_not_found", Msg: err.Error(), Status: http.StatusNotFound}
+	}
+	resolver := imagePluginResolver(c, paths.Paths{Base: c.BaseDir}.PluginsDir())
+	if image.IsLegacyV1(manifest) {
+		resolved, err := plugincaps.ResolveWithExternal(requested, resolver)
+		if err != nil {
+			return nil, api.UserError{Code: "bad_plugins", Msg: err.Error(), Status: http.StatusBadRequest}
+		}
+		return resolved, nil
+	}
+	resolved, err := plugincaps.ValidateExplicit(requested, resolver)
+	if err != nil {
+		return nil, api.UserError{Code: "bad_plugins", Msg: err.Error(), Status: http.StatusBadRequest}
+	}
+	inImage := map[string]bool{}
+	for _, plugin := range manifest.Plugins {
+		inImage[plugin.Name] = true
+	}
+	for _, name := range resolved {
+		if !inImage[name] {
+			return nil, api.UserError{Code: "plugin_not_in_image", Msg: fmt.Sprintf("plugin %q is not in image %s; build an image with it and select it with agent image set", name, a.ImageRef), Status: http.StatusBadRequest}
+		}
+	}
+	return resolved, nil
 }
 
 // validHarnessTypes are the harness types internal/harness.Get() knows about.

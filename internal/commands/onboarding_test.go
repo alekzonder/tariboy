@@ -125,7 +125,7 @@ func TestStoreRemoveMarksOnlyTheDefaultStoreRemoved(t *testing.T) {
 	}
 	catalog := storeCatalog(c)
 	for name, src := range map[string]string{"team": other, onboarding.DefaultStoreName: source} {
-		if _, err := catalog.Add(context.Background(), name, src); err != nil {
+		if _, err := catalog.Add(context.Background(), name, src, ""); err != nil {
 			t.Fatal(err)
 		}
 	}

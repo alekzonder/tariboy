@@ -44,6 +44,13 @@ type AgentInteractiveResult struct {
 	Interactive bool   `json:"interactive"`
 }
 
+// AgentPluginsResult is the result of agent.plugins: the agent's plugin list,
+// never null.
+type AgentPluginsResult struct {
+	Name    string   `json:"name"`
+	Plugins []string `json:"plugins"`
+}
+
 // AgentEnvResult is the result of agent.env.
 type AgentEnvResult struct {
 	Name string            `json:"name"`

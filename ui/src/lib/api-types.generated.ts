@@ -801,6 +801,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/agents/{name}/plugins": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Get or replace the agent plugin list (omit value to read); applies from the next iteration */
+    post: operations["agent.plugins"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/agents/{name}/prompt": {
     parameters: {
       query?: never;
@@ -2266,6 +2283,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/stores/{name}/ref": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Check a Git Store out at a branch, tag or commit */
+    post: operations["store.ref"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/stores/{name}/refresh": {
     parameters: {
       query?: never;
@@ -3311,6 +3345,10 @@ export interface components {
     AgentNotesResult: {
       name: string;
       notes: string;
+    };
+    AgentPluginsResult: {
+      name: string;
+      plugins: string[];
     };
     AgentPool: {
       agents: string[];
@@ -4700,9 +4738,11 @@ export interface components {
     };
     StoreDetail: {
       auto: components["schemas"]["StoreAutoBuild"];
+      commit: string;
       images: components["schemas"]["StoreImageView"][];
       name: string;
       path: string;
+      ref: string;
       source: string;
       workflows: components["schemas"]["StoreWorkflowView"][];
     };
@@ -4719,8 +4759,10 @@ export interface components {
       removed: boolean;
     };
     StoreView: {
+      commit: string;
       name: string;
       path: string;
+      ref: string;
       source: string;
     };
     StoreWorkflowView: {
@@ -5347,6 +5389,7 @@ export type AgentMessagesBatch = components["schemas"]["AgentMessagesBatch"];
 export type AgentMessagesMaxQueue = components["schemas"]["AgentMessagesMaxQueue"];
 export type AgentModelResult = components["schemas"]["AgentModelResult"];
 export type AgentNotesResult = components["schemas"]["AgentNotesResult"];
+export type AgentPluginsResult = components["schemas"]["AgentPluginsResult"];
 export type AgentPool = components["schemas"]["AgentPool"];
 export type AgentPromptLayers = components["schemas"]["AgentPromptLayers"];
 export type AgentPromptPreview = components["schemas"]["AgentPromptPreview"];
@@ -8453,6 +8496,54 @@ export interface operations {
           "application/json": {
             ok: boolean;
             result: components["schemas"]["AgentNotesResult"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "agent.plugins": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          value?: string | string[];
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["AgentPluginsResult"];
           };
         };
       };
@@ -13083,6 +13174,8 @@ export interface operations {
         "application/json": {
           /** @description Store name */
           name: string;
+          /** @description branch, tag or commit to check out; Git Stores only */
+          ref?: string;
           /** @description absolute local directory or Git source */
           source: string;
         };
@@ -13220,6 +13313,55 @@ export interface operations {
           image?: string[];
           /** @description refresh interval in whole minutes; 0 disables automatic builds */
           interval?: number;
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["StoreDetail"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "store.ref": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** @description branch, tag or commit; "" follows the default branch */
+          ref: string;
         };
       };
     };

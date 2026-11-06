@@ -574,6 +574,25 @@
         ],
         "type": "object"
       },
+      "AgentPluginsResult": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "plugins": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "plugins"
+        ],
+        "type": "object"
+      },
       "AgentPool": {
         "additionalProperties": false,
         "properties": {
@@ -6150,6 +6169,9 @@
           "auto": {
             "$ref": "#/components/schemas/StoreAutoBuild"
           },
+          "commit": {
+            "type": "string"
+          },
           "images": {
             "items": {
               "$ref": "#/components/schemas/StoreImageView"
@@ -6160,6 +6182,9 @@
             "type": "string"
           },
           "path": {
+            "type": "string"
+          },
+          "ref": {
             "type": "string"
           },
           "source": {
@@ -6176,6 +6201,8 @@
           "name",
           "source",
           "path",
+          "ref",
+          "commit",
           "images",
           "workflows",
           "auto"
@@ -6231,10 +6258,16 @@
       "StoreView": {
         "additionalProperties": false,
         "properties": {
+          "commit": {
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },
           "path": {
+            "type": "string"
+          },
+          "ref": {
             "type": "string"
           },
           "source": {
@@ -6244,7 +6277,9 @@
         "required": [
           "name",
           "source",
-          "path"
+          "path",
+          "ref",
+          "commit"
         ],
         "type": "object"
       },
@@ -14326,6 +14361,110 @@
           }
         },
         "summary": "Get or set the agent notes (omit value to read, empty to clear)"
+      }
+    },
+    "/api/agents/{name}/plugins": {
+      "post": {
+        "operationId": "agent.plugins",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "agent name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "value": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ]
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/AgentPluginsResult"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Get or replace the agent plugin list (omit value to read); applies from the next iteration"
       }
     },
     "/api/agents/{name}/prompt": {
@@ -23241,6 +23380,10 @@
                     "description": "Store name",
                     "type": "string"
                   },
+                  "ref": {
+                    "description": "branch, tag or commit to check out; Git Stores only",
+                    "type": "string"
+                  },
                   "source": {
                     "description": "absolute local directory or Git source",
                     "type": "string"
@@ -23577,6 +23720,104 @@
           }
         },
         "summary": "Set a Store's automatic refresh and build policy"
+      }
+    },
+    "/api/stores/{name}/ref": {
+      "post": {
+        "operationId": "store.ref",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "description": "Store name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "ref": {
+                    "description": "branch, tag or commit; \"\" follows the default branch",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "ref"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/StoreDetail"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Check a Git Store out at a branch, tag or commit"
       }
     },
     "/api/stores/{name}/refresh": {
