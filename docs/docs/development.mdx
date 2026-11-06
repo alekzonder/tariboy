@@ -374,11 +374,10 @@ depends on separate work, disable only that check in `staticcheck.conf` with a
 comment that names the task.
 
 `make gocyclo` fails when a non-test function has a cyclomatic complexity
-over `GOCYCLO_OVER` in the `Makefile`. The value is a ratchet: it is the
-current maximum, and a change that simplifies the most complex function lowers
-it. Do not raise it. The target for new code is 25. Test files are not
-measured. `make gocyclo-report` prints the 30 most complex functions and the
-average, and it never fails.
+over `GOCYCLO_OVER` in the `Makefile`, which is 25. Split a function that goes
+over the limit. Do not raise it. Test files are not measured.
+`make gocyclo-report` prints the 30 most complex functions and the average,
+and it never fails.
 
 `make fmt` is not a check: it rewrites files. Only `fmt-check` is part of
 `backend-check`; run `make fmt` yourself when it reports drift.

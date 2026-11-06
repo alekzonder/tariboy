@@ -183,11 +183,10 @@ staticcheck:
 	packages=$$(printf '%s\n' "$$packages" | sed '/\/node_modules\//d'); \
 	$(GOTOOL) staticcheck -tags=tmux $$packages
 
-# Ratchet: the most complex non-test function today. Lower it when a task
-# simplifies that function; never raise it. The target for new code is 25.
-# Tests are excluded: table tests and fakes with a large switch are their
-# normal shape.
-GOCYCLO_OVER := 46
+# The limit for every non-test function. Split a function that goes over it;
+# never raise the limit. Tests are excluded: table tests and fakes with a large
+# switch are their normal shape.
+GOCYCLO_OVER := 25
 GOCYCLO_IGNORE := (^|/)node_modules/|_test\.go$$
 
 gocyclo:
