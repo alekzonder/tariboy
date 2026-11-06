@@ -25,7 +25,7 @@ func (bindingsPhase) plan(p *planner, f File, live *liveState) error {
 		want := f.TaskQueues[prefix]
 		p.planQueueEnv(prefix, want, live, true)
 		p.planResponsibleAgent(prefix, want, live)
-		if err := p.planQueueWorkflow(prefix, want); err != nil {
+		if err := p.planQueueWorkflow(prefix, want, f.Workflows); err != nil {
 			return err
 		}
 		p.planTriggers(prefix, want, live)
@@ -74,9 +74,11 @@ func poolText(pool tasks.AgentPool, found bool) string {
 // to at apply time. The bind depends on the queue's other actions (create,
 // update, env, secrets and pools) and on the build of its Store workflow, so
 // a secret the workflow requires is set before it binds. A queue with no
-// workflow value keeps whatever binding it has; Compose never clears one.
-func (p *planner) planQueueWorkflow(prefix string, want TaskQueueSpec) error {
-	ref, declared, err := want.WorkflowRef()
+// workflow value keeps whatever binding it has; Compose never clears one. In
+// version 2 the value names an entry of workflows: a bare NAME follows the
+// entry's tag, and the bind waits for the entry's build.
+func (p *planner) planQueueWorkflow(prefix string, want TaskQueueSpec, entries map[string]WorkflowSpec) error {
+	ref, declared, err := queueWorkflowRef(want, entries)
 	if err != nil {
 		return fmt.Errorf("task queue %s workflow: %w", prefix, err)
 	}
@@ -84,11 +86,15 @@ func (p *planner) planQueueWorkflow(prefix string, want TaskQueueSpec) error {
 		return nil
 	}
 	id := "queue:" + prefix
+	buildKey := "workflow:" + ref.Selector()
+	if _, ok := entries[ref.Name]; ok {
+		buildKey = "workflow:" + ref.Name
+	}
 	build, field := -1, Field{Name: "workflow", To: ref.Ref() + " (resolved at apply time)"}
+	if b := p.needs(buildKey); len(b) > 0 {
+		build = b[0]
+	}
 	if ref.Store != "" {
-		if b := p.needs("workflow:" + ref.Selector()); len(b) > 0 {
-			build = b[0]
-		}
 		if ref.Tag == "" {
 			field.To = ref.Selector() + " (resolved after the build)"
 		}

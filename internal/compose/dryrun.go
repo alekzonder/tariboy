@@ -64,7 +64,7 @@ func phaseLines(plan Plan, phase string) []planLine {
 	for _, a := range plan.Actions {
 		// A secret refresh rewrites a secret the queue has; it changes nothing
 		// up can see, so dry-run does not list it.
-		if a.Phase != phase || a.Kind == secretRefresh {
+		if a.Phase != phase || a.Kind == secretRefresh || a.Kind == storeCheck {
 			continue
 		}
 		i, ok := index[a.Resource]

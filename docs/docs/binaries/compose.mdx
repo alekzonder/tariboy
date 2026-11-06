@@ -80,7 +80,7 @@ The `version` key selects the schema. The values `1` and `2` are valid.
   sections, and new source fields for `images`.
 
 If a version 1 file uses a version 2 key (`tariboy`, `stores`, a non-empty
-`workflows`, or an image `path`, `store`, `source` or `version`), the error
+`workflows`, or an image `path`, `store`, `source`, `tag` or `version`), the error
 tells you to declare `version: 2`. An empty `workflows: {}`, as written by older
 team exports, is accepted in version 1 and ignored.
 
@@ -115,9 +115,9 @@ The version 2 sections are:
 
 | Section | Fields | Rules |
 | --- | --- | --- |
-| `stores` | `git` and `ref`, or `path` | Exactly one of `git` and `path`. `ref` is valid only with `git`. |
-| `workflows` | `path`, or `store`, `source` and `version` | Exactly one of `path` and `store`. `source` names the entry in the Store; it defaults to the entry name. `version` is valid only with `store` and must be a SemVer version. |
-| `images` | `path`, or `store`, `source` and `version` | The same rules as `workflows`. `context` is version 1 syntax: in version 2, use `path`. |
+| `stores` | `git` and `ref`, or `path` | Exactly one of `git` and `path`. `git` is an `https://HOST/PATH` URL without a user name, a password, a query or a fragment. `ref` is a branch, a tag or a commit, and is valid only with `git`. |
+| `workflows` | `path`, or `store` and `source`, and optional `tag` and `version` | Exactly one of `path` and `store`. `source` names the entry in the Store; it defaults to the entry name. `tag` is `latest` (the default) or a SemVer version. `version` is a SemVer version. |
+| `images` | `path`, or `store` and `source`, and optional `tag` and `version` | The same rules as `workflows`, but `tag` is any image tag except `.` and `..`. `context` is version 1 syntax: in version 2, use `path`. |
 | `task_queues`, `agents`, `groups` | As in version 1 | |
 
 A relative `path` is resolved from the directory of the compose file.
@@ -130,20 +130,134 @@ In version 2, these references must name an entry of the same file:
 - The `responsible_agent` of a queue must be in `agents`. This rule also
   applies in version 1.
 - The workflow of a queue must be in `workflows`. If the value has a `STORE/`
-  prefix, that Store must be in `stores`.
+  prefix, that Store must be in `stores`, and it must be the `store` of the
+  workflow entry.
 - The `store` of a workflow or an image must be in `stores`.
 
 In version 1, an agent image and a queue workflow can name objects outside the
 file, as before.
 
-### Sections that are not applied yet
+### Stores, workflows and images
 
-`compose up` and `compose build` do not create Stores, build workflows, or
-build images from a Store yet. If a file has a `stores` or `workflows` section,
-or an image with `store`, `up` and `build` stop before they call the daemon.
-The error tells you to run `compose validate` to check the file. A team import
-(`team.import.yaml` and the archive import) refuses such a file in the same
-way. An image with `path` builds as a version 1 image with `context` does.
+`compose up` applies the `stores`, `workflows` and `images` sections in its
+first three phases. `compose build` applies only these three phases. A team
+import (`team.import.yaml` and the archive import) does not apply them: it
+refuses a file with `stores`, `workflows` or an image with `store`, and the
+error tells you to apply the file with `compose up`.
+
+```yaml
+version: 2
+stores:
+  team: {git: https://example.com/team-store.git, ref: v2}
+  local: {path: ./store}
+workflows:
+  development: {store: team, version: 1.2.0}
+  review: {path: ./workflows/review, tag: 0.3.0}
+images:
+  developer: {store: team, source: developer, version: 2.1.0}
+  tester: {store: local}
+  reviewer: {path: ./images/reviewer, tag: stable}
+agents:
+  dev-developer: {image: developer:latest}
+task_queues:
+  DEV:
+    name: Development
+    workflow: development
+    pools: {developers: [dev-developer]}
+```
+
+#### Stores
+
+For each Store of the file, the stores phase does one of these steps:
+
+| Daemon state | `up` |
+| --- | --- |
+| No Store with this name | Registers it with `POST /api/stores`. A `path` is sent as an absolute path. A relative `path` is resolved from the directory of the compose file. |
+| The Store has another source | Fails the Store and changes nothing. To change the source, run `tariboy store rm NAME`, then `up`. |
+| A git Store at another `ref` | Checks the Store out at the file's `ref` (`POST /api/stores/{name}/ref`), then refreshes it. An empty `ref` means the default branch. |
+| A git Store | Refreshes it (`POST /api/stores/{name}/refresh`) on every `up`. The Store is `changed` when the commit moved, else `ok`. |
+| A path Store | Reads it with `GET /api/stores/{name}`. The daemon reads the directory again. The Store is `ok` when the read succeeds. |
+
+`up` never refreshes a path Store. A refresh of a local Store that is a git
+checkout runs `git pull --ff-only` in your directory. Update that directory
+yourself. The source is compared as text: the git URL without surrounding
+spaces, or the clean absolute path. Thus `https://example.com/a.git` and
+`https://example.com/a` are different sources. `up` registers only an `https`
+git URL, so a Store that you registered with `ssh` gives a source conflict.
+
+#### Builds and versions
+
+A workflow entry builds with `POST /api/workflow-images/build`, from
+`STORE/SOURCE` or from the absolute `path`. The workflow builds on every `up`.
+A build of a version that the daemon already has, with the same content,
+publishes nothing and is `ok`. The `name` in `Workflowfile.yaml` must equal
+the entry key, else the entry fails before the build. For a Store source,
+`up` reads the name through `POST /api/workflow-images/validate`, which
+changes nothing. After the build, `up` makes sure that the entry's tag
+`NAME:TAG` exists. A workflow build publishes only the tags `latest` and its
+version, so `tag` is one of these. A version `tag` without `version` works as
+`version`: the source must give that version.
+
+An image entry from a path builds as a version 1 image with `context` does,
+but with the entry's `tag`. It builds on every `up`, and it is `ok` when
+`NAME:TAG` keeps its digest. An image entry from a Store builds with
+`POST /api/images/build` with `name`, `tag` and `source: STORE/SOURCE`. It
+builds only when `NAME:TAG` was built from another `image_version` than the
+Store gives now. This is the rule of the automatic Store builds. A change in
+the Store without a new `image_version` does not reach the image.
+
+`version` selects the version that the source must give. `up` reads the
+version before the build:
+
+- For a Store source, `up` reads the version that the daemon reads from the
+  Store after the refresh.
+- For a path source, `up` reads `image_version` from `Tariboyfile.yaml` or
+  `workflow_version` from `Workflowfile.yaml`.
+
+If the version differs from the file, the entry fails before the build, and
+its tag stays on the build it had:
+
+```text
+failed   image:developer: image developer: expected version 2.1.0, the source gives 2.2.0; the tag is not moved
+```
+
+`up` compares the version again after the build. If the source changes
+between the first read and the build, the tag already moved to the new build,
+and the entry still fails with the same error. A source without a version
+gives `the source gives no version`.
+
+#### Updates
+
+To update an image or a workflow, change the source: commit a new version to
+the Store, or change the `ref`. The next `up` refreshes the Store, builds the
+new version and moves the tag to it. An agent on that tag gets the new image as
+its pending image and adopts it on its next iteration. A queue that follows
+the tag moves to the new build. A queue pinned with `STORE/NAME` is bound to
+the new digest in the queue bindings phase.
+
+#### A Store that is not available
+
+A Store fails when the daemon cannot reach it: no network, a wrong URL, a
+`ref` that does not exist, a path that does not exist, or another source under
+the same name. Every workflow and image from this Store is then `skipped`, and
+so are the agents on those images and the queue bindings of those workflows.
+Entries from a path and from other Stores still apply. `up` exits non-zero:
+
+```text
+failed   store:team: refresh store team: ...
+skipped  workflow:development: an action it depends on failed
+skipped  image:developer: an action it depends on failed
+changed  image:reviewer
+skipped  agent:dev-developer: an action it depends on failed
+```
+
+#### A second `up`
+
+A second `up` on unchanged sources refreshes each git Store, builds each path
+image and each workflow again, and builds no Store image. The path builds and
+the workflow builds give the digests that the daemon already has, so no tag
+moves. `up` makes no change to agents and queues, and it reports every
+resource `ok`.
 
 ### The tariboy version range
 
@@ -186,11 +300,15 @@ tariboy compose validate [-f FILE] [--daemon]
 
 1. The schema. If the YAML has unknown fields, it lists each one. A YAML syntax
    error stops the check.
-2. The references between entries, as listed above.
-3. The existence of each local `path` in `stores`, `workflows`, and `images`,
+2. The references between entries, as listed above: each `store` of a
+   workflow or an image is in `stores`, and the `STORE/` prefix of a queue
+   workflow is the `store` of its entry.
+3. The fields of the version 2 sections: a git URL is `https` only, a `tag`
+   and a `version` have a valid form.
+4. The existence of each local `path` in `stores`, `workflows`, and `images`,
    and of each version 1 image `context`.
-4. The `tariboy` range against the version of the CLI.
-5. With `--daemon`, the `tariboy` range against the version of the running
+5. The `tariboy` range against the version of the CLI.
+6. With `--daemon`, the `tariboy` range against the version of the running
    daemon. This is one read of `GET /api/daemon/status`. If the file has no
    `tariboy` key, there is nothing to compare and it makes no call.
 
@@ -215,9 +333,9 @@ toward the file and applies them phase by phase:
 
 | Phase | What it applies |
 | --- | --- |
-| `stores` | Nothing yet; the `stores` section is not applied by `up`. |
-| `workflows` | Builds each Store workflow a task queue names, once per source. |
-| `images` | Builds each declared image as `NAME:latest`, one action per image. |
+| `stores` | Registers each Store of the file, sets the `ref` of a git Store and refreshes it, and reads a path Store. See [Stores](#stores). |
+| `workflows` | Version 2: builds each entry of `workflows` after its Store. Version 1: builds each Store workflow a task queue names, once per source. |
+| `images` | Builds each declared image as `NAME:TAG` (`latest` by default), one action per image, after its Store. |
 | `queues` | Creates each task queue, restores a changed name, description and owners, and sets the plain env and the secrets of each queue. |
 | `agents` | Creates each new agent **without a group**, converges the settings of an existing one, stops one whose file sets `loop.enabled: false`, and sets the agent budget. |
 | `groups` | Creates each group without a lead, assigns the file's agents to it, sets the lead, and sets the group budget. |
@@ -234,11 +352,13 @@ already has its group, its pools and its queue's workflow.
 
 A setting that already matches makes no call. Running `up` again on a
 converged file reports every resource `ok`. The only exception is the
-builds: compose cannot tell whether the local sources changed, so every `up`
-builds each image and each Store workflow again. A build of unchanged sources
-publishes the digest the daemon already has and is reported `ok`; an image
-whose `NAME:latest` digest changed, or a workflow version that was not
-published before, is reported `changed`.
+builds and the refresh of each git Store: compose cannot tell whether the
+local sources changed, so every `up` builds each path image and each workflow
+again. A build of unchanged sources publishes the digest the daemon already
+has and is reported `ok`; an image whose `NAME:TAG` digest changed, or a
+workflow version that was not published before, is reported `changed`. An
+image from a Store builds only when the Store gives a new `image_version` (see
+[A second `up`](#a-second-up)).
 
 An existing agent converges in place:
 
@@ -278,9 +398,8 @@ An existing agent converges in place:
   schedule, the user prompt, the mail settings, alias, notes, color, retention
   and secrets converge as [Agent settings](#agent-settings) describes.
 
-The ref of a Git Store changes with `tariboy store ref` (see
-[Images](/docs/images#the-ref-of-a-git-store)). Compose does not use this
-command yet.
+The stores phase changes the ref of a Git Store as `tariboy store ref` does
+(see [Images](/docs/images#the-ref-of-a-git-store)).
 
 ### Entities that are in use
 
@@ -329,7 +448,19 @@ dry-run: 6 resources to change, 0 ok; nothing applied
 Env and secret values are never printed, only the names of the env keys.
 Without a build, the digest of a Store workflow is not known, so the dry run
 lists each build and each workflow binding as planned even when `up` would
-find it unchanged. When the daemon is not running, `--dry-run` fails with
+find it unchanged. It also lists the refresh of each git Store. It does not
+refresh a Store, so it does not know the version that a Store source will
+give. A `version` from a Store shows as `(checked at apply time)`:
+
+```text
+phase stores
+  create   store:local (source=/work/store; ref=(default branch))
+  update   store:team (ref main -> v2; refresh)
+phase images
+  build    image:developer (source=team/developer; tag=latest; version=2.1.0 (checked at apply time))
+```
+
+When the daemon is not running, `--dry-run` fails with
 `tariboyd is not running` instead of starting it.
 
 ### When an action fails
@@ -586,6 +717,26 @@ These agent commands have no compose field:
 | `secret rm`, `env` keys that the file omits with `env_mode: merge` | `up` never removes them. Use `env_mode: replace` for env. |
 | `agent messages instant-senders --reset` | The file cannot express "not set". Run the command. |
 
+For a version 2 file, status also prints one line for each Store, workflow and
+image. A Store line shows the drift of its `ref`. A workflow or image line
+compares the version that `NAME:TAG` was built from with the version that its
+source gives now. Status does not refresh a Store: it reads the version from
+the current copy of the Store, and the version of a path source from the local
+file. Every line except `ok` counts as drift:
+
+```text
+store      team       ok (ref main, commit 3f2a9c1e0b7d)
+store      team       drift: ref have=main want=v2
+store      team       MISSING
+store      team       source differs: have=https://a/x.git want=https://b/x.git (up does not change it)
+store      local      UNREADABLE (bad_source_path)
+image      developer  ok (version 1.2.0)
+image      developer  drift: built=1.1.0 source=1.2.0
+image      developer  MISSING (not built; source 1.2.0)
+image      developer  version conflict: want=1.2.0 source=1.3.0
+workflow   development drift: built=0.9.0 source=1.0.0
+```
+
 ## Task queues and pools
 
 Compose can declare task queues with every setting of a queue:
@@ -745,6 +896,19 @@ task_queues:
 | `STORE/NAME:TAG` | Builds `STORE/NAME`, then binds `NAME:TAG`. The queue follows the tag. |
 
 A tag of `.` or `..` is a validation error.
+
+In version 2, `NAME` is the key of a `workflows` entry. `up` builds the entry
+in the workflows phase and binds the queue after that build. A failed build or
+a version conflict skips the binding, and the queue keeps its workflow:
+
+| Value | `compose up` in version 2 |
+| --- | --- |
+| `NAME` | Binds the entry's `tag` (`latest` by default). The queue follows the tag. |
+| `NAME:TAG` | Binds `NAME:TAG`. The queue follows the tag. |
+| `STORE/NAME` | Binds the digest of the entry's build. The binding is pinned. `STORE` must be the `store` of the entry. |
+| `STORE/NAME:TAG` | Binds `NAME:TAG`. The queue follows the tag. |
+
+The paragraphs below describe the version 1 forms.
 
 Each Store workflow is built once per run in the workflows phase, before any
 queue is bound, and a bind runs after the queue's pools exist, since a bind needs the pools the

@@ -141,8 +141,8 @@ func report(p Plan, outcomes []Outcome, errs []error) Report {
 	return rep
 }
 
-// printReport writes one line per resource, then a summary.
-func (r *Runner) printReport(rep Report) {
+// printReport writes one line per resource, then a summary for verb.
+func (r *Runner) printReport(verb string, rep Report) {
 	counts := map[Outcome]int{}
 	for _, e := range rep.Entries {
 		counts[e.Outcome]++
@@ -152,6 +152,6 @@ func (r *Runner) printReport(rep Report) {
 			r.logf("%-8s %s", e.Outcome, e.Resource)
 		}
 	}
-	r.logf("up: %d ok, %d changed, %d failed, %d skipped",
+	r.logf("%s: %d ok, %d changed, %d failed, %d skipped", verb,
 		counts[OutcomeOK], counts[OutcomeChanged], counts[OutcomeFailed], counts[OutcomeSkipped])
 }

@@ -72,7 +72,7 @@ func TestVersion2ParseIsStrict(t *testing.T) {
 	t.Parallel()
 	for _, doc := range []string{
 		"version: 2\nstores:\n  team: {git: x, branch: main}\n",
-		"version: 2\nworkflows:\n  w: {path: ./w, tag: x}\n",
+		"version: 2\nworkflows:\n  w: {path: ./w, digest: x}\n",
 		"version: 2\nimages:\n  i: {path: ./i, digest: x}\n",
 		"version: 2\ntariboy: {min: 0.1.0, exact: 0.1.0}\n",
 	} {
@@ -87,7 +87,7 @@ func TestVersion1RejectsVersion2SectionsWithAHint(t *testing.T) {
 	for _, tc := range []struct{ doc, want string }{
 		{"version: 1\ntariboy: {min: 0.1.0}\n", "the tariboy key needs version: 2"},
 		{"version: 1\nstores:\n  team: {path: ./s}\n", "the stores section needs version: 2"},
-		{"version: 1\nimages:\n  i: {path: ./i}\n", `image "i" uses path, store, source or version, which need version: 2`},
+		{"version: 1\nimages:\n  i: {path: ./i}\n", `image "i" uses path, store, source, tag or version, which need version: 2`},
 	} {
 		f := parseV2(t, tc.doc)
 		if err := f.Validate(); err == nil || err.Error() != tc.want {
@@ -128,10 +128,72 @@ images:
 		`workflow "nosrc" source needs store`,
 		`workflow "twosrc" needs exactly one source: path or store`,
 		`image "ctx" context is version 1 syntax; use path`,
-		`image "pathver" version needs store`,
 	}
 	if got := problemTexts(f); strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("problems:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// A version 2 entry may set tag and version with either source; a git Store
+// takes only an https URL; a queue's Store prefix must match its entry.
+func TestVersion2TagGitAndPrefixProblems(t *testing.T) {
+	t.Parallel()
+	f := parseV2(t, `version: 2
+stores:
+  team: {git: https://example.com/store.git}
+  other: {git: https://example.com/other.git}
+  plain: {git: http://example.com/s.git}
+  sshurl: {git: ssh://git@example.com/s.git}
+  scp: {git: "git@example.com:s.git"}
+  creds: {git: "https://user:pw@example.com/s.git"}
+  query: {git: "https://example.com/s.git?x=1"}
+  nopath: {git: https://example.com}
+workflows:
+  development: {store: team, tag: 1.2.0, version: 1.2.0}
+  review: {path: ./review, version: 0.1.0}
+  badtag: {path: ./w, tag: stable}
+images:
+  developer: {store: team, tag: stable, version: 1.0.0}
+  reviewer: {path: ./reviewer, tag: v2, version: 2.0.0}
+  dots: {path: ./d, tag: ..}
+  badtag: {path: ./d, tag: "a b"}
+task_queues:
+  DEV:
+    name: Development
+    workflow: other/development
+  REV:
+    name: Review
+    workflow: review:0.1.0
+`)
+	want := []string{
+		`store "creds" git must be an https URL without credentials, query or fragment`,
+		`store "nopath" git must be an https URL without credentials, query or fragment`,
+		`store "plain" git must be an https URL without credentials, query or fragment`,
+		`store "query" git must be an https URL without credentials, query or fragment`,
+		`store "scp" git must be an https URL without credentials, query or fragment`,
+		`store "sshurl" git must be an https URL without credentials, query or fragment`,
+		`workflow "badtag" tag "stable": want latest or a version`,
+		`image "badtag" invalid tag "a b"`,
+		`image "dots" invalid tag ".."`,
+		`task queue "DEV" workflow store "other" differs from store "team" of workflow "development"`,
+	}
+	if got := problemTexts(f); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("problems:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	if got := f.Images["reviewer"]; got.Tag != "v2" || got.Version != "2.0.0" {
+		t.Fatalf("images.reviewer = %+v", got)
+	}
+}
+
+// A version 1 image keeps context; tag is version 2 syntax.
+func TestVersion1ImageTagNeedsVersion2(t *testing.T) {
+	t.Parallel()
+	f := parseV2(t, "version: 1\nimages:\n  i: {context: ./i, tag: x}\n")
+	if err := f.Validate(); err == nil || err.Error() != `image "i" uses path, store, source, tag or version, which need version: 2` {
+		t.Fatalf("Validate = %v", err)
+	}
+	if err := parseV2(t, "version: 1\nimages:\n  i: {context: ./i}\n").Validate(); err != nil {
+		t.Fatalf("version 1 context: %v", err)
 	}
 }
 

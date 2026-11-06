@@ -51,21 +51,21 @@ func checkVersion(what string, v version.SemVer, c version.Constraint, path stri
 	return fmt.Errorf("%s version %s does not satisfy tariboy %s in %s", what, v, c, path)
 }
 
-// UnappliedSections refuses a file with sections that up, build and team
-// import do not apply yet (stores, workflows, images from a Store), so such
-// a file is never applied in part.
+// UnappliedSections refuses a file with sections that team import does not
+// apply (stores, workflows, images from a Store), so such a file is never
+// imported in part; compose up applies them.
 func (f File) UnappliedSections() error {
 	for _, s := range []struct {
 		name string
 		n    int
 	}{{"stores", len(f.Stores)}, {"workflows", len(f.Workflows)}} {
 		if s.n != 0 {
-			return fmt.Errorf("section %s is not applied by compose up yet; run compose validate to check it", s.name)
+			return fmt.Errorf("section %s is not applied by team import; apply the file with compose up", s.name)
 		}
 	}
 	for _, name := range sortedKeys(f.Images) {
 		if f.Images[name].Store != "" {
-			return fmt.Errorf("image %q from a Store is not applied by compose up yet; run compose validate to check it", name)
+			return fmt.Errorf("image %q from a Store is not applied by team import; apply the file with compose up", name)
 		}
 	}
 	return nil

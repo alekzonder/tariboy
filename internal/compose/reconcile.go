@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -52,7 +51,7 @@ func (r *Runner) Up(f File) error {
 		return err
 	}
 	rep := r.Apply(plan)
-	r.printReport(rep)
+	r.printReport("up", rep)
 	return rep.summaryErr()
 }
 
@@ -120,26 +119,33 @@ func (r *Runner) Down(f File, volumes bool) error {
 	return nil
 }
 
-// Build publishes every declared image through the daemon, for the build
-// verb; up builds in its images phase. No-op when the file declares no images
-// or the test seam is set.
+// buildPhases are the phases the build verb applies.
+var buildPhases = map[string]bool{"stores": true, "workflows": true, "images": true}
+
+// Build applies the stores, workflows and images phases of the plan, for the
+// build verb, and prints their report. These phases come first, so the
+// dependencies of their actions stay in the cut plan.
 func (r *Runner) Build(f File) error {
-	if r.skipBuild {
-		return nil
+	plan, err := r.Plan(f)
+	if err != nil {
+		return err
 	}
-	for _, name := range sortedKeys(f.Images) {
-		spec := f.Images[name]
-		ctx := spec.BuildPath()
-		if !filepath.IsAbs(ctx) {
-			ctx = filepath.Join(r.workdir, ctx)
-		}
-		r.logf("building image %s:latest", name)
-		// The build is a daemon operation; wait answers when it has ended.
-		if _, err := r.call.Call("POST", "/api/images/build", map[string]any{"name": name, "tag": "latest", "path": ctx, "wait": true, "initiator": "compose"}); err != nil {
-			return fmt.Errorf("build image %s: %w", name, err)
+	var cut Plan
+	resources := map[string]bool{}
+	for _, a := range plan.Actions {
+		if buildPhases[a.Phase] {
+			cut.Actions = append(cut.Actions, a)
+			resources[a.Resource] = true
 		}
 	}
-	return nil
+	for _, res := range plan.Resources {
+		if resources[res.ID] {
+			cut.Resources = append(cut.Resources, res)
+		}
+	}
+	rep := r.Apply(cut)
+	r.printReport("build", rep)
+	return rep.summaryErr()
 }
 func sortedKeys[V any](m map[string]V) []string {
 	out := make([]string, 0, len(m))

@@ -100,6 +100,16 @@ func (q TaskQueueSpec) WorkflowRef() (ref WorkflowRef, declared bool, err error)
 	return ref, err == nil, err
 }
 
+// queueWorkflowRef returns the workflow of a queue; in version 2 a bare NAME
+// takes the tag of its workflows entry, so the queue follows that tag.
+func queueWorkflowRef(q TaskQueueSpec, entries map[string]WorkflowSpec) (WorkflowRef, bool, error) {
+	ref, declared, err := q.WorkflowRef()
+	if entry, ok := entries[ref.Name]; ok && ref.Store == "" && ref.Tag == "" {
+		ref.Tag = entry.Tag
+	}
+	return ref, declared, err
+}
+
 // Selector is the Store selector "STORE/NAME" the build step sends.
 func (r WorkflowRef) Selector() string { return r.Store + "/" + r.Name }
 
@@ -128,8 +138,12 @@ func (f File) taskQueueProblems(prefix string, queue TaskQueueSpec) []error {
 			out = append(out, fmt.Errorf("task queue %q references undeclared store %q", prefix, ref.Store))
 		}
 	}
-	if _, ok := f.Workflows[ref.Name]; !ok {
+	entry, ok := f.Workflows[ref.Name]
+	switch {
+	case !ok:
 		out = append(out, fmt.Errorf("task queue %q references undeclared workflow %q", prefix, ref.Name))
+	case ref.Store != "" && ref.Store != entry.Store:
+		out = append(out, fmt.Errorf("task queue %q workflow store %q differs from store %q of workflow %q", prefix, ref.Store, entry.Store, ref.Name))
 	}
 	return out
 }

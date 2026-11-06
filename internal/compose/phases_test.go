@@ -37,11 +37,12 @@ func phasedCaller() *workflowComposeCaller {
 	return fc
 }
 
-// mutating returns the calls other than GET, from index start.
+// mutating returns the calls other than GET, from index start. A workflow
+// validate is a POST that changes nothing, so it is not listed.
 func mutating(calls []string, start int) []string {
 	var out []string
 	for _, c := range calls[start:] {
-		if !strings.HasPrefix(c, "GET ") {
+		if !strings.HasPrefix(c, "GET ") && c != "POST /api/workflow-images/validate" {
 			out = append(out, c)
 		}
 	}

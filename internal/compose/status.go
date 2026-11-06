@@ -42,7 +42,7 @@ func (r *Runner) Status(f File) error {
 		if res.queue == "" {
 			continue
 		}
-		if err := r.statusQueueWorkflow(res.queue, f.TaskQueues[res.queue], &drift); err != nil {
+		if err := r.statusQueueWorkflow(res.queue, f.TaskQueues[res.queue], f.Workflows, &drift); err != nil {
 			return err
 		}
 	}
@@ -59,8 +59,8 @@ func (r *Runner) Status(f File) error {
 // workflow, and a Store source that cannot be read, is compared through
 // NAME:TAG (latest by default), so a Store workflow that is not built yet reads
 // as pending. A daemon error on the queue's binding is reported for the queue.
-func (r *Runner) statusQueueWorkflow(prefix string, want TaskQueueSpec, drift *int) error {
-	ref, declared, err := want.WorkflowRef()
+func (r *Runner) statusQueueWorkflow(prefix string, want TaskQueueSpec, entries map[string]WorkflowSpec, drift *int) error {
+	ref, declared, err := queueWorkflowRef(want, entries)
 	if err != nil {
 		return fmt.Errorf("task queue %s workflow: %w", prefix, err)
 	}

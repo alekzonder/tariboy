@@ -86,31 +86,39 @@ func TestFileWithoutTariboyKeySkipsTheVersionRead(t *testing.T) {
 	}
 }
 
-// TestUpAndBuildRefuseSectionsTheyDoNotApply pins that up and build reject a
-// file with stores, workflows or a Store image before any call, instead of
-// applying part of it.
-func TestUpAndBuildRefuseSectionsTheyDoNotApply(t *testing.T) {
-	for _, tc := range []struct{ name, doc, want string }{
-		{"stores", "version: 2\nstores:\n  team: {path: ./s}\n", "section stores is not applied by compose up yet"},
-		{"workflows", "version: 2\nworkflows:\n  w: {path: ./w}\n", "section workflows is not applied by compose up yet"},
-		{"store image", "version: 2\nstores:\n  team: {path: ./s}\nimages:\n  i: {store: team}\n", "section stores is not applied"},
+// TestTeamImportRefusesSourceSections pins that a team import still rejects
+// stores, workflows and a Store image, and tells the user to apply the file
+// with compose up.
+func TestTeamImportRefusesSourceSections(t *testing.T) {
+	for _, tc := range []struct {
+		f    File
+		want string
+	}{
+		{File{Version: 2, Stores: map[string]StoreSpec{"team": {Path: "./s"}}}, "section stores is not applied by team import; apply the file with compose up"},
+		{File{Version: 2, Workflows: map[string]WorkflowSpec{"w": {SourceSpec{Path: "./w"}}}}, "section workflows is not applied by team import; apply the file with compose up"},
+		{File{Version: 2, Images: map[string]ImageSpec{"i": {SourceSpec: SourceSpec{Store: "team"}}}}, `image "i" from a Store is not applied by team import; apply the file with compose up`},
 	} {
-		for _, verb := range []string{"up", "build"} {
-			t.Run(tc.name+"/"+verb, func(t *testing.T) {
-				path := writeNamedFile(t, t.TempDir(), "Tariboycompose.yaml", tc.doc)
-				fc := newVersionCaller("0.110.0")
-				var errOut strings.Builder
-				if code := Run(context.Background(), fc, Options{Verb: verb, File: path, NoStart: true}, io.Discard, &errOut); code != 1 || !strings.Contains(errOut.String(), tc.want) {
-					t.Fatalf("code=%d stderr=%s; want 1 and %q", code, errOut.String(), tc.want)
-				}
-				if len(fc.calls) != 0 {
-					t.Fatalf("calls = %v; want none", fc.calls)
-				}
-			})
+		if err := tc.f.UnappliedSections(); err == nil || err.Error() != tc.want {
+			t.Errorf("UnappliedSections = %v; want %q", err, tc.want)
 		}
 	}
-	if err := (File{Version: 2, Images: map[string]ImageSpec{"i": {SourceSpec: SourceSpec{Store: "team"}}}}).UnappliedSections(); err == nil || !strings.Contains(err.Error(), `image "i" from a Store is not applied`) {
-		t.Fatalf("store image error = %v", err)
+}
+
+// TestUpAndBuildApplySourceSections pins that up and build no longer refuse
+// a file with stores and workflows.
+func TestUpAndBuildApplySourceSections(t *testing.T) {
+	for _, verb := range []string{"up", "build"} {
+		dir := t.TempDir()
+		path := writeNamedFile(t, dir, "Tariboycompose.yaml", "version: 2\nstores:\n  team: {path: ./s}\n")
+		fc := newSourcesCaller()
+		fc.remote[filepath.Join(dir, "s")] = &sourceState{}
+		var errOut strings.Builder
+		if code := Run(context.Background(), fc, Options{Verb: verb, File: path, NoStart: true}, io.Discard, &errOut); code != 0 {
+			t.Fatalf("%s: code=%d stderr=%s", verb, code, errOut.String())
+		}
+		if fc.registered["team"] == nil {
+			t.Fatalf("%s did not create the Store: %v", verb, fc.calls)
+		}
 	}
 }
 

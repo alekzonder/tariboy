@@ -107,7 +107,7 @@ func (f *workflowComposeCaller) Call(method, route string, body any) (json.RawMe
 		if err := f.buildErr[selector]; err != nil {
 			return nil, err
 		}
-		return mustJSON(f.built[selector]), nil
+		return operationResult(f.built[selector]), nil
 	case method == "GET" && strings.HasPrefix(route, "/api/workflow-images/"):
 		f.record(method, route, body)
 		parts := strings.Split(strings.TrimPrefix(route, "/api/workflow-images/"), "/")
@@ -153,6 +153,12 @@ func (f *workflowComposeCaller) Call(method, route string, body any) (json.RawMe
 		return mustJSON(detail), nil
 	}
 	return f.taskQueueComposeCaller.Call(method, route, body)
+}
+
+// operationResult is what a waited workflow build returns: the finished
+// operation, with the build result in workflow_result.
+func operationResult(result map[string]any) json.RawMessage {
+	return mustJSON(map[string]any{"operation": map[string]any{"kind": "workflow.build", "status": "succeeded", "workflow_result": result}})
 }
 
 func (f *workflowComposeCaller) record(method, route string, body any) {
