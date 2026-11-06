@@ -6,6 +6,9 @@ import { TOUR_ANCHORS } from "@/lib/onboarding/tour";
 import { ActivityTotals } from "@/pages/activity/ActivityParts";
 import type { TaskActivityTotals } from "@/types";
 
+/** Rows of Running now before "Show all". */
+export const RUNNING_LIMIT = 8;
+
 export interface HomeAgentLink {
   key: string;
   name: string;
@@ -15,11 +18,17 @@ export interface HomeAgentLink {
 }
 
 export interface HomeViewProps {
-  needsYouCount: number;
+  /** "7", or "100+" when the count is a lower bound. */
+  needsYouCount: string;
   /** The Needs you list. It keeps its own task drawer and data, so the
    *  container renders it. */
   needsYou: ReactNode;
+  /** The shown rows of Running now. */
   running: HomeAgentLink[];
+  /** All running agents, shown or not. */
+  runningTotal: number;
+  runningExpanded: boolean;
+  onToggleRunning: () => void;
   recent: HomeAgentLink[];
   totals: TaskActivityTotals | null;
   todayError: string | null;
@@ -67,6 +76,9 @@ export function HomeView({
   needsYouCount,
   needsYou,
   running,
+  runningTotal,
+  runningExpanded,
+  onToggleRunning,
   recent,
   totals,
   todayError,
@@ -89,8 +101,8 @@ export function HomeView({
       </header>
       <Section title={`Needs you (${needsYouCount})`}>{needsYou}</Section>
       {/* Full width: the six Today tiles need it at 1024 px. */}
-      <Section title={`Running now (${running.length})`}>
-        {running.length === 0 && (
+      <Section title={`Running now (${runningTotal})`}>
+        {runningTotal === 0 && (
           <p className="px-2 text-body-sm text-muted-foreground">No agent is running.</p>
         )}
         <ul className="space-y-0.5">
@@ -109,6 +121,17 @@ export function HomeView({
             </li>
           ))}
         </ul>
+        {runningTotal > RUNNING_LIMIT && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-2 text-muted-foreground"
+            aria-expanded={runningExpanded}
+            onClick={onToggleRunning}
+          >
+            {runningExpanded ? "Show less" : `Show all (${runningTotal})`}
+          </Button>
+        )}
       </Section>
       <Section
         title="Today"

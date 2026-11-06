@@ -1,27 +1,14 @@
 import { lazy, useState } from "react";
-import { ChevronRight, Mail } from "lucide-react";
 import { ApiProvider } from "@/components/ApiProvider";
 import { LazyBoundary } from "@/components/LazyBoundary";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import type { NeedsYouRow } from "@/lib/needsYou";
 import { targetFor } from "@/lib/terminalsHost";
-import { principalName } from "@/pages/mailbox/mailboxModel";
 import TaskDrawer from "@/pages/tasks/TaskDrawer";
-import { formatTaskTime } from "@/pages/tasks/taskTime";
 import { useNeedsYou } from "@/pages/terminals/needsYouContext";
+import { NeedsYouListView, type NeedsYouListViewProps } from "./NeedsYouList.view";
 
 // Loaded on the first expand: the card brings the Markdown renderer.
 const NeedsYouCard = lazy(() => import("@/pages/tasks/NeedsYouCard"));
-
-const ROW_CLASS =
-  "grid w-full min-w-0 grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-x-3 rounded-control px-2 py-1.5 text-left text-body-sm hover:bg-accent sm:flex";
-
-function taskState(row: Extract<NeedsYouRow, { kind: "task" }>): string {
-  const { task } = row;
-  const waiting = task.waiting_on === "pause" ? "paused" : task.status;
-  return [waiting, task.assignee].filter(Boolean).join(" · ");
-}
 
 /**
  * The tasks and letters that wait for the user, across the workspace's hosts.
@@ -29,11 +16,9 @@ function taskState(row: Extract<NeedsYouRow, { kind: "task" }>): string {
  */
 export function NeedsYouList({
   rows,
-  multiHost,
+  showAll,
   onOpenLetter,
-}: {
-  rows: NeedsYouRow[];
-  multiHost: boolean;
+}: Pick<NeedsYouListViewProps, "rows" | "showAll"> & {
   onOpenLetter: (hostId: string, letterId: string) => void;
 }) {
   const { hosts, loaded, reload } = useNeedsYou();
@@ -63,73 +48,24 @@ export function NeedsYouList({
   }
   return (
     <>
-      <ul className="space-y-0.5">
-        {rows.map((row) => {
-          const id = `${row.hostId}\u0000${row.kind}\u0000${row.id}`;
-          const open = expanded.has(id);
-          return (
-            <li key={id}>
-              <div className="flex min-w-0 items-center gap-0.5">
-                {row.kind === "task" ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-6 shrink-0"
-                    aria-label="Answer in place"
-                    aria-expanded={open}
-                    onClick={() => toggle(id)}
-                  >
-                    <ChevronRight
-                      aria-hidden="true"
-                      className={cn("size-3.5", open && "rotate-90")}
-                    />
-                  </Button>
-                ) : (
-                  <span className="size-6 shrink-0" />
-                )}
-                <button
-                  type="button"
-                  className={ROW_CLASS}
-                  onClick={() =>
-                    row.kind === "task"
-                      ? setTask({ hostId: row.hostId, key: row.task.key })
-                      : onOpenLetter(row.hostId, row.letter.id)
-                  }
-                >
-                  {row.kind === "task" ? (
-                    <span className="w-24 shrink-0 truncate font-mono text-caption">
-                      {row.task.key}
-                    </span>
-                  ) : (
-                    <span className="flex w-24 shrink-0 items-center gap-1 text-caption text-muted-foreground">
-                      <Mail className="size-3" aria-hidden="true" />
-                      {principalName(row.letter.from)}
-                    </span>
-                  )}
-                  <span className="min-w-0 flex-1 truncate">
-                    {row.kind === "task" ? row.task.title : row.letter.subject || "(no subject)"}
-                  </span>
-                  <span className="col-start-2 min-w-0 truncate text-caption text-muted-foreground sm:max-w-1/2 sm:shrink-0">
-                    {row.kind === "task" ? taskState(row) : "letter"}
-                    {multiHost ? ` · ${row.hostLabel}` : ""}
-                    {` · ${formatTaskTime(row.at)}`}
-                  </span>
-                </button>
-              </div>
-              {open && row.kind === "task" && (
-                <div className="py-1.5 pl-6.5">
-                  <ApiProvider target={targetFor(row.hostId)}>
-                    <LazyBoundary resetKey={id}>
-                      <NeedsYouCard taskKey={row.task.key} onChanged={reload} />
-                    </LazyBoundary>
-                  </ApiProvider>
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+      <NeedsYouListView
+        rows={rows}
+        expanded={expanded}
+        onToggle={toggle}
+        showAll={showAll}
+        onOpen={(row) =>
+          row.kind === "task"
+            ? setTask({ hostId: row.hostId, key: row.ref })
+            : onOpenLetter(row.hostId, row.ref)
+        }
+        renderCard={(row) => (
+          <ApiProvider target={targetFor(row.hostId)}>
+            <LazyBoundary resetKey={row.id}>
+              <NeedsYouCard taskKey={row.ref} onChanged={reload} />
+            </LazyBoundary>
+          </ApiProvider>
+        )}
+      />
       {task && (
         <ApiProvider target={targetFor(task.hostId)}>
           <TaskDrawer

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { HostAgents } from "@/lib/aggregate";
 import { agentRow } from "@/test/fixtures/apiFixtures";
-import { elapsed, recentAgents, runningAgents } from "./homeModel";
+import { elapsed, formatAge, recentAgents, runningAgents } from "./homeModel";
 
 const agent = (name: string, over: Record<string, string> = {}) =>
   agentRow({ name, image: "img", state: "idle", harness: "claude", ...over });
@@ -53,5 +53,21 @@ describe("elapsed", () => {
     ["not a time", ""],
   ])("reads %s as %s", (start, text) => {
     expect(elapsed(start, now)).toBe(text);
+  });
+});
+
+describe("formatAge", () => {
+  const now = new Date("2026-11-06T12:00:00Z");
+  it.each([
+    ["2026-11-06T11:59:30Z", "just now"],
+    ["2026-11-06T12:00:30Z", "just now"],
+    ["2026-11-06T11:48:00Z", "12 min ago"],
+    ["2026-11-06T10:00:00Z", "2 h ago"],
+    ["2026-11-05T12:01:00Z", "23 h ago"],
+    ["2026-11-04T12:00:00Z", "Nov 4"],
+    ["", "—"],
+    ["not a time", "—"],
+  ])("reads %s as %s", (iso, text) => {
+    expect(formatAge(iso, now)).toBe(text);
   });
 });

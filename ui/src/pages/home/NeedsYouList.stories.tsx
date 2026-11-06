@@ -1,6 +1,5 @@
 import type { Decorator, Meta, StoryObj } from "@storybook/react-vite";
-import { taskItem } from "@/fixtures/tasks";
-import type { NeedsYouRow } from "@/lib/needsYou";
+import { busyNeedsYou, needsYouRow } from "@/fixtures/needsYou";
 import { NeedsYouContext } from "@/pages/terminals/needsYouContext";
 import { NeedsYouList } from "./NeedsYouList";
 
@@ -31,25 +30,27 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-const HOST = "a-build-host-with-a-deliberately-long-label";
-
-// The data of `longText` in mockups/home/Home.stories.tsx.
-const longText: NeedsYouRow[] = [
-  {
-    kind: "task",
-    id: "TARIDESIGN-38fp",
-    hostId: "",
-    hostLabel: HOST,
-    at: "2026-11-05T09:42:00Z",
-    task: taskItem({
-      key: "TARIDESIGN-38fp",
-      title: "Approve the release notes for the nightly release candidate of worker:v2",
-      status: "wait_customer",
-      assignee: "release-candidate-packager-for-the-long-running-nightly",
-    }),
-  },
-];
-
 export const LongText: Story = {
-  args: { rows: longText, multiHost: true, onOpenLetter: () => {} },
+  args: {
+    rows: [
+      needsYouRow({
+        id: "task-TARIDESIGN-38fp",
+        ref: "TARIDESIGN-38fp",
+        label: "TARIDESIGN-38fp",
+        title: "Approve the release notes for the nightly release candidate of worker:v2",
+        meta: "waiting for you · release-candidate-packager-for-the-long-running-nightly · a-build-host-with-a-deliberately-long-label · 12 min ago",
+      }),
+    ],
+    showAll: null,
+    onOpenLetter: () => {},
+  },
+};
+
+// 100+ items wait: the seven most urgent, with repeated letters merged.
+export const Busy: Story = {
+  args: {
+    rows: busyNeedsYou,
+    showAll: { label: "Show all (100+)", href: "/inbox" },
+    onOpenLetter: () => {},
+  },
 };

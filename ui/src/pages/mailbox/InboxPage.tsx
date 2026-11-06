@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useApi } from "@/components/apiContext";
 import { useApiQuery } from "@/hooks/useApiQuery";
-import { needsYouRows } from "@/lib/needsYou";
+import { needsYouView } from "@/pages/home/needsYouModel";
 import { hostToParam } from "@/lib/terminalsHost";
 import { NeedsYouList } from "@/pages/home/NeedsYouList";
 import { taskQueries } from "@/pages/tasks/taskQueries";
@@ -26,7 +26,8 @@ export default function InboxPage({
   const [searchParams, setSearchParams] = useSearchParams();
   const agents = useApiQuery(taskQueries.principals(api)).data?.agents ?? [];
   const needs = useNeedsYou();
-  const rows = needsYouRows(needs.hosts);
+  // Inbox lists every row; only Home cuts the list.
+  const { rows } = needsYouView(needs.hosts, multiHost, new Date(), Infinity);
   const openLetter = (hostId: string, letterId: string) => {
     const next = new URLSearchParams({ letter: letterId });
     if (multiHost) next.set("host", hostToParam(hostId));
@@ -39,7 +40,7 @@ export default function InboxPage({
         className="max-h-[40%] shrink-0 overflow-y-auto border-b px-2 py-3"
       >
         <h2 className="mb-1.5 px-2 text-body font-semibold">Needs you ({rows.length})</h2>
-        <NeedsYouList rows={rows} multiHost={multiHost} onOpenLetter={openLetter} />
+        <NeedsYouList rows={rows} showAll={null} onOpenLetter={openLetter} />
       </section>
       <div className="min-h-0 flex-1">
         <Mailbox

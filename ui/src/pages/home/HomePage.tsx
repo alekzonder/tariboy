@@ -5,14 +5,14 @@ import { useTaskActivity } from "@/hooks/useTaskActivity";
 import type { HostAgents } from "@/lib/aggregate";
 import { activityWindow } from "@/lib/activityPeriod";
 import { scopedPath } from "@/lib/navRoutes";
-import { needsYouRows } from "@/lib/needsYou";
 import { targetFor } from "@/lib/terminalsHost";
 import { DEFAULT_AGENT_TAB } from "@/pages/agents/agentWorkspaceModel";
 import { useNeedsYou } from "@/pages/terminals/needsYouContext";
 import { agentPath } from "@/pages/terminals/terminalsHosts";
-import { elapsed, recentAgents, runningAgents } from "./homeModel";
-import { HomeView } from "./HomePage.view";
+import { elapsed, formatAge, recentAgents, runningAgents } from "./homeModel";
+import { HomeView, RUNNING_LIMIT } from "./HomePage.view";
 import { NeedsYouList } from "./NeedsYouList";
+import { needsYouView } from "./needsYouModel";
 
 const RECENT = 8;
 const MINUTE_MS = 60_000;
@@ -29,6 +29,7 @@ function HomeContainer({ hosts, pageHostId, onNewAgent }: HomeProps) {
   const navigate = useNavigate();
   const needs = useNeedsYou();
   const [now, setNow] = useState(() => new Date());
+  const [runningExpanded, setRunningExpanded] = useState(false);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), MINUTE_MS);
     return () => window.clearInterval(timer);
@@ -37,35 +38,45 @@ function HomeContainer({ hosts, pageHostId, onNewAgent }: HomeProps) {
   const day = useMemo(() => activityWindow(new URLSearchParams(), now), [now]);
   const { report, error } = useTaskActivity(day);
 
-  const rows = needsYouRows(needs.hosts);
   const multiHost = hosts.length >= 2;
+  const needsView = needsYouView(needs.hosts, multiHost, now);
+  const needsCount = `${needsView.total}${needsView.atLeast ? "+" : ""}`;
+  const showAllHref = scopedPath(needsView.showAll, multiHost ? pageHostId : undefined);
   const hostSuffix = (label: string) => (multiHost ? ` · ${label}` : "");
-  const running = runningAgents(hosts).map((row) => ({
+  const allRunning = runningAgents(hosts).map((row) => ({
     key: row.key,
     name: row.agent.name,
     meta: `${elapsed(row.agent.current_iteration_started_at ?? "", now)}${hostSuffix(row.hostLabel)}`,
     href: agentPath(row.hostId, row.agent.name, "console"),
   }));
+  const running = runningExpanded ? allRunning : allRunning.slice(0, RUNNING_LIMIT);
   const recent = recentAgents(hosts, RECENT).map((row) => ({
     key: row.key,
     name: row.agent.name,
-    meta: `${row.agent.state}${hostSuffix(row.hostLabel)}`,
+    meta: `${row.agent.last_iteration_at ? formatAge(row.agent.last_iteration_at, now) : "not run yet"}${hostSuffix(row.hostLabel)}`,
     href: agentPath(row.hostId, row.agent.name, DEFAULT_AGENT_TAB),
   }));
 
   return (
     <HomeView
-      needsYouCount={rows.length}
+      needsYouCount={needsCount}
       needsYou={
         <NeedsYouList
-          rows={rows}
-          multiHost={multiHost}
+          rows={needsView.rows}
+          showAll={
+            needsView.total > needsView.rows.length || needsView.atLeast
+              ? { label: `Show all (${needsCount})`, href: showAllHref }
+              : null
+          }
           onOpenLetter={(hostId, letterId) =>
             navigate(scopedPath("inbox", multiHost ? hostId : undefined, { letter: letterId }))
           }
         />
       }
       running={running}
+      runningTotal={allRunning.length}
+      runningExpanded={runningExpanded}
+      onToggleRunning={() => setRunningExpanded((value) => !value)}
       recent={recent}
       totals={report?.totals ?? null}
       todayError={error || null}

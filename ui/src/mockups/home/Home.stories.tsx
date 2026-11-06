@@ -5,9 +5,11 @@ import { taskActivityTotals } from "@/fixtures/activity";
 import { agentLink, agentLinks } from "@/fixtures/agents";
 import { NOW, minutesAgo } from "@/fixtures/time";
 import type { AgentState } from "@/lib/agentState";
+import { needsYouRow, busyNeedsYou } from "@/fixtures/needsYou";
 import { HomeView, type HomeViewProps } from "@/pages/home/HomePage.view";
+import { NeedsYouListView } from "@/pages/home/NeedsYouList.view";
+import type { NeedsYouViewRow } from "@/pages/home/needsYouModel";
 import { withWidth } from "@/storybook/decorators";
-import { NeedsYouListView, type NeedsYouViewRow } from "./NeedsYouList.view";
 
 /**
  * Purpose: Home is the first screen of a workspace that has agents. It shows
@@ -51,6 +53,8 @@ interface PageData {
   sidebar: SidebarAgent[];
   needs: NeedsYouViewRow[];
   view: Omit<HomeViewProps, "needsYou" | "needsYouCount">;
+  /** "Show all (N)" under the rows, when more items wait than are shown. */
+  showAll?: string;
 }
 
 function Sidebar({ agents }: { agents: SidebarAgent[] }) {
@@ -81,8 +85,16 @@ function HomeMockup({ compact, data }: { compact: boolean; data: PageData }) {
         <div className="flex min-h-0 flex-1 flex-col p-3">
           <HomeView
             {...data.view}
-            needsYouCount={data.needs.length}
-            needsYou={<NeedsYouListView rows={data.needs} />}
+            needsYouCount={data.showAll ? "100+" : String(data.needs.length)}
+            needsYou={
+              <NeedsYouListView
+                rows={data.needs}
+                expanded={new Set()}
+                onToggle={() => {}}
+                onOpen={() => {}}
+                showAll={data.showAll ? { label: data.showAll, href: "/inbox" } : null}
+              />
+            }
           />
         </div>
       </main>
@@ -103,31 +115,29 @@ const base: PageData = {
     { name: "packager", agentState: off },
   ],
   needs: [
-    {
-      id: "task/TB-148",
-      kind: "task",
-      label: "TB-148",
-      title: "Approve the release notes for worker:v2",
-      meta: "wait_customer · planner · 09:42",
-    },
-    {
-      id: "letter/m-1",
+    needsYouRow(),
+    needsYouRow({
+      id: "letter-m-1",
       kind: "letter",
+      ref: "m-1",
       label: "docs-bot",
       title: "Which image builds the docs: worker:v1 or bare:latest?",
-      meta: "letter · 09:15",
-    },
+      meta: "Question on TB-150 · 45 min ago",
+    }),
   ],
   view: {
     running: [
       agentLink({ key: "local/builder", name: "builder", meta: "12 min", href: "/a/builder" }),
       agentLink({ key: "local/reviewer", name: "reviewer", meta: "3 min", href: "/a/reviewer" }),
     ],
-    recent: ["builder", "reviewer", "planner", "docs-bot", "packager"].map((name) =>
+    runningTotal: 2,
+    runningExpanded: false,
+    onToggleRunning: () => {},
+    recent: ["builder", "reviewer", "planner", "docs-bot", "packager"].map((name, i) =>
       agentLink({
         key: `local/${name}`,
         name,
-        meta: name === "builder" || name === "reviewer" ? "running" : "stopped",
+        meta: `${i + 1} min ago`,
         href: `/a/${name}`,
       }),
     ),
@@ -140,23 +150,23 @@ const base: PageData = {
 
 const isRunning = (link: { meta: string }) => !link.meta.startsWith("stopped");
 
-// 50 agents, 17 of them running, and six things that wait for the operator.
+// 50 agents, 17 of them running (8 shown), and 100+ things that wait for the
+// operator (the 7 most urgent shown, repeated letters merged).
 const busy: PageData = {
   sidebar: agentLinks.many.map((link, i) => ({
     name: link.name,
     agentState: isRunning(link) ? working(i + 1) : off,
   })),
-  needs: Array.from({ length: 6 }, (_, i) => ({
-    id: `task/TB-${160 + i}`,
-    kind: "task" as const,
-    label: `TB-${160 + i}`,
-    title: `Review the build output of packager-${4 * i + 3}`,
-    meta: `wait_customer · packager-${4 * i + 3} · 09:${String(10 + i * 7).padStart(2, "0")}`,
-  })),
+  needs: busyNeedsYou,
+  showAll: "Show all (100+)",
   view: {
     ...base.view,
-    running: agentLinks.many.filter(isRunning),
-    recent: agentLinks.many.filter((link) => !isRunning(link)).slice(0, 8),
+    running: agentLinks.many.filter(isRunning).slice(0, 8),
+    runningTotal: agentLinks.many.filter(isRunning).length,
+    recent: agentLinks.many
+      .filter((link) => !isRunning(link))
+      .slice(0, 8)
+      .map((link, i) => ({ ...link, meta: `${i + 1} h ago · build-01` })),
     totals: taskActivityTotals({
       tasks: 212,
       completed: 187,
@@ -176,18 +186,19 @@ const busy: PageData = {
 const longText: PageData = {
   ...base,
   needs: [
-    {
-      id: "task/TARIDESIGN-38fp",
-      kind: "task",
+    needsYouRow({
+      id: "task-TARIDESIGN-38fp",
+      ref: "TARIDESIGN-38fp",
       label: "TARIDESIGN-38fp",
       title: "Approve the release notes for the nightly release candidate of worker:v2",
-      meta: "wait_customer · release-candidate-packager-for-the-long-running-nightly · 09:42",
-    },
+      meta: "waiting for you · release-candidate-packager-for-the-long-running-nightly · 12 min ago",
+    }),
     base.needs[1],
   ],
   view: {
     ...base.view,
     running: [...agentLinks.longText, ...base.view.running],
+    runningTotal: agentLinks.longText.length + base.view.running.length,
     recent: [...agentLinks.longText, ...base.view.recent],
   },
 };
