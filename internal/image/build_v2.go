@@ -41,13 +41,52 @@ func prepareV2(src *imagefile.V2, roots imagefile.ResolveRoots, resolver pluginc
 	if len(src.Extends) > 0 {
 		return preparedV2{}, errors.New(imagefile.ExtendsUnassembledMessage)
 	}
-	plugins := make([]ManifestPlugin, 0, len(src.Plugins))
-	for _, plugin := range src.Plugins {
+	plugins, err := prepareV2Plugins(src.Plugins, resolver)
+	if err != nil {
+		return preparedV2{}, err
+	}
+	skills, sourceSkills, err := prepareV2Skills(src, roots)
+	if err != nil {
+		return preparedV2{}, err
+	}
+	if err := agentskills.ValidateSet(skills); err != nil {
+		return preparedV2{}, err
+	}
+	if err := validateV2Contract(plugins, skills, src.Prompts, resolver); err != nil {
+		return preparedV2{}, err
+	}
+	promptRoots := roots
+	promptRoots.SourceSkills = sourceSkills
+	entries, layers, err := prepareV2Prompts(src, promptRoots)
+	if err != nil {
+		return preparedV2{}, err
+	}
+	if entries == nil {
+		entries = []TemplateEntry{}
+	}
+	hash, err := templateHash(entries)
+	if err != nil {
+		return preparedV2{}, err
+	}
+	template := PromptTemplate{SchemaVersion: 2, Entries: entries, SHA256: hash}
+	return preparedV2{plugins: plugins, skills: skills, entries: entries, layers: layers, template: template}, nil
+}
+
+func prepareV2Plugins(sources []imagefile.V2Plugin, resolver plugincaps.ExternalResolver) ([]ManifestPlugin, error) {
+	plugins := make([]ManifestPlugin, 0, len(sources))
+	for _, plugin := range sources {
 		if _, err := plugincaps.ValidateExplicit([]string{plugin.Name}, resolver); err != nil {
-			return preparedV2{}, err
+			return nil, err
 		}
 		plugins = append(plugins, ManifestPlugin{Name: plugin.Name})
 	}
+	return plugins, nil
+}
+
+// prepareV2Skills loads each declared skill. It also returns the source skill
+// roots prompts resolve against: roots.SourceSkills when set, left unchanged,
+// otherwise the relative skill directories it just resolved.
+func prepareV2Skills(src *imagefile.V2, roots imagefile.ResolveRoots) ([]agentskills.Prepared, map[string]string, error) {
 	skills := make([]agentskills.Prepared, 0, len(src.Skills))
 	sourceSkills := roots.SourceSkills
 	if sourceSkills == nil {
@@ -56,20 +95,21 @@ func prepareV2(src *imagefile.V2, roots imagefile.ResolveRoots, resolver pluginc
 	for i, skill := range src.Skills {
 		resolved, err := imagefile.ResolveSkillDirectory(src.Dir, skill.Dir, roots)
 		if err != nil {
-			return preparedV2{}, fmt.Errorf("skills[%d]: %w", i, err)
+			return nil, nil, fmt.Errorf("skills[%d]: %w", i, err)
 		}
 		prepared, err := agentskills.Prepare(resolved)
 		if err != nil {
-			return preparedV2{}, fmt.Errorf("skills[%d]: %w", i, err)
+			return nil, nil, fmt.Errorf("skills[%d]: %w", i, err)
 		}
 		skills = append(skills, prepared)
 		if roots.SourceSkills == nil && (strings.HasPrefix(skill.Dir, "./") || strings.HasPrefix(skill.Dir, "../")) {
 			sourceSkills[skill.Dir] = resolved.Path
 		}
 	}
-	if err := agentskills.ValidateSet(skills); err != nil {
-		return preparedV2{}, err
-	}
+	return skills, sourceSkills, nil
+}
+
+func validateV2Contract(plugins []ManifestPlugin, skills []agentskills.Prepared, prompts []imagefile.PromptEntry, resolver plugincaps.ExternalResolver) error {
 	contract := imagecontract.Input{Plugins: make([]string, 0, len(plugins)), Skills: make([]imagecontract.Skill, 0, len(skills))}
 	for _, plugin := range plugins {
 		contract.Plugins = append(contract.Plugins, plugin.Name)
@@ -83,37 +123,38 @@ func prepareV2(src *imagefile.V2, roots imagefile.ResolveRoots, resolver pluginc
 		}
 		contract.Skills = append(contract.Skills, imagecontract.Skill{Name: skill.Metadata.Name, Executables: executables})
 	}
-	for _, prompt := range src.Prompts {
+	for _, prompt := range prompts {
 		if prompt.Runtime != "" {
 			contract.Runtimes = append(contract.Runtimes, prompt.Runtime)
 		}
 	}
-	if err := imagecontract.Validate(contract, resolver); err != nil {
-		return preparedV2{}, err
-	}
+	return imagecontract.Validate(contract, resolver)
+}
+
+// prepareV2Prompts turns the prompts of src into template entries and the
+// bodies of their file layers, keyed by archive path.
+func prepareV2Prompts(src *imagefile.V2, roots imagefile.ResolveRoots) ([]TemplateEntry, map[string][]byte, error) {
 	entries := make([]TemplateEntry, 0, len(src.Prompts))
 	layers := map[string][]byte{}
 	var totalPromptBytes int64
-	promptRoots := roots
-	promptRoots.SourceSkills = sourceSkills
 	for i, prompt := range src.Prompts {
 		if prompt.Runtime != "" {
 			entries = append(entries, TemplateEntry{Kind: "runtime", Runtime: prompt.Runtime})
 			continue
 		}
-		resolved, err := imagefile.ResolvePromptFile(src.Dir, prompt.File, promptRoots)
+		resolved, err := imagefile.ResolvePromptFile(src.Dir, prompt.File, roots)
 		if err != nil {
-			return preparedV2{}, fmt.Errorf("prompts[%d]: %w", i, err)
+			return nil, nil, fmt.Errorf("prompts[%d]: %w", i, err)
 		}
 		body, err := os.ReadFile(resolved.Path)
 		if err != nil {
-			return preparedV2{}, err
+			return nil, nil, err
 		}
 		if int64(len(body)) != resolved.Size || sha256hex(body) != resolved.SHA256 {
-			return preparedV2{}, fmt.Errorf("prompts[%d]: source changed while building", i)
+			return nil, nil, fmt.Errorf("prompts[%d]: source changed while building", i)
 		}
 		if totalPromptBytes > maxV2PromptBytes-resolved.Size {
-			return preparedV2{}, fmt.Errorf("prompt layers exceed %d aggregate bytes", maxV2PromptBytes)
+			return nil, nil, fmt.Errorf("prompt layers exceed %d aggregate bytes", maxV2PromptBytes)
 		}
 		totalPromptBytes += resolved.Size
 		base := archiveBaseCleaner.ReplaceAllString(filepath.Base(resolved.Path), "-")
@@ -121,15 +162,7 @@ func prepareV2(src *imagefile.V2, roots imagefile.ResolveRoots, resolver pluginc
 		layers[archivePath] = body
 		entries = append(entries, TemplateEntry{Kind: "file", Source: resolved.Source, Category: resolved.Category, ArchivePath: archivePath, Size: resolved.Size, SHA256: resolved.SHA256})
 	}
-	if entries == nil {
-		entries = []TemplateEntry{}
-	}
-	hash, err := templateHash(entries)
-	if err != nil {
-		return preparedV2{}, err
-	}
-	template := PromptTemplate{SchemaVersion: 2, Entries: entries, SHA256: hash}
-	return preparedV2{plugins: plugins, skills: skills, entries: entries, layers: layers, template: template}, nil
+	return entries, layers, nil
 }
 
 type ValidationV2 struct {
