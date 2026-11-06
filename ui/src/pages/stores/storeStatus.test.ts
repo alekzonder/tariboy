@@ -101,7 +101,9 @@ describe("hasTariboyStore", () => {
   const defaultStore = { name: "tariboy", source: "https://example.com/store.git" };
 
   it("matches the default Store by name or by source", () => {
-    const store = (name: string, source: string) => [{ name, source, path: "/s" }];
+    const store = (name: string, source: string) => [
+      { name, source, path: "/s", ref: "", commit: "" },
+    ];
     expect(hasTariboyStore(store("tariboy", "elsewhere"), defaultStore)).toBe(true);
     expect(hasTariboyStore(store("mine", defaultStore.source), defaultStore)).toBe(true);
     expect(hasTariboyStore(store("mine", "elsewhere"), defaultStore)).toBe(false);
