@@ -1,3 +1,26 @@
+## [0.110.0] - 2026-11-06
+
+### Added
+
+- A customer can set a USD budget on a task with `ttasks update --budget-usd`, the task PATCH route or the Budget field of the task panel. `0` means no limit, and an agent cannot set it. The AI proxy adds the cost of the task and of each limited parent subtree. When a limit is spent, the proxy answers `429 budget exceeded: task KEY`. A workflow task then pauses with the reason `budget_exhausted`, and a flexible task gets a block reason and a comment for the customer. A higher limit lifts the block. `GET /api/tasks/{key}/budget` returns the limit, the spending and whether the limit is spent. Migration `0079` adds the column and an index.
+- A customer can dismiss an open question on a task without an answer, also on a done task: `POST /api/tasks/{key}/waits/dismiss` (`tasks.waits.dismiss`), or the Dismiss question button on the Needs you card and in the task drawer. Each asker gets a `task.answered` letter that says that no answer is necessary.
+- The metrics server report gives each slice `usage_without_task`: the iterations, tokens and cost of the AI requests without a task. `metrics server` prints it in the `NO_TASK_COST_USD` column. The Metrics page shows a "Without a task" card, a "Cost without task" column and a row in the version comparison.
+- On Home, Needs you shows the 7 most urgent rows and a "Show all (N)" link. The link opens Inbox when every row is a letter, else Tasks. N reads "100+" when the inbox read reached its limit. Running now shows 8 rows with "Show all" and "Show less".
+- The new `tariboy-scripts` binary, with the `tscripts` alias, is the agent client of the scripts tools (`run`, `schedule`, `rerun`, `ls`, `runs`, `logs`, `cancel`, `rm`). It replaces `scripts.py` of the `scripts` skill and keeps its output, errors and exit codes. It works only in agent mode. It is installed and linked wherever `tariboy-mail` is: `make install`, the daemon runtime `bin/`, self-update, the Desktop bundle, CLI install, remote provisioning and the server archives.
+
+### Changed
+
+- If an iteration ends without `loop.sh done` (`harness_error`, `timeout` or `no_i_am_done`), the reconciler sends its Goal again. The pause is max(c, min(c × 2^(n−1), 10m)). Here c is `goal_delivery_cooldown_s`, and n is the number of failed iterations in a row, read from the iterations table, so the count survives a restart. A done iteration resets the count. Killed and failed iterations do not count. Each such letter has the reason `retry` and writes the audit event `goal_redelivered`.
+- On Home, letters from one sender about one task are one Needs you row. The "Answer on KEY:" prefix moves to the meta line, and the meta line says "waiting for you" with a relative age. Recent shows the age of the last iteration. Below 640 px, the meta of a Running now, Recent or Needs you row moves to a second line, so agent names and titles stay visible.
+- The daemon tool check now requires `tscripts` on the daemon host, next to `ttasks` and `tmail`. Install the 0.110.0 CLI so that `~/.local/bin/tscripts` exists.
+- Desktop no longer uploads server binaries to an SSH host with `scp`. To install or update a host, the host downloads the archive of the Desktop version from the GitHub release, checks it against the release `SHA256SUMS` and installs it. The host now needs outbound HTTPS to GitHub, `curl` or `wget`, `tar`, and `sha256sum` or `shasum`; preflight names each missing program. `TARIBOY_UPDATE_BASE_URL` sets another `https://` release root, for example a mirror. The host dialog step is now "Download release". Each release also contains `tariboy_X.Y.Z_darwin-arm64.tar.gz`, and the Desktop app carries only the binaries of its own platform.
+
+### Fixed
+
+- A `harness_error` iteration runs the iteration end again. The end closes only its Goal letters and counts nothing as idle. Before, an open Goal letter blocked every later Goal delivery.
+
+[0.110.0]: https://github.com/alekzonder/tariboy/compare/v0.109.0...v0.110.0
+
 ## [0.109.0] - 2026-11-05
 
 ### Added
