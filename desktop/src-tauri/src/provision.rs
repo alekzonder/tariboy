@@ -1066,7 +1066,7 @@ mod tests {
         assert_eq!(calls.len(), 4);
         assert!(calls[0].starts_with("run:stage:sh|-s|--|.stage-"));
         assert!(calls[1].starts_with(
-            "upload:tariboyd,tariboy,tariboy-tasks,tariboy-mail,tariboy-shim,tariboy-plugin-telegram,SHA256SUMS,VERSION,remote-install.sh:~/.local/lib/tariboy/.stage-"
+            "upload:tariboyd,tariboy,tariboy-tasks,tariboy-mail,tariboy-scripts,tariboy-shim,tariboy-plugin-telegram,SHA256SUMS,VERSION,remote-install.sh:~/.local/lib/tariboy/.stage-"
         ));
         assert!(calls[2].contains("run:verify_install:sh|-s|--|0.9.0|.stage-"));
         assert_eq!(calls[3], "run:status:sh|-s|--|0.9.0|9990");
@@ -1565,6 +1565,7 @@ mod tests {
         }
         std::os::unix::fs::symlink(old.join("tariboy-tasks"), bin.join("ttasks")).unwrap();
         std::os::unix::fs::symlink(old.join("tariboy-mail"), bin.join("tmail")).unwrap();
+        std::os::unix::fs::symlink(old.join("tariboy-scripts"), bin.join("tscripts")).unwrap();
         write_release(&root.join(".stage-update"), "update", true);
         let script = concat!(env!("CARGO_MANIFEST_DIR"), "/src/remote-install.sh");
 
@@ -1588,6 +1589,10 @@ mod tests {
             old.join("tariboy-mail")
         );
         assert_eq!(
+            fs::read_link(bin.join("tscripts")).unwrap(),
+            old.join("tariboy-scripts")
+        );
+        assert_eq!(
             fs::read_link(bin.join("tariboy")).unwrap(),
             old.join("tariboy")
         );
@@ -1609,6 +1614,10 @@ mod tests {
         assert_eq!(
             fs::read_link(bin.join("tmail")).unwrap(),
             root.join("update/tariboy-mail")
+        );
+        assert_eq!(
+            fs::read_link(bin.join("tscripts")).unwrap(),
+            root.join("update/tariboy-scripts")
         );
         for name in BINARIES {
             assert_eq!(
@@ -1685,12 +1694,13 @@ mod tests {
         }
         std::os::unix::fs::symlink(old.join("tariboy-tasks"), bin.join("ttasks")).unwrap();
         std::os::unix::fs::symlink(old.join("tariboy-mail"), bin.join("tmail")).unwrap();
+        std::os::unix::fs::symlink(old.join("tariboy-scripts"), bin.join("tscripts")).unwrap();
         write_release(&root.join(".stage-new"), "new", true);
 
         let tools = tempfile::tempdir().unwrap();
         let counter = tools.path().join("mv-count");
-        // Move 14 backs up the shim, after both Tasks and both mail links have
-        // switched.
+        // Move 18 backs up the shim, after both Tasks, both mail and both
+        // scripts links have switched.
         crate::testbin::executable(
             tools.path(),
             "mv",
@@ -1698,7 +1708,7 @@ mod tests {
 if test -f "$MV_TEST_COUNTER"; then count=$(cat "$MV_TEST_COUNTER"); fi
 count=$((count + 1))
 printf '%s' "$count" > "$MV_TEST_COUNTER"
-if test "$count" -eq 14; then exit 70; fi
+if test "$count" -eq 18; then exit 70; fi
 exec /bin/mv "$@""#,
         );
         let path = format!(
@@ -1725,7 +1735,7 @@ exec /bin/mv "$@""#,
                 .trim()
                 .parse::<u32>()
                 .unwrap()
-                >= 14
+                >= 18
         );
         for name in BINARIES {
             assert_eq!(fs::read_link(bin.join(name)).unwrap(), old.join(name));

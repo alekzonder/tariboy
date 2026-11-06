@@ -298,9 +298,10 @@ const shellEnvMarker = "TARIBOY_SHELL_ENV"
 var runtimeAliases = []struct{ payload, link string }{
 	{"tariboy-tasks", "ttasks"},
 	{"tariboy-mail", "tmail"},
+	{"tariboy-scripts", "tscripts"},
 }
 
-// installTasksAlias exposes the sibling payloads ttasks and tmail to all
+// installTasksAlias exposes the sibling payloads ttasks, tmail and tscripts to all
 // daemon children, including fresh Desktop agents before optional CLI
 // installation. The stable runtime path survives daemon handoff; explicit
 // agent PATH overrides still win. It returns the runtime bin directory, or ""
@@ -362,8 +363,8 @@ func installRuntimeAlias(exeDir, runtimeDir, payload, name string) (string, erro
 	return binDir, nil
 }
 
-// ensureLocalBin appends ~/.local/bin, where the managed tariboy, ttasks and tmail
-// links live, so agents find them even when the account PATH lacks it.
+// ensureLocalBin appends ~/.local/bin, where the managed tariboy, ttasks, tmail
+// and tscripts links live, so agents find them even when the account PATH lacks it.
 func ensureLocalBin(home string) {
 	dir := filepath.Join(home, ".local", "bin")
 	path := os.Getenv("PATH")

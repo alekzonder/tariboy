@@ -28,7 +28,7 @@ import (
 
 func TestTasksRuntimeAliasRefreshAndOwnership(t *testing.T) {
 	t.Parallel()
-	for _, alias := range []struct{ payload, link string }{{"tariboy-tasks", "ttasks"}, {"tariboy-mail", "tmail"}} {
+	for _, alias := range []struct{ payload, link string }{{"tariboy-tasks", "ttasks"}, {"tariboy-mail", "tmail"}, {"tariboy-scripts", "tscripts"}} {
 		t.Run(alias.link, func(t *testing.T) {
 			t.Parallel()
 			testRuntimeAlias(t, alias.payload, alias.link)

@@ -64,7 +64,7 @@
   "daemon.status": {
     "base_dir": "$BASE",
     "http_addr": "127.0.0.1:0",
-    "message": "missing required tools: tmux, python3, git, npx, tariboy, ttasks, tmail, claude | codex | opencode | agent; install them on the daemon host",
+    "message": "missing required tools: tmux, python3, git, npx, tariboy, ttasks, tmail, tscripts, claude | codex | opencode | agent; install them on the daemon host",
     "missing_tools": [
       {
         "install": "install tmux with the system package manager",
@@ -100,6 +100,11 @@
         "install": "install the Tariboy CLI and put ~/.local/bin on PATH",
         "name": "tmail",
         "purpose": "the tmail command inside agents"
+      },
+      {
+        "install": "install the Tariboy CLI and put ~/.local/bin on PATH",
+        "name": "tscripts",
+        "purpose": "the tscripts command inside agents"
       },
       {
         "install": "install Claude Code, Codex, OpenCode or Cursor Agent",

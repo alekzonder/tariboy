@@ -313,6 +313,8 @@ mod tests {
             ("ttasks", "tariboy-tasks"),
             ("tariboy-mail", "tariboy-mail"),
             ("tmail", "tariboy-mail"),
+            ("tariboy-scripts", "tariboy-scripts"),
+            ("tscripts", "tariboy-scripts"),
         ] {
             assert_eq!(
                 std::fs::read_link(link_dir.join(name)).unwrap(),
@@ -327,7 +329,7 @@ mod tests {
 
     #[test]
     fn occupied_tasks_or_mail_alias_preserves_every_original_link() {
-        for alias in ["ttasks", "tmail"] {
+        for alias in ["ttasks", "tmail", "tscripts"] {
             let dir = tempfile::tempdir().unwrap();
             let old = bundled_set(&dir.path().join("old"), "Tariboy.app");
             let new = bundled_set(&dir.path().join("new"), "Tariboy.app");

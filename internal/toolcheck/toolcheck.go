@@ -30,6 +30,7 @@ var required = []Tool{
 	{"tariboy", "the tariboy command inside agents", "install the Tariboy CLI and put ~/.local/bin on PATH"},
 	{"ttasks", "the ttasks command inside agents", "install the Tariboy CLI and put ~/.local/bin on PATH"},
 	{"tmail", "the tmail command inside agents", "install the Tariboy CLI and put ~/.local/bin on PATH"},
+	{"tscripts", "the tscripts command inside agents", "install the Tariboy CLI and put ~/.local/bin on PATH"},
 }
 
 var harnesses = []string{"claude", "codex", "opencode", "agent"}
