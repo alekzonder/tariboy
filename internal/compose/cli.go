@@ -126,12 +126,6 @@ func Run(ctx context.Context, call Caller, o Options, out, errOut io.Writer) int
 		fmt.Fprintf(errOut, "compose: %v\n", err)
 		return 1
 	}
-	if verb == "up" || verb == "build" {
-		if err := f.UnappliedSections(); err != nil {
-			fmt.Fprintf(errOut, "compose %s: %v\n", verb, err)
-			return 1
-		}
-	}
 	r := NewRunner(call, workdir, out)
 
 	// Auto-start the daemon before applying the file (default on). --no-start or

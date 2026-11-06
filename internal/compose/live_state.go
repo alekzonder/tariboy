@@ -22,6 +22,8 @@ type liveState struct {
 	// queueSettings holds the env, secret keys and triggers of every
 	// declared queue that exists.
 	queueSettings map[string]liveQueueSettings
+	// sources holds the stores, workflows and images of a version 2 file.
+	sources liveSources
 }
 
 // liveQueueSettings is what the daemon returns for a queue's env, secrets and
@@ -38,6 +40,9 @@ func (r *Runner) readLive(f File) (*liveState, error) {
 	live := &liveState{pending: map[string]string{}, pools: map[string]map[string]tasks.AgentPool{},
 		queueSettings: map[string]liveQueueSettings{}}
 	var err error
+	if live.sources, err = r.readSources(f); err != nil {
+		return nil, err
+	}
 	if live.groups, err = r.liveGroups(); err != nil {
 		return nil, err
 	}

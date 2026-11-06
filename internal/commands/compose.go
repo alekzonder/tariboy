@@ -29,7 +29,7 @@ var composeVerbs = map[string]struct {
 	}},
 	"ps":       {summary: "List the file's agents and their live state"},
 	"status":   {summary: "Compare the file with the daemon and report drift"},
-	"build":    {summary: "Build the file's images"},
+	"build":    {summary: "Build the file's Stores, workflows and images"},
 	"validate": {summary: "Check the file's schema, references, local paths and tariboy version range; --daemon also checks the daemon version"},
 	"archive":  {summary: "Create a compose-only portable team archive; transfer runnable images separately"},
 	"import":   {summary: "Preview and import compose-only team/runtime configuration"},

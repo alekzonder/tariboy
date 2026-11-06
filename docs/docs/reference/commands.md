@@ -89,7 +89,7 @@ tariboy has four command surfaces:
 | `tariboy budget set` | Set a cost budget (scope agent:\<name\>\|group:\<g\>\|global) |
 | `tariboy budget status` | Show current spend vs limit for each budget |
 | `tariboy compose archive` | Create a compose-only portable team archive; transfer runnable images separately |
-| `tariboy compose build` | Build the file's images |
+| `tariboy compose build` | Build the file's Stores, workflows and images |
 | `tariboy compose down` | Remove the file's agents and groups; --volumes also deletes their data |
 | `tariboy compose exec MEMBER [PROMPT...]` | Run an iteration of one of the file's agents now, with an optional prompt |
 | `tariboy compose import` | Preview and import compose-only team/runtime configuration |

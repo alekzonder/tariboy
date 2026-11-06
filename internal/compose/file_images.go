@@ -31,7 +31,7 @@ func (f File) imageProblems() []error {
 			out = append(out, fmt.Errorf("invalid image name %q", name))
 		case f.Version == 1:
 			if s.SourceSpec.declared() {
-				out = append(out, fmt.Errorf("image %q uses path, store, source or version, which need version: 2", name))
+				out = append(out, fmt.Errorf("image %q uses path, store, source, tag or version, which need version: 2", name))
 			}
 		case s.Context != "":
 			out = append(out, fmt.Errorf("image %q context is version 1 syntax; use path", name))
