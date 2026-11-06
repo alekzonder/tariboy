@@ -129,7 +129,7 @@ func (r *Runner) Build(f File) error {
 	}
 	for _, name := range sortedKeys(f.Images) {
 		spec := f.Images[name]
-		ctx := spec.Context
+		ctx := spec.BuildPath()
 		if !filepath.IsAbs(ctx) {
 			ctx = filepath.Join(r.workdir, ctx)
 		}

@@ -11,21 +11,23 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
-
-	"github.com/alekzonder/tariboy/internal/agent"
 )
 
-// File is a parsed tariboy-compose.yaml (spec §5.1).
+// File is a parsed Tariboycompose.yaml (spec §5.1). Version 1 has images,
+// groups, agents and task_queues; version 2 adds tariboy, stores and
+// workflows, and the source fields of images.
 type File struct {
-	Version    int                      `yaml:"version"`
+	Version int                  `yaml:"version"`
+	Tariboy *TariboySpec         `yaml:"tariboy,omitempty"`
+	Stores  map[string]StoreSpec `yaml:"stores,omitempty"`
+	// Workflows is a version 2 section. In version 1 the key belonged to the
+	// removed task workflow engine: Parse rejects a non-empty one there, and
+	// accepts the empty "workflows: {}" that older team exports always wrote.
+	Workflows  map[string]WorkflowSpec  `yaml:"workflows,omitempty"`
 	Images     map[string]ImageSpec     `yaml:"images"`
 	Groups     map[string]GroupSpec     `yaml:"groups"`
 	Agents     map[string]AgentSpec     `yaml:"agents"`
 	TaskQueues map[string]TaskQueueSpec `yaml:"task_queues"`
-	// RemovedWorkflows captures the top-level workflows: map of the removed
-	// task workflow engine so Parse can reject it by name. An empty map is
-	// accepted: team exports before the removal always wrote "workflows: {}".
-	RemovedWorkflows yaml.Node `yaml:"workflows,omitempty"`
 }
 
 // Parse decodes a tariboy-compose.yaml document. It does not validate the
@@ -44,55 +46,47 @@ func Parse(b []byte) (File, error) {
 		}
 		return File{}, fmt.Errorf("parse compose file: %w", err)
 	}
-	if declaresValue(f.RemovedWorkflows) {
-		return File{}, fmt.Errorf("parse compose file: the top-level workflows key is no longer supported: the task workflow engine was removed")
+	if f.Version != 2 && len(f.Workflows) != 0 {
+		return File{}, fmt.Errorf("parse compose file: the top-level workflows key is no longer supported in version 1; declare version: 2 to use the workflows section")
 	}
 	return f, nil
 }
 
-// declaresValue reports whether a captured YAML value says anything: an absent
-// key, null, an empty string, and an empty map or list do not.
-func declaresValue(n yaml.Node) bool {
-	switch n.Kind {
-	case 0:
-		return false
-	case yaml.ScalarNode:
-		return n.Tag != "!!null" && n.Value != ""
-	case yaml.MappingNode, yaml.SequenceNode:
-		return len(n.Content) != 0
-	default:
-		return true
-	}
-}
-
-// Validate enforces the schema rules (spec §5.1): version, name charset (the
-// shared path-traversal guard), lead-is-a-member, group references, image
-// presence, and budget mode.
+// Validate enforces the schema rules (spec §5.1) and returns the first of
+// problems: version, name charset (the shared path-traversal guard),
+// lead-is-a-member, references between entries, sources, and budget mode.
 func (f File) Validate() error {
-	if f.Version != 1 {
-		return fmt.Errorf("unsupported compose version %d (want 1)", f.Version)
-	}
-	for name := range f.Images {
-		if !agent.ValidName(name) {
-			return fmt.Errorf("invalid image name %q", name)
-		}
-	}
-	for name, g := range f.Groups {
-		if err := f.validateGroup(name, g); err != nil {
-			return err
-		}
-	}
-	for name, a := range f.Agents {
-		if err := f.validateAgent(name, a); err != nil {
-			return err
-		}
-	}
-	for prefix, queue := range f.TaskQueues {
-		if err := f.validateTaskQueue(prefix, queue); err != nil {
-			return err
-		}
+	if p := f.problems(); len(p) != 0 {
+		return p[0]
 	}
 	return nil
+}
+
+// problems returns every schema and reference error of the file, section by
+// section (version, tariboy, stores, workflows, images, groups, agents,
+// task_queues) and by entry name within a section. An unsupported version is
+// the only problem reported, since the other rules depend on it.
+func (f File) problems() []error {
+	if f.Version != 1 && f.Version != 2 {
+		return []error{fmt.Errorf("unsupported compose version %d (want 1 or 2)", f.Version)}
+	}
+	var out []error
+	out = append(out, f.tariboyProblems()...)
+	out = append(out, f.storeProblems()...)
+	out = append(out, f.workflowProblems()...)
+	out = append(out, f.imageProblems()...)
+	for _, name := range sortedKeys(f.Groups) {
+		if err := f.validateGroup(name, f.Groups[name]); err != nil {
+			out = append(out, err)
+		}
+	}
+	for _, name := range sortedKeys(f.Agents) {
+		out = append(out, f.agentProblems(name, f.Agents[name])...)
+	}
+	for _, prefix := range sortedKeys(f.TaskQueues) {
+		out = append(out, f.taskQueueProblems(prefix, f.TaskQueues[prefix])...)
+	}
+	return out
 }
 
 func normalizeAgentNames(in []string) []string {

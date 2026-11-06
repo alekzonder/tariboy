@@ -83,6 +83,28 @@ func (r WorkflowRef) Ref() string {
 	return r.Name + ":" + tag
 }
 
+// taskQueueProblems adds the version 2 workflow reference to
+// validateTaskQueue: the workflow, and its Store prefix, must be declared.
+func (f File) taskQueueProblems(prefix string, queue TaskQueueSpec) []error {
+	var out []error
+	if err := f.validateTaskQueue(prefix, queue); err != nil {
+		out = append(out, err)
+	}
+	ref, declared, err := queue.WorkflowRef()
+	if f.Version != 2 || !declared || err != nil || !taskQueuePrefixRE.MatchString(prefix) {
+		return out
+	}
+	if ref.Store != "" {
+		if _, ok := f.Stores[ref.Store]; !ok {
+			out = append(out, fmt.Errorf("task queue %q references undeclared store %q", prefix, ref.Store))
+		}
+	}
+	if _, ok := f.Workflows[ref.Name]; !ok {
+		out = append(out, fmt.Errorf("task queue %q references undeclared workflow %q", prefix, ref.Name))
+	}
+	return out
+}
+
 func (f File) validateTaskQueue(prefix string, queue TaskQueueSpec) error {
 	if !taskQueuePrefixRE.MatchString(prefix) {
 		return fmt.Errorf("invalid task queue prefix %q", prefix)

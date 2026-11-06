@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
+	"github.com/alekzonder/tariboy/internal/image"
 )
 
 type AgentSpec struct {
@@ -150,6 +151,24 @@ func (h HarnessSpec) Validate() error {
 	default:
 		return fmt.Errorf("harness.type %q is not supported (want claude|codex|opencode|cursor)", h.Type)
 	}
+}
+
+// agentProblems adds the version 2 image reference to validateAgent: the
+// agent's image must be declared in images.
+func (f File) agentProblems(name string, a AgentSpec) []error {
+	var out []error
+	if err := f.validateAgent(name, a); err != nil {
+		out = append(out, err)
+	}
+	if f.Version != 2 || a.Image == "" || !agent.ValidName(name) {
+		return out
+	}
+	if ref, err := image.ParseRef(a.Image); err != nil {
+		out = append(out, fmt.Errorf("agent %q image: %w", name, err))
+	} else if _, ok := f.Images[ref.Name]; !ok {
+		out = append(out, fmt.Errorf("agent %q references undeclared image %q", name, ref.Name))
+	}
+	return out
 }
 
 func (f File) validateAgent(name string, a AgentSpec) error {

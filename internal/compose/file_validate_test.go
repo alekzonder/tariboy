@@ -29,14 +29,14 @@ func runValidationChain(t *testing.T, f *File, steps []validationStep) {
 func TestValidateReportsSectionsInOrder(t *testing.T) {
 	t.Parallel()
 	f := File{
-		Version:    2,
+		Version:    3,
 		Images:     map[string]ImageSpec{"Bad Image!": {}},
 		Groups:     map[string]GroupSpec{"Bad Group!": {}},
 		Agents:     map[string]AgentSpec{"Bad Agent!": {}},
 		TaskQueues: map[string]TaskQueueSpec{"bad": {}},
 	}
 	runValidationChain(t, &f, []validationStep{
-		{`unsupported compose version 2 (want 1)`, func() { f.Version = 1 }},
+		{`unsupported compose version 3 (want 1 or 2)`, func() { f.Version = 1 }},
 		{`invalid image name "Bad Image!"`, func() { f.Images = nil }},
 		{`invalid group name "Bad Group!"`, func() { f.Groups = nil }},
 		{`invalid agent name "Bad Agent!"`, func() { f.Agents = nil }},
