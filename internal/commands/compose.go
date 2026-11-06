@@ -15,7 +15,7 @@ var composeVerbs = map[string]struct {
 	summary string
 	args    []registry.Arg
 }{
-	"up":      {summary: "Build, create and start the file's images, groups and agents; start the daemon first"},
+	"up":      {summary: "Build, create and start the file's images, task queues, agents and groups phase by phase; start the daemon first; --dry-run prints the plan"},
 	"down":    {summary: "Remove the file's agents and groups; --volumes also deletes their data"},
 	"start":   {summary: "Start the file's agents, or the named agents and groups", args: composeMembers()},
 	"stop":    {summary: "Stop the file's agents, or the named agents and groups", args: composeMembers()},
@@ -45,6 +45,7 @@ func composeFlags() []registry.Arg {
 	return []registry.Arg{
 		{Name: "file", Flag: "file", Short: "f", Type: registry.String, Help: "compose file (default: " + compose.DefaultFile + ", else " + compose.LegacyFile + ", in the current directory)"},
 		{Name: "no_start", Flag: "no-start", Type: registry.Bool, Help: "up: do not start the daemon (also TARIBOY_NO_AUTOSTART)"},
+		{Name: "dry_run", Flag: "dry-run", Type: registry.Bool, Help: "up: print the plan by phase; build nothing and change nothing"},
 		{Name: "volumes", Flag: "volumes", Short: "v", Type: registry.Bool, Help: "down: also delete agent data and group shared dirs"},
 		{Name: "tail", Flag: "tail", Type: registry.Int, Default: compose.DefaultTail, Help: "logs: events per agent"},
 		{Name: "output", Flag: "output", Type: registry.String, Help: "archive: archive file to create (required)"},
@@ -78,6 +79,7 @@ func composeLocal(verb string) registry.HandlerFunc {
 			Daemon:  p.Bool("daemon"),
 			Volumes: p.Bool("volumes"),
 			NoStart: p.Bool("no_start"),
+			DryRun:  p.Bool("dry_run"),
 			Tail:    p.IntOr("tail", compose.DefaultTail),
 			Stdin:   os.Stdin,
 		}

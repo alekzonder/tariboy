@@ -3,6 +3,7 @@ package compose
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // Call is one daemon request an action issues.
@@ -12,26 +13,49 @@ type Call struct {
 	Body   any
 }
 
+// Field is one value an action sets, as `up --dry-run` prints it. It never
+// holds a secret: for env it names the keys only.
+type Field struct {
+	Name string
+	From string // the live value; "" when the action sets a new one
+	To   string
+}
+
+func (f Field) String() string {
+	switch {
+	case f.To == "" && f.From == "":
+		return f.Name
+	case f.From == "":
+		return f.Name + "=" + f.To
+	default:
+		return f.Name + " " + f.From + " -> " + f.To
+	}
+}
+
 // Action is one step of a Plan. Apply issues Call, or runs the action's
 // resolver when the request depends on what an earlier action returned. An
 // action whose DependsOn names an action that failed or was skipped is
 // skipped.
 type Action struct {
+	Phase     string // the phase that planned the action
 	Resource  string // the Resource.ID the action changes
 	Kind      string // create, assign, image, harness, stop, start, ...
 	Note      string // progress line printed before the call; empty prints none
 	Fail      string // prefix of the error the action reports
 	Call      Call
-	DependsOn []int // indexes into Plan.Actions
+	Fields    []Field // what the action sets, without secret values
+	DependsOn []int   // indexes into Plan.Actions
 
 	// run replaces Call for an action that resolves its request at apply
-	// time from the results of earlier actions. changed is false when the
-	// resolved state already matches.
-	run func(results []json.RawMessage) (changed bool, err error)
+	// time, from the results of earlier actions, or reads the state around
+	// it. result is what later actions read; changed is false when the
+	// resolved state already matched.
+	run func(results []json.RawMessage) (result json.RawMessage, changed bool, err error)
 }
 
-// Resource is one thing the file declares (a group, agent, budget, task
-// queue, or workflow build), with what `compose status` prints for it.
+// Resource is one thing the file declares (an image, a workflow build, a
+// task queue, an agent, a group or a budget), with what `compose status`
+// prints for it.
 type Resource struct {
 	ID     string
 	status []string // status lines
@@ -40,52 +64,56 @@ type Resource struct {
 }
 
 // Plan is the ordered list of actions that converge the daemon toward a file,
-// computed from one read of the live state. Resource and action order follow
-// the reconcile order: groups, agents, budgets, task queues, workflows.
+// computed from one read of the live state. Actions follow the phase order;
+// a resource is listed where an action or a status line first names it.
 type Plan struct {
 	Resources []Resource
 	Actions   []Action
 }
 
+// phase is one step of compose up. plan reads the File and the live state
+// (read once, before any phase) and adds actions; it never calls the daemon
+// with a mutating request. Apply is common to every phase, so a new kind of
+// entity adds its actions to its phase only.
+type phase interface {
+	name() string
+	plan(p *planner, f File, live *liveState) error
+}
+
+// phases is the order of compose up: what a later phase binds exists by then,
+// and agents start last, once their groups and pools are set.
+var phases = []phase{storesPhase{}, workflowsPhase{}, imagesPhase{}, queuesPhase{},
+	agentsPhase{}, groupsPhase{}, bindingsPhase{}, startPhase{}}
+
 type planner struct {
 	r         *Runner
 	plan      Plan
+	phase     string
 	resources map[string]int
-	// groupCreate and agentCreate hold the index of the create action of a
-	// group or agent missing on the daemon, so resources that need it can
-	// depend on it.
-	groupCreate map[string]int
-	agentCreate map[string]int
+	// keys names actions for later phases: "image:NAME", "workflow:SELECTOR",
+	// "queue:PREFIX", "agent:NAME", "settings:NAME", "group:NAME",
+	// "member:AGENT" and "pool:PREFIX". A key exists only when an action is
+	// planned for it, so an entity that already matches adds no dependency.
+	keys map[string][]int
 }
 
-// Plan reads the live state and returns the actions that converge it toward
-// the file. It never issues a mutating call.
+// Plan reads the live state once and returns the actions of every phase that
+// converge it toward the file. It never issues a mutating call.
 func (r *Runner) Plan(f File) (Plan, error) {
-	p := &planner{r: r, resources: map[string]int{}, groupCreate: map[string]int{}, agentCreate: map[string]int{}}
-	groups, err := r.liveGroups()
+	live, err := r.readLive(f)
 	if err != nil {
 		return Plan{}, err
 	}
-	agents, err := r.liveAgents()
-	if err != nil {
-		return Plan{}, err
-	}
-	budgets, err := r.liveBudgets()
-	if err != nil {
-		return Plan{}, err
-	}
-	p.planGroups(f, groups)
-	if err := p.planAgents(f, agents); err != nil {
-		return Plan{}, err
-	}
-	if err := p.planBudgets(f, budgets); err != nil {
-		return Plan{}, err
-	}
-	if err := p.planTaskQueues(f); err != nil {
-		return Plan{}, err
-	}
-	if err := p.planQueueWorkflows(f); err != nil {
-		return Plan{}, err
+	return r.planFrom(f, live)
+}
+
+func (r *Runner) planFrom(f File, live *liveState) (Plan, error) {
+	p := &planner{r: r, resources: map[string]int{}, keys: map[string][]int{}}
+	for _, ph := range phases {
+		p.phase = ph.name()
+		if err := ph.plan(p, f, live); err != nil {
+			return Plan{}, err
+		}
 	}
 	return p.plan, nil
 }
@@ -110,12 +138,13 @@ func (p *planner) status(id string, drift bool, format string, a ...any) {
 	}
 }
 
-// add appends an action and returns its index. Negative dependencies mean
-// "none" and are dropped.
+// add appends an action to the current phase and returns its index. Negative
+// dependencies mean "none" and are dropped.
 func (p *planner) add(a Action, deps ...int) int {
 	p.resource(a.Resource)
+	a.Phase = p.phase
 	for _, d := range deps {
-		if d >= 0 {
+		if d >= 0 && !containsInt(a.DependsOn, d) {
 			a.DependsOn = append(a.DependsOn, d)
 		}
 	}
@@ -123,82 +152,35 @@ func (p *planner) add(a Action, deps ...int) int {
 	return len(p.plan.Actions) - 1
 }
 
-func (p *planner) planGroups(f File, live map[string]liveGroup) {
-	for _, name := range sortedKeys(f.Groups) {
-		g := f.Groups[name]
-		id := "group:" + name
-		cur, exists := live[name]
-		switch {
-		case !exists:
-			p.status(id, true, "group %-14s MISSING (desired lead=%s)", name, g.Lead)
-		case cur.Lead != g.Lead:
-			p.status(id, true, "group %-14s lead drift: have=%s want=%s", name, cur.Lead, g.Lead)
-		default:
-			p.status(id, false, "group %-14s ok (lead=%s)", name, cur.Lead)
-			continue
-		}
-		// Ensure groups first so lead/inbox wiring exists before members join.
-		i := p.add(Action{Resource: id, Kind: "ensure", Note: fmt.Sprintf("ensuring group %s (lead %s)", name, g.Lead),
-			Fail: "ensure group " + name, Call: Call{"POST", "/api/groups", map[string]any{"name": name, "lead": g.Lead}}})
-		if !exists {
-			p.groupCreate[name] = i
-		}
-	}
+// provide names an action so a later phase can depend on it.
+func (p *planner) provide(key string, action int) {
+	p.keys[key] = append(p.keys[key], action)
 }
 
-func (p *planner) planBudgets(f File, live map[string]liveBudget) error {
-	for _, name := range sortedKeys(f.Groups) {
-		if b := f.Groups[name].Budget; b != nil {
-			if err := p.planBudget("group:"+name, *b, live, createDep(p.groupCreate, name)); err != nil {
-				return err
-			}
+// needs returns the actions named by keys; an unknown key adds none.
+func (p *planner) needs(keys ...string) []int {
+	var out []int
+	for _, k := range keys {
+		out = append(out, p.keys[k]...)
+	}
+	return out
+}
+
+// imageKey is the key of the build of the file image an agent image ref
+// names, or "" when the file does not build that image.
+func imageKey(f File, ref string) string {
+	name, _, _ := strings.Cut(ref, ":")
+	if _, ok := f.Images[name]; !ok {
+		return ""
+	}
+	return "image:" + name
+}
+
+func containsInt(list []int, v int) bool {
+	for _, x := range list {
+		if x == v {
+			return true
 		}
 	}
-	for _, name := range sortedKeys(f.Agents) {
-		if b := f.Agents[name].Budget; b != nil {
-			if err := p.planBudget("agent:"+name, *b, live, createDep(p.agentCreate, name)); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// createDep returns the create action index for name, or -1.
-func createDep(creates map[string]int, name string) int {
-	if i, ok := creates[name]; ok {
-		return i
-	}
-	return -1
-}
-
-func (p *planner) planBudget(scope string, b BudgetSpec, live map[string]liveBudget, dep int) error {
-	id := "budget:" + scope
-	mode, err := b.NormalizedMode()
-	if err != nil {
-		return err
-	}
-	cur, exists := live[scope]
-	switch {
-	case !exists:
-		p.status(id, true, "budget %-14s MISSING (desired limit=%g mode=%s)", scope, b.LimitUSD, mode)
-	case !budgetMatches(cur, b, mode):
-		p.status(id, true, "budget %-14s drift: have limit=%g mode=%s", scope, cur.LimitUSD, cur.Mode)
-	default:
-		p.status(id, false, "budget %-14s ok", scope)
-		return nil
-	}
-	body := map[string]any{"scope": scope, "limit-usd": fmt.Sprintf("%g", b.LimitUSD), "mode": mode}
-	if b.Period != "" {
-		body["period"] = b.Period
-	}
-	p.add(Action{Resource: id, Kind: "set", Note: "setting budget " + scope, Fail: "set budget " + scope,
-		Call: Call{"POST", "/api/budgets", body}}, dep)
-	return nil
-}
-
-// budgetMatches reports whether a live budget already equals the desired spec
-// with normalized mode.
-func budgetMatches(cur liveBudget, b BudgetSpec, mode string) bool {
-	return cur.Mode == mode && cur.LimitUSD == b.LimitUSD && cur.PeriodS == desiredPeriodSeconds(b.Period)
+	return false
 }

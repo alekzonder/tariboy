@@ -65,6 +65,7 @@ type Options struct {
 	Yes     bool   // import: apply without asking
 	Volumes bool   // down: also delete agent data and group shared dirs
 	NoStart bool   // up: do not start the daemon
+	DryRun  bool   // up: print the plan by phase; build and change nothing
 	Tail    int    // logs: events per member
 	Daemon  bool   // validate: also check the daemon version
 	// Stdin is where import reads its answer when Yes is false.
@@ -95,9 +96,8 @@ func VerbFirst(args []string) []string {
 // Run executes one compose verb: it loads the file and drives the Runner, or
 // writes or imports a team archive. It returns a process exit code.
 func Run(ctx context.Context, call Caller, o Options, out, errOut io.Writer) int {
-	output, archive, yes, volumes, noStart, tail := o.Output, o.Archive, o.Yes, o.Volumes, o.NoStart, o.Tail
+	output, archive, yes, noStart := o.Output, o.Archive, o.Yes, o.NoStart
 	verb := o.Verb
-	verbArgs := o.Args
 	if verb == "import" {
 		return composeImport(call, archive, yes, o.Stdin, out, errOut)
 	}
@@ -136,7 +136,8 @@ func Run(ctx context.Context, call Caller, o Options, out, errOut io.Writer) int
 
 	// Auto-start the daemon before applying the file (default on). --no-start or
 	// TARIBOY_NO_AUTOSTART restores the plain "not running" error path below.
-	if verb == "up" && !noStart && os.Getenv("TARIBOY_NO_AUTOSTART") == "" {
+	// A dry run changes nothing, starting the daemon included.
+	if verb == "up" && !noStart && !o.DryRun && os.Getenv("TARIBOY_NO_AUTOSTART") == "" {
 		if err := ensureDaemonUp(ctx, out); err != nil {
 			fmt.Fprintf(errOut, "compose up: %v\n", err)
 			return 1
@@ -148,30 +149,41 @@ func Run(ctx context.Context, call Caller, o Options, out, errOut io.Writer) int
 	if runErr != nil {
 		return reportRunError(verb, runErr, errOut)
 	}
-	switch verb {
-	case "up":
-		runErr = r.Up(f)
-	case "down":
-		runErr = r.Down(f, volumes)
-	case "build":
-		runErr = r.Build(f)
-	case "ps":
-		runErr = r.Ps(f)
-	case "status":
-		runErr = r.Status(f)
-	case "start", "stop", "restart", "kill":
-		runErr = r.Lifecycle(f, verb, verbArgs)
-	case "rm":
-		runErr = r.Rm(f, verbArgs)
-	case "exec":
-		runErr = r.Exec(f, verbArgs)
-	case "logs":
-		runErr = r.Logs(f, verbArgs, tail)
-	default:
+	known, runErr := r.runVerb(f, o)
+	if !known {
 		fmt.Fprintf(errOut, "compose: unknown verb %q\n", verb)
 		return 2
 	}
 	return reportRunError(verb, runErr, errOut)
+}
+
+// runVerb runs a verb that reads the file and calls the daemon; known is
+// false for any other verb.
+func (r *Runner) runVerb(f File, o Options) (known bool, err error) {
+	switch o.Verb {
+	case "up":
+		if o.DryRun {
+			return true, r.DryRun(f)
+		}
+		return true, r.Up(f)
+	case "down":
+		return true, r.Down(f, o.Volumes)
+	case "build":
+		return true, r.Build(f)
+	case "ps":
+		return true, r.Ps(f)
+	case "status":
+		return true, r.Status(f)
+	case "start", "stop", "restart", "kill":
+		return true, r.Lifecycle(f, o.Verb, o.Args)
+	case "rm":
+		return true, r.Rm(f, o.Args)
+	case "exec":
+		return true, r.Exec(f, o.Args)
+	case "logs":
+		return true, r.Logs(f, o.Args, o.Tail)
+	}
+	return false, nil
 }
 
 // reportRunError prints the error of a verb and returns its exit code.

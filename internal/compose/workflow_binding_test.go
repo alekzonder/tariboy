@@ -180,6 +180,8 @@ func callIndex(calls []string, want string) int {
 	return -1
 }
 
+// The workflow builds in the workflows phase, before the queue and its pools;
+// the bind follows the pools in the queue bindings phase.
 func TestUpBuildsStoreWorkflowAndBindsItsDigestAfterPools(t *testing.T) {
 	fc := newWorkflowComposeCaller()
 	fc.publish("official/development", "development", "0.1.0", digestA, "0.1.0", "latest")
@@ -188,7 +190,7 @@ func TestUpBuildsStoreWorkflowAndBindsItsDigestAfterPools(t *testing.T) {
 	pool := callIndex(fc.calls, "PATCH /api/task-queues/DEV/pools/developers")
 	build := callIndex(fc.calls, "POST /api/workflow-images/build")
 	bind := callIndex(fc.calls, "PUT /api/task-queues/DEV/workflow")
-	if pool < 0 || build < 0 || bind < 0 || !(pool < build && build < bind) {
+	if pool < 0 || build < 0 || bind < 0 || !(build < pool && pool < bind) {
 		t.Fatalf("order pool=%d build=%d bind=%d in %v", pool, build, bind, fc.calls)
 	}
 	if got := fc.bound["DEV"]; got.Digest != digestA || got.Name != "development" {

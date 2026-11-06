@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/client"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
@@ -59,6 +60,12 @@ func (f *taskQueueComposeCaller) Call(method, route string, body any) (json.RawM
 		parts := strings.Split(route, "/")
 		queue, pool := parts[3], parts[5]
 		b := body.(map[string]any)
+		// The daemon binds a pool only to agents that exist (requireAgentsExist).
+		for _, name := range b["agents"].([]string) {
+			if f.agents[name] == nil {
+				return nil, fmt.Errorf("pool %s/%s: agent %s does not exist", queue, pool, name)
+			}
+		}
 		if f.pools[queue] == nil {
 			f.pools[queue] = map[string]tasks.AgentPool{}
 		}
@@ -91,6 +98,10 @@ type fakeCaller struct {
 	// fail makes the named "METHOD route" call return its error, so a test
 	// can fail one action and watch the rest of the reconcile continue.
 	fail map[string]error
+	// images maps NAME:TAG to the digest the daemon stores; a build of NAME
+	// stores buildDigest[NAME] (default "digest-NAME") under NAME:latest.
+	images      map[string]string
+	buildDigest map[string]string
 }
 
 func newFake() *fakeCaller {
@@ -98,6 +109,7 @@ func newFake() *fakeCaller {
 		agents:  map[string]map[string]any{},
 		groups:  map[string]map[string]any{},
 		budgets: map[string]map[string]any{},
+		images:  map[string]string{},
 	}
 }
 
@@ -126,6 +138,43 @@ func (f *fakeCaller) Call(method, route string, body any) (json.RawMessage, erro
 			rows = append(rows, b)
 		}
 		return mustJSON(map[string]any{"budgets": rows, "count": len(rows)}), nil
+	case method == "POST" && route == "/api/images/build":
+		name := body.(map[string]any)["name"].(string)
+		digest := f.buildDigest[name]
+		if digest == "" {
+			digest = "digest-" + name
+		}
+		f.images[name+":latest"] = digest
+		return mustJSON(map[string]any{"name": name, "tag": "latest", "digest": digest}), nil
+	case method == "GET" && strings.HasPrefix(route, "/api/images/"):
+		ref := strings.TrimPrefix(route, "/api/images/")
+		digest, ok := f.images[ref]
+		if !ok {
+			return nil, &client.APIError{Code: "not_found", Msg: "image " + ref + " not found"}
+		}
+		name, tag, _ := strings.Cut(ref, ":")
+		return mustJSON(map[string]any{"name": name, "tag": tag, "digest": digest}), nil
+	case method == "POST" && strings.HasPrefix(route, "/api/groups/") && strings.HasSuffix(route, "/assign"):
+		group := strings.Split(route, "/")[3]
+		name := body.(map[string]any)["agent"].(string)
+		a := f.agents[name]
+		if a == nil {
+			return nil, fmt.Errorf("agent %s not found", name)
+		}
+		a["group"] = group
+		if f.groups[group] == nil {
+			f.groups[group] = map[string]any{"name": group, "lead": ""}
+		}
+		return mustJSON(map[string]any{"name": group}), nil
+	case method == "PATCH" && strings.HasPrefix(route, "/api/groups/") && strings.HasSuffix(route, "/lead"):
+		// The daemon only makes a current member the lead.
+		group := strings.Split(route, "/")[3]
+		lead := body.(map[string]any)["lead"].(string)
+		if a := f.agents[lead]; a == nil || a["group"] != group {
+			return nil, fmt.Errorf("lead %s is not a member of group %s", lead, group)
+		}
+		f.groups[group]["lead"] = lead
+		return mustJSON(map[string]any{"name": group, "lead": lead}), nil
 	case method == "POST" && route == "/api/groups":
 		m := body.(map[string]any)
 		name := m["name"].(string)
@@ -575,7 +624,8 @@ func TestUpCreatesAndIsIdempotent(t *testing.T) {
 
 // TestUpConvergesGroupLeadDrift proves the group skip is conditional: when a
 // group already exists but its live lead differs from desired, the reconciler
-// must issue exactly one POST /api/groups to converge the lead.
+// sets the lead with exactly one PATCH /api/groups/{name}/lead, after the lead
+// joined the group, and creates no group.
 func TestUpConvergesGroupLeadDrift(t *testing.T) {
 	fc := newFake()
 	// Pre-seed the group with a stale lead so only the lead needs converging.
@@ -583,8 +633,11 @@ func TestUpConvergesGroupLeadDrift(t *testing.T) {
 	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(goodYAML))
 	upNoBuild(t, r, f)
-	if n := countCalls(fc, "POST /api/groups"); n != 1 {
-		t.Fatalf("lead drift caused %d group POSTs, want exactly 1", n)
+	if n := countCalls(fc, "POST /api/groups"); n != 0 {
+		t.Fatalf("lead drift caused %d group POSTs, want 0", n)
+	}
+	if n := countCalls(fc, "PATCH /api/groups/research-team/lead"); n != 1 {
+		t.Fatalf("lead drift caused %d lead PATCHes, want exactly 1", n)
 	}
 	if got := fmt.Sprint(fc.groups["research-team"]["lead"]); got != "scout" {
 		t.Fatalf("lead did not converge: lead=%q, want scout", got)

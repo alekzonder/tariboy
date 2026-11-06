@@ -80,7 +80,7 @@ func (r *Runner) Apply(p Plan) Report {
 		}
 		changed, err := true, error(nil)
 		if a.run != nil {
-			changed, err = a.run(results)
+			results[i], changed, err = a.run(results)
 		} else {
 			if a.Note != "" {
 				r.logf("%s", a.Note)

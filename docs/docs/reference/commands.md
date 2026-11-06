@@ -100,7 +100,7 @@ tariboy has four command surfaces:
 | `tariboy compose start [MEMBERS...]` | Start the file's agents, or the named agents and groups |
 | `tariboy compose status` | Compare the file with the daemon and report drift |
 | `tariboy compose stop [MEMBERS...]` | Stop the file's agents, or the named agents and groups |
-| `tariboy compose up` | Build, create and start the file's images, groups and agents; start the daemon first |
+| `tariboy compose up` | Build, create and start the file's images, task queues, agents and groups phase by phase; start the daemon first; --dry-run prints the plan |
 | `tariboy compose validate` | Check the file's schema, references, local paths and tariboy version range; --daemon also checks the daemon version |
 | `tariboy context get NAME` | Read the agent's CONTEXT.md |
 | `tariboy context set NAME` | Overwrite the agent's CONTEXT.md |
@@ -257,7 +257,11 @@ down:
   Without `-f FILE`, it reads `Tariboycompose.yaml`, else
   `tariboy-compose.yaml`, from the current directory; if both files exist, it
   stops with an error. `compose up` starts the
-  daemon first unless `--no-start` or `TARIBOY_NO_AUTOSTART` is set. If the
+  daemon first unless `--no-start` or `TARIBOY_NO_AUTOSTART` is set, and
+  applies the file phase by phase. `compose up --dry-run` prints that plan
+  from reads only: it does not start the daemon, build or change anything.
+  `compose status` and `compose up --dry-run` also list the agents, groups
+  and task queues tied to the file that it does not declare. If the
   file has a `tariboy` version range, a verb that calls the daemon stops before
   any change when the daemon version is outside the range.
   `tariboy compose validate [-f FILE] [--daemon]` checks the file and changes

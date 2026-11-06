@@ -12,6 +12,7 @@ auto-starts if it is down.
 
 ```bash
 tariboy compose validate    # check the file, change nothing
+tariboy compose up --dry-run  # print the plan by phase, change nothing
 tariboy compose up          # build images, create groups/agents, start loops
 tariboy compose ps          # what compose manages
 tariboy compose logs        # tail agent logs
@@ -21,7 +22,7 @@ tariboy compose down --volumes  # also drop the shared/agent data
 
 Verbs: `up`, `down`, `build`, `ps`, `status`, `start`/`stop`/`restart`/`kill`,
 `rm`, `exec`, `logs`, `validate`, `archive`, `import`. Flags include
-`-f/--file`, `-v/--volumes`, `--no-start`, `--tail`, `--daemon`. `compose down` then `up` preserves data by default; `--volumes` is the
+`-f/--file`, `-v/--volumes`, `--no-start`, `--dry-run`, `--tail`, `--daemon`. `compose down` then `up` preserves data by default; `--volumes` is the
 purge path. A plain `down` removes each agent in mode `keep`: the stopped
 agent row stays, so `up` re-provisions it. `compose rm` removes a stopped agent
 in mode `remove`: the agent is gone, and its history stays. See
@@ -205,13 +206,37 @@ compose validate: 2 problem(s) in /work/Tariboycompose.yaml
 
 ## How `up` converges
 
-`compose up` builds the declared images and reads the live state once: the
-groups, agents, budgets, task queues and their pools, the queue workflow
-bindings, and the pending image of each running agent whose image differs from
-the file. It then plans the actions that move the daemon toward the file and
-applies them in this order: groups, agents, budgets, task queues, and queue
-workflows. A setting that already matches makes no call, so running `up` again
-on a converged file changes nothing and reports every resource `ok`.
+`compose up` reads the live state once: the groups, agents, budgets, task
+queues and their pools, and the pending image of each running agent whose
+image differs from the file. It then plans the actions that move the daemon
+toward the file and applies them phase by phase:
+
+| Phase | What it applies |
+| --- | --- |
+| `stores` | Nothing yet; the `stores` section is not applied by `up`. |
+| `workflows` | Builds each Store workflow a task queue names, once per source. |
+| `images` | Builds each declared image as `NAME:latest`, one action per image. |
+| `queues` | Creates each task queue and restores a changed queue name. |
+| `agents` | Creates each new agent **without a group**, converges the settings of an existing one, stops one whose file sets `loop.enabled: false`, and sets the agent budget. |
+| `groups` | Creates each group without a lead, assigns the file's agents to it, sets the lead, and sets the group budget. |
+| `queue bindings` | Binds the agent pools of each queue, then its workflow. |
+| `start` | Starts each new agent and each stopped loop the file enables, and restarts an agent whose harness changed. |
+
+The order follows what each step needs. A pool can only name agents that
+exist, and a workflow binding needs the pools it names, so the queue bindings
+come after the agents. A group's lead must already be a member, so the groups
+phase assigns the members first and then sets the lead with
+`PATCH /api/groups/{name}/lead`. A group without `lead` in the file keeps the
+lead it has. A new agent starts only after it joined its group. Agents start last, so their first iteration
+already has its group, its pools and its queue's workflow.
+
+A setting that already matches makes no call. Running `up` again on a
+converged file reports every resource `ok`. The only exception is the
+builds: compose cannot tell whether the local sources changed, so every `up`
+builds each image and each Store workflow again. A build of unchanged sources
+publishes the digest the daemon already has and is reported `ok`; an image
+whose `NAME:latest` digest changed, or a workflow version that was not
+published before, is reported `changed`.
 
 An existing agent converges in place:
 
@@ -220,19 +245,24 @@ An existing agent converges in place:
   image on its next iteration; there is no restart. A bare name means
   `NAME:latest`.
 - **Harness.** A different `harness.type` is stored
-  (`POST /api/agents/{name}/harness`), and a running agent is then stopped and
-  started so the new harness takes effect. The restart runs after the agent's
-  other changes, so the restarted iteration also uses the new image, CWD, loop,
-  and Goal settings. The restart interrupts the current iteration, as a manual
-  restart does. A stopped agent is re-provisioned
-  instead (see below), which starts it with the new harness. An agent whose
-  file sets `loop.enabled: false` is not restarted; its next start uses the new
-  harness.
+  (`POST /api/agents/{name}/harness`) in the agents phase. A running agent is
+  then stopped and started in the start phase, after the agent's other changes
+  and its group and pools, so the restarted iteration also uses the new image,
+  CWD, loop, and Goal settings. The restart interrupts the current iteration,
+  as a manual restart does. A stopped agent is re-provisioned instead (see
+  below), which starts it with the new harness. An agent whose file sets
+  `loop.enabled: false` is not restarted; its next start uses the new harness.
 - **Stopped agent.** An agent left stopped by a data-preserving `down` is
   re-provisioned in place with the file's image, keeping its context,
-  iterations, and audit log, and then converges as above.
-- Group membership, CWD, timeout, loop settings, and the Goal settings the file
-  sets converge to the file's values.
+  iterations, and audit log, and then converges as above. The daemon starts a
+  re-provisioned agent at once, in the agents phase, so its first iteration may
+  run before the groups and queue bindings phases have set its new group or
+  pool.
+- **Group.** An agent in another group, or a new agent, is assigned to the
+  file's group in the groups phase (`POST /api/groups/{name}/assign`). An agent
+  the file leaves without a group keeps the group it has.
+- CWD, timeout, loop settings, and the Goal settings the file sets converge to
+  the file's values.
 - **Environment and interactive mode.** When a key in the file's `env` is
   missing from the agent or has another value, `up` sets the agent env to its
   current env merged with the file's keys. Keys the file does not declare, such
@@ -246,18 +276,71 @@ An existing agent converges in place:
 Model, effort, and plugins are applied only when compose creates an agent; `up`
 does not change them on an existing agent.
 
-A failed action does not stop the run. The actions that depend on it are
-skipped: for example, a failed agent create skips that agent's start and its
-budget, and a failed harness change skips the restart. Independent actions,
-including the other agents, still run. When the run ends, `up` prints one line
-per resource with its outcome:
+### Entities that are in use
+
+`up` changes a running project without waiting for it to be idle:
+
+- A new image is only pending: the agent finishes its current iteration on the
+  old image and adopts the new one on the next.
+- A harness change restarts a running agent in the start phase and ends its
+  current iteration.
+- Rebinding a queue to a new workflow version leaves the tasks that already
+  started on the version they pinned; new tasks follow the new binding.
+
+### Preview with `--dry-run`
+
+`compose up --dry-run` prints the plan by phase and applies nothing. It reads
+the live state with `GET` requests only: it does not start the daemon, build
+an image or a workflow, or make any other change. A phase with nothing to do
+is not printed. Each line shows the verb and the fields an action sets, with
+the live value before `->` when there is one:
 
 ```text
-changed  group:research-team
+phase images
+  build    image:dev (path=./dev)
+phase queues
+  create   queue:DEV (name=Development)
+phase agents
+  create   agent:lead (image=dev:latest; cwd=/work; env keys=TOKEN)
+  set      budget:agent:lead (limit_usd=5; mode=warn)
+  update   agent:ops (harness codex -> claude; env keys=REGION)
+phase groups
+  update   agent:lead (group=team)
+  update   group:team (lead ops -> lead)
+phase queue bindings
+  update   queue:DEV (pool developers [] -> [lead, ops])
+phase start
+  start    agent:lead
+  restart  agent:ops (harness codex -> claude)
+not declared
+  agent      old-bot        not declared (group=team state=running)
+dry-run: 6 resources to change, 0 ok; nothing applied
+```
+
+Env and secret values are never printed, only the names of the env keys.
+Without a build, the digest of a Store workflow is not known, so the dry run
+lists each build and each workflow binding as planned even when `up` would
+find it unchanged. When the daemon is not running, `--dry-run` fails with
+`tariboyd is not running` instead of starting it.
+
+### When an action fails
+
+A failed action does not stop the run. The actions that depend on it are
+skipped in every later phase, and independent actions, including the other
+agents, still run. For example, a failed create of agent `writer` skips its
+budget, its group membership, the group's lead when `writer` is the lead, the
+pools that name it, the workflow binding that needs those pools, and its
+start. A failed image build skips only the agents on that image, and a failed
+harness change skips the restart. When the run ends, `up` prints one line per
+resource, in phase order:
+
+```text
+changed  image:analyst
+changed  agent:scout
 failed   agent:writer: create agent writer: ...
 skipped  budget:agent:writer: an action it depends on failed
-ok       agent:scout
-up: 1 ok, 1 changed, 1 failed, 1 skipped
+changed  group:research-team
+up: 0 ok, 3 changed, 1 failed, 1 skipped
 ```
 
 | Outcome | Meaning |
@@ -267,15 +350,48 @@ up: 1 ok, 1 changed, 1 failed, 1 skipped
 | `failed` | An action failed; the line shows the first error. |
 | `skipped` | An action it depends on failed, so it was not attempted. |
 
-If any resource failed, `up` exits non-zero and prints a one-line summary such
-as `compose up: 1 resource failed` to standard error; the report above already
-shows each error. The resources that succeeded stay
-applied, so the daemon can be partly converged; fix the cause and run `up`
-again to converge the rest.
+An agent's line covers its create or settings, its group membership and its
+start; a group's line covers the group and its lead; a queue's line covers the
+queue, its pools and its workflow binding. If any resource failed, `up` exits
+non-zero and prints a one-line summary such as `compose up: 1 resource failed`
+to standard error; the report above already shows each error. The resources
+that succeeded stay applied, so the daemon can be partly converged; fix the
+cause and run `up` again to converge the rest. An error while reading the live
+state or planning stops `up` and `--dry-run` before any change.
+
+### Removing an entity from the file
+
+`up` never deletes. An agent, group or task queue removed from the file stays
+on the daemon, unchanged. To remove it, run `compose down` before you edit the
+file, or remove it directly with `tariboy agent rm NAME` or
+`tariboy group rm NAME`.
+
+The daemon does not record which file created an entity, so `compose status`
+and `compose up --dry-run` find the leftovers by their ties to the file and
+list them as `not declared`:
+
+- an agent the file does not declare that is in one of the file's groups or
+  in a pool of one of its task queues;
+- a group the file does not declare that has one of the file's agents as a
+  member;
+- a task queue the file does not declare with a pool that names one of the
+  file's agents.
+
+```text
+agent      old-bot        not declared (group=research state=running)
+group      legacy         not declared (member dev)
+task queue OLD            not declared (pool dev has dev)
+```
+
+An entity with no tie to the file, such as an agent outside the file's groups
+and pools, is not listed. `not declared` lines do not count as drift.
+
+### `compose status`
 
 `compose status` reads the same plan without applying it. It prints one line
-per group, agent, budget, task queue, and pool, then `drift: N`. An agent's line
-lists each setting `up` would change; an image that is already pending shows as
+per task queue and pool, agent, budget, and group, then the `not declared`
+entities, then `drift: N`. An agent's line lists each setting `up` would
+change, its group included; an image that is already pending shows as
 `image pending` until the agent adopts it. Environment drift lists the key
 names only, never their values. Model and plugins are not checked, and status
 says so on its last line.
@@ -311,9 +427,9 @@ workflow engine. A non-empty value is rejected with an error that names the key
 and tells you to declare `version: 2`. In version 2, `workflows` declares
 workflow sources; see [The compose file](#the-compose-file).
 
-`compose up` first converges images, agents, and groups. It then reconciles the
-queue and its pools through the daemon's Native Tasks API, and last binds queue
-workflows. Repeating `compose up` is idempotent; it also restores changed queue
+`compose up` creates the queues before the agents and binds the pools in the
+queue bindings phase, after the agents and groups, through the daemon's Native
+Tasks API; the queue workflow binding follows the pools. Repeating `compose up` is idempotent; it also restores changed queue
 names and pool membership. `compose status` remains read-only and reports queue,
 pool membership, and workflow drift alongside agent, group, and budget drift.
 Existing compose files without `task_queues` keep their previous behavior.
@@ -342,8 +458,8 @@ task_queues:
 
 A tag of `.` or `..` is a validation error.
 
-Each Store workflow is built once per run, before any queue is bound, and a
-bind runs after the queue's pools exist, since a bind needs the pools the
+Each Store workflow is built once per run in the workflows phase, before any
+queue is bound, and a bind runs after the queue's pools exist, since a bind needs the pools the
 workflow names. A queue already bound to the resolved digest and tag is left
 alone. A queue that follows a tag moves to each new build of that tag; see
 [Binding a queue](/docs/task-workflows#binding-a-queue). A

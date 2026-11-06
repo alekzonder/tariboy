@@ -5,155 +5,96 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/client"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
-// planTaskQueues converges queues and their agent pools through the typed
-// native Tasks REST commands, whose daemon handlers are backed by
+// queuesPhase creates and renames the task queues through the typed native
+// Tasks REST commands, whose daemon handlers are backed by
 // registry.TaskControl. Compose never reaches into task persistence directly.
-func (p *planner) planTaskQueues(f File) error {
-	if len(f.TaskQueues) == 0 {
-		return nil
-	}
-	queues, err := p.r.listTaskQueues()
-	if err != nil {
-		return fmt.Errorf("task queues: %w", err)
-	}
+// Pools and workflow bindings follow in the queue bindings phase, once the
+// agents they name exist.
+type queuesPhase struct{}
+
+func (queuesPhase) name() string { return "queues" }
+
+func (queuesPhase) plan(p *planner, f File, live *liveState) error {
 	for _, prefix := range sortedKeys(f.TaskQueues) {
 		want := f.TaskQueues[prefix]
 		id := "queue:" + prefix
-		queue, exists := queues[prefix]
-		pools := map[string]tasks.AgentPool{}
-		create := -1
-		if !exists {
+		queue, exists := live.queues[prefix]
+		switch {
+		case !exists:
 			p.status(id, true, "task queue %-10s MISSING (want name=%s)", prefix, want.Name)
-			create = p.add(Action{Resource: id, Kind: "create", Note: "creating task queue " + prefix, Fail: "create task queue " + prefix,
-				Call: Call{"POST", "/api/task-queues", map[string]any{"prefix": prefix, "name": want.Name}}})
-		} else {
+			p.provide(id, p.add(Action{Resource: id, Kind: "create", Note: "creating task queue " + prefix, Fail: "create task queue " + prefix,
+				Fields: []Field{{Name: "name", To: want.Name}},
+				Call:   Call{"POST", "/api/task-queues", map[string]any{"prefix": prefix, "name": want.Name}}}))
+		case queue.Name != want.Name:
 			p.resource(id).queue = prefix
-			if queue.Name != want.Name {
-				p.status(id, true, "task queue %-10s name drift: have=%s want=%s", prefix, queue.Name, want.Name)
-				p.add(Action{Resource: id, Kind: "rename", Note: "updating task queue " + prefix, Fail: "update task queue " + prefix,
-					Call: Call{"PATCH", "/api/task-queues/" + prefix, map[string]any{"name": want.Name, "revision": queue.Revision}}})
-			}
-			if pools, err = p.r.listTaskPools(prefix); err != nil {
-				return fmt.Errorf("task queue %s pools: %w", prefix, err)
-			}
-		}
-		for _, poolName := range sortedKeys(want.Pools) {
-			agents := normalizeAgentNames(want.Pools[poolName])
-			current, found := pools[poolName]
-			switch {
-			case found && slices.Equal(current.Agents, agents):
-				p.status(id, false, "task queue %-10s pool %s ok", prefix, poolName)
-				continue
-			case found:
-				p.status(id, true, "task queue %-10s pool %s drift: have=%v want=%v", prefix, poolName, current.Agents, agents)
-			case exists:
-				p.status(id, true, "task queue %-10s pool %s MISSING (want=%v)", prefix, poolName, agents)
-			}
-			p.add(Action{Resource: id, Kind: "pool", Note: fmt.Sprintf("binding task queue %s pool %s", prefix, poolName),
-				Fail: fmt.Sprintf("bind pool %s/%s", prefix, poolName),
-				Call: Call{"PATCH", "/api/task-queues/" + prefix + "/pools/" + poolName, map[string]any{"agents": agents, "revision": current.Revision,
-					"idempotency_key": composeIdempotency("pool", prefix, poolName, current.Revision, agents)}}}, create)
+			p.status(id, true, "task queue %-10s name drift: have=%s want=%s", prefix, queue.Name, want.Name)
+			p.add(Action{Resource: id, Kind: "rename", Note: "updating task queue " + prefix, Fail: "update task queue " + prefix,
+				Fields: []Field{{Name: "name", From: queue.Name, To: want.Name}},
+				Call:   Call{"PATCH", "/api/task-queues/" + prefix, map[string]any{"name": want.Name, "revision": queue.Revision}}})
+		default:
+			p.resource(id).queue = prefix
 		}
 	}
 	return nil
-}
-
-// planQueueWorkflows builds the Store workflows the file names, then binds
-// each queue to the digest it resolves to. The binds follow the queue and
-// pool actions, since a bind needs the pools the workflow names, and depend
-// on them. A queue with no workflow value keeps whatever binding it has;
-// Compose never clears one.
-func (p *planner) planQueueWorkflows(f File) error {
-	built := map[string]int{}
-	for _, prefix := range sortedKeys(f.TaskQueues) {
-		ref, declared, err := f.TaskQueues[prefix].WorkflowRef()
-		if err != nil {
-			return fmt.Errorf("task queue %s workflow: %w", prefix, err)
-		}
-		if _, done := built[ref.Selector()]; declared && ref.Store != "" && !done {
-			built[ref.Selector()] = p.add(Action{Resource: "workflow:" + ref.Selector(), Kind: "build", Note: "building workflow " + ref.Selector(),
-				Fail: "build workflow " + ref.Selector(), Call: Call{"POST", "/api/workflow-images/build", map[string]any{"source": ref.Selector(), "wait": true, "initiator": "compose"}}})
-		}
-	}
-	for _, prefix := range sortedKeys(f.TaskQueues) {
-		ref, declared, _ := f.TaskQueues[prefix].WorkflowRef()
-		if !declared {
-			continue
-		}
-		id := "queue:" + prefix
-		build := -1
-		if ref.Store != "" {
-			build = built[ref.Selector()]
-		}
-		p.add(Action{Resource: id, Kind: "workflow", run: p.r.bindWorkflow(prefix, ref, build)}, append(p.actionsOf(id), build)...)
-	}
-	return nil
-}
-
-// actionsOf returns the indexes of the actions planned so far for a resource.
-func (p *planner) actionsOf(id string) []int {
-	var out []int
-	for i, a := range p.plan.Actions {
-		if a.Resource == id {
-			out = append(out, i)
-		}
-	}
-	return out
 }
 
 // bindWorkflow resolves and binds the workflow of one queue at apply time. A
 // Store workflow without a tag binds the digest its build (action build)
 // returned; every other form resolves NAME:TAG after the builds and binds by
 // the tag, so the queue follows it.
-func (r *Runner) bindWorkflow(prefix string, ref WorkflowRef, build int) func([]json.RawMessage) (bool, error) {
-	return func(results []json.RawMessage) (bool, error) {
-		var img workflowImage
-		if build >= 0 {
-			if err := json.Unmarshal(results[build], &img); err != nil {
-				return false, err
-			}
-		}
-		bindRef, tag := img.Name+":"+img.Digest, ""
-		if ref.Store == "" || ref.Tag != "" {
-			bindRef = ref.Ref()
-			tag = bindRef[strings.LastIndex(bindRef, ":")+1:]
-			var found bool
-			var err error
-			if img, found, err = r.inspectWorkflowImage(ref.Ref()); err != nil {
-				return false, fmt.Errorf("resolve workflow %s: %w", ref.Ref(), err)
-			}
-			if !found && ref.Store != "" {
-				return false, fmt.Errorf("task queue %s workflow: %s does not exist after building %s", prefix, ref.Ref(), ref.Selector())
-			}
-			if !found {
-				return false, fmt.Errorf("task queue %s workflow: %s is not built; build it or add the Store prefix (STORE/%s)", prefix, ref.Ref(), ref.Ref())
-			}
-		}
-		current, bound, err := r.queueWorkflow(prefix)
-		if err != nil {
-			return false, fmt.Errorf("read workflow of task queue %s: %w", prefix, err)
-		}
-		if bound && current.Digest == img.Digest && current.Tag == tag {
-			r.logf("task queue %s workflow %s:%s unchanged", prefix, img.Name, img.Version)
-			return false, nil
-		}
-		revision := int64(0)
-		if bound {
-			revision = current.Revision
-		}
-		r.logf("binding task queue %s workflow %s:%s", prefix, img.Name, img.Version)
-		if _, err := r.call.Call("PUT", "/api/task-queues/"+prefix+"/workflow", map[string]any{"ref": bindRef, "revision": revision}); err != nil {
-			return false, bindWorkflowError(prefix, ref, err)
-		}
-		return true, nil
+func (r *Runner) bindWorkflow(prefix string, ref WorkflowRef, build int) func([]json.RawMessage) (json.RawMessage, bool, error) {
+	return func(results []json.RawMessage) (json.RawMessage, bool, error) {
+		changed, err := r.resolveAndBind(prefix, ref, build, results)
+		return nil, changed, err
 	}
+}
+
+func (r *Runner) resolveAndBind(prefix string, ref WorkflowRef, build int, results []json.RawMessage) (bool, error) {
+	var img workflowImage
+	if build >= 0 {
+		if err := json.Unmarshal(results[build], &img); err != nil {
+			return false, err
+		}
+	}
+	bindRef, tag := img.Name+":"+img.Digest, ""
+	if ref.Store == "" || ref.Tag != "" {
+		bindRef = ref.Ref()
+		tag = bindRef[strings.LastIndex(bindRef, ":")+1:]
+		var found bool
+		var err error
+		if img, found, err = r.inspectWorkflowImage(ref.Ref()); err != nil {
+			return false, fmt.Errorf("resolve workflow %s: %w", ref.Ref(), err)
+		}
+		if !found && ref.Store != "" {
+			return false, fmt.Errorf("task queue %s workflow: %s does not exist after building %s", prefix, ref.Ref(), ref.Selector())
+		}
+		if !found {
+			return false, fmt.Errorf("task queue %s workflow: %s is not built; build it or add the Store prefix (STORE/%s)", prefix, ref.Ref(), ref.Ref())
+		}
+	}
+	current, bound, err := r.queueWorkflow(prefix)
+	if err != nil {
+		return false, fmt.Errorf("read workflow of task queue %s: %w", prefix, err)
+	}
+	if bound && current.Digest == img.Digest && current.Tag == tag {
+		r.logf("task queue %s workflow %s:%s unchanged", prefix, img.Name, img.Version)
+		return false, nil
+	}
+	revision := int64(0)
+	if bound {
+		revision = current.Revision
+	}
+	r.logf("binding task queue %s workflow %s:%s", prefix, img.Name, img.Version)
+	if _, err := r.call.Call("PUT", "/api/task-queues/"+prefix+"/workflow", map[string]any{"ref": bindRef, "revision": revision}); err != nil {
+		return false, bindWorkflowError(prefix, ref, err)
+	}
+	return true, nil
 }
 
 // workflowImage is the part of a workflow image the binding step needs.
