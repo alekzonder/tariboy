@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"io/fs"
 	"os"
@@ -23,6 +24,10 @@ import (
 	"github.com/alekzonder/tariboy/internal/safefs"
 	"github.com/alekzonder/tariboy/internal/store"
 )
+
+// snapshotSkillRoot is the snapshot directory that holds skills declared
+// outside the source tree.
+const snapshotSkillRoot = ".tariboy-snapshot-skills"
 
 type Snapshot struct {
 	Ref          string `json:"ref"`
@@ -82,61 +87,15 @@ func (s Store) Freeze(sourceDir string, skills ...imagefile.SkillEntry) (FrozenS
 	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return FrozenSource{}, fmt.Errorf("image snapshot: unsafe source root")
 	}
-	var files []file
-	sourceSkills := make(map[string]string)
-	var externalSkills []agentskills.Prepared
-	const skillRoot = ".tariboy-snapshot-skills"
-	for _, skill := range skills {
-		if !strings.HasPrefix(skill.Dir, "./") && !strings.HasPrefix(skill.Dir, "../") {
-			continue
-		}
-		resolved, err := imagefile.ResolveSkillDirectory(sourceDir, skill.Dir, imagefile.ResolveRoots{})
-		if err != nil {
-			return FrozenSource{}, err
-		}
-		rel := filepath.Clean(filepath.FromSlash(skill.Dir))
-		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			prepared, err := agentskills.Prepare(resolved)
-			if err != nil {
-				return FrozenSource{}, err
-			}
-			externalSkills = append(externalSkills, prepared)
-			if err := agentskills.ValidateSet(externalSkills); err != nil {
-				return FrozenSource{}, err
-			}
-			rel = filepath.Join(skillRoot, prepared.Metadata.Name)
-			for _, member := range prepared.Files {
-				mode := os.FileMode(0o600)
-				if member.Executable {
-					mode = 0o700
-				}
-				files = append(files, file{rel: filepath.ToSlash(filepath.Join(rel, member.RelativePath)), mode: mode, body: member.Body})
-			}
-		}
-		sourceSkills[skill.Dir] = rel
-	}
-	opts := safefs.WalkOptions{
-		Dirs:        true,
-		Skip:        func(rel string) bool { return rel == imagesource.MetadataFilename },
-		MaxFileSize: imagesource.MaxFileSize,
-	}
-	err = safefs.WalkRegular(sourceDir, opts, func(rel string, _ fs.DirEntry, info fs.FileInfo) error {
-		if len(externalSkills) > 0 && rel == skillRoot {
-			return fmt.Errorf("image snapshot: source uses reserved directory %s", skillRoot)
-		}
-		if info.IsDir() {
-			return nil
-		}
-		files = append(files, file{rel: rel, path: filepath.Join(sourceDir, filepath.FromSlash(rel)), mode: info.Mode()})
-		return nil
-	})
-	var pathErr *safefs.PathError
-	if errors.As(err, &pathErr) {
-		return FrozenSource{}, fmt.Errorf("image snapshot: %s", pathErr.Error())
-	}
+	collected, err := collectSnapshotSkills(sourceDir, skills)
 	if err != nil {
 		return FrozenSource{}, err
 	}
+	files, err := appendSourceFiles(collected.files, sourceDir, len(collected.external) > 0)
+	if err != nil {
+		return FrozenSource{}, err
+	}
+	sourceSkills := collected.sourceSkills
 	sort.Slice(files, func(i, j int) bool { return files[i].rel < files[j].rel })
 	if err := os.MkdirAll(s.Root, 0o700); err != nil {
 		return FrozenSource{}, err
@@ -151,41 +110,9 @@ func (s Store) Freeze(sourceDir string, skills ...imagefile.SkillEntry) (FrozenS
 	defer os.RemoveAll(stage)
 	h := sha256.New()
 	for _, f := range files {
-		mode := os.FileMode(0o600)
-		if f.mode.Perm()&0o100 != 0 {
-			mode = 0o700
-		}
-		dst := filepath.Join(stage, filepath.FromSlash(f.rel))
-		if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+		if err := stageSnapshotFile(stage, f, h); err != nil {
 			return FrozenSource{}, err
 		}
-		var in io.ReadCloser = io.NopCloser(bytes.NewReader(f.body))
-		if f.path != "" {
-			in, err = os.Open(f.path)
-			if err != nil {
-				return FrozenSource{}, err
-			}
-		}
-		out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
-		if err != nil {
-			in.Close()
-			return FrozenSource{}, err
-		}
-		fileHash := sha256.New()
-		_, copyErr := io.Copy(io.MultiWriter(out, fileHash), in)
-		closeOutErr := out.Close()
-		closeInErr := in.Close()
-		if copyErr != nil {
-			return FrozenSource{}, copyErr
-		}
-		if closeOutErr != nil {
-			return FrozenSource{}, closeOutErr
-		}
-		if closeInErr != nil {
-			return FrozenSource{}, closeInErr
-		}
-		fmt.Fprintf(h, "%s\x00%o\x00", f.rel, mode.Perm())
-		_, _ = h.Write(fileHash.Sum(nil))
 	}
 	digest := "sha256:" + hex.EncodeToString(h.Sum(nil))
 	relativeDir := strings.TrimPrefix(digest, "sha256:")
@@ -201,6 +128,130 @@ func (s Store) Freeze(sourceDir string, skills ...imagefile.SkillEntry) (FrozenS
 		sourceSkills[source] = filepath.Join(target, rel)
 	}
 	return FrozenSource{SourceDigest: digest, RelativeDir: relativeDir, SourceSkills: sourceSkills}, nil
+}
+
+// snapshotSkills is what the declared skills add to a snapshot. files holds the
+// members of skills outside the source tree, external those skills, and
+// sourceSkills maps each relative skill path to its directory in the snapshot.
+type snapshotSkills struct {
+	files        []file
+	sourceSkills map[string]string
+	external     []agentskills.Prepared
+}
+
+func collectSnapshotSkills(sourceDir string, skills []imagefile.SkillEntry) (snapshotSkills, error) {
+	collected := snapshotSkills{sourceSkills: make(map[string]string)}
+	for _, skill := range skills {
+		if !strings.HasPrefix(skill.Dir, "./") && !strings.HasPrefix(skill.Dir, "../") {
+			continue
+		}
+		resolved, err := imagefile.ResolveSkillDirectory(sourceDir, skill.Dir, imagefile.ResolveRoots{})
+		if err != nil {
+			return snapshotSkills{}, err
+		}
+		rel := filepath.Clean(filepath.FromSlash(skill.Dir))
+		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			rel, err = collected.addExternal(resolved)
+			if err != nil {
+				return snapshotSkills{}, err
+			}
+		}
+		collected.sourceSkills[skill.Dir] = rel
+	}
+	return collected, nil
+}
+
+// addExternal takes in a skill outside the source tree and returns the
+// directory it gets in the snapshot.
+func (c *snapshotSkills) addExternal(resolved imagefile.ResolvedDirectory) (string, error) {
+	prepared, err := agentskills.Prepare(resolved)
+	if err != nil {
+		return "", err
+	}
+	c.external = append(c.external, prepared)
+	if err := agentskills.ValidateSet(c.external); err != nil {
+		return "", err
+	}
+	rel := filepath.Join(snapshotSkillRoot, prepared.Metadata.Name)
+	for _, member := range prepared.Files {
+		mode := os.FileMode(0o600)
+		if member.Executable {
+			mode = 0o700
+		}
+		c.files = append(c.files, file{rel: filepath.ToSlash(filepath.Join(rel, member.RelativePath)), mode: mode, body: member.Body})
+	}
+	return rel, nil
+}
+
+// appendSourceFiles walks the source tree and adds its regular files. With
+// external skills the snapshot needs snapshotSkillRoot, so the source may not
+// use that name.
+func appendSourceFiles(files []file, sourceDir string, reserveSkillRoot bool) ([]file, error) {
+	opts := safefs.WalkOptions{
+		Dirs:        true,
+		Skip:        func(rel string) bool { return rel == imagesource.MetadataFilename },
+		MaxFileSize: imagesource.MaxFileSize,
+	}
+	err := safefs.WalkRegular(sourceDir, opts, func(rel string, _ fs.DirEntry, info fs.FileInfo) error {
+		if reserveSkillRoot && rel == snapshotSkillRoot {
+			return fmt.Errorf("image snapshot: source uses reserved directory %s", snapshotSkillRoot)
+		}
+		if info.IsDir() {
+			return nil
+		}
+		files = append(files, file{rel: rel, path: filepath.Join(sourceDir, filepath.FromSlash(rel)), mode: info.Mode()})
+		return nil
+	})
+	var pathErr *safefs.PathError
+	if errors.As(err, &pathErr) {
+		return nil, fmt.Errorf("image snapshot: %s", pathErr.Error())
+	}
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+// stageSnapshotFile copies f into stage with its normalized mode and adds its
+// path, mode and content hash to digest.
+func stageSnapshotFile(stage string, f file, digest hash.Hash) error {
+	mode := os.FileMode(0o600)
+	if f.mode.Perm()&0o100 != 0 {
+		mode = 0o700
+	}
+	dst := filepath.Join(stage, filepath.FromSlash(f.rel))
+	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+		return err
+	}
+	var in io.ReadCloser = io.NopCloser(bytes.NewReader(f.body))
+	if f.path != "" {
+		var err error
+		in, err = os.Open(f.path)
+		if err != nil {
+			return err
+		}
+	}
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
+	if err != nil {
+		in.Close()
+		return err
+	}
+	fileHash := sha256.New()
+	_, copyErr := io.Copy(io.MultiWriter(out, fileHash), in)
+	closeOutErr := out.Close()
+	closeInErr := in.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	if closeOutErr != nil {
+		return closeOutErr
+	}
+	if closeInErr != nil {
+		return closeInErr
+	}
+	fmt.Fprintf(digest, "%s\x00%o\x00", f.rel, mode.Perm())
+	_, _ = digest.Write(fileHash.Sum(nil))
+	return nil
 }
 
 func (s Store) OpenFrozen(frozen FrozenSource) (string, error) {

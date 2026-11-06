@@ -295,98 +295,18 @@ func validateV2PortableMembers(manifestBody []byte, members map[string]portableI
 	if err := decodeStrictMember(manifestBody, &strict); err != nil {
 		return fmt.Errorf("invalid schema-v2 manifest: %w", err)
 	}
-	if strict.SchemaVersion != 2 || strict.Name != ref.Name || strict.PromptTemplateSHA256 == "" {
-		return errors.New("invalid schema-v2 manifest identity")
-	}
-	if strict.ImageVersion != "" {
-		if err := imagefile.ValidateImageVersion(strict.ImageVersion); err != nil {
-			return err
-		}
-	}
-	if _, err := store.ParseInputTime(strict.BuiltAt); err != nil {
-		return errors.New("invalid schema-v2 manifest built_at")
-	}
-	if err := validatePortableRole(strict.Role, manifestBody); err != nil {
+	if err := validateV2ManifestFields(strict, ref, manifestBody); err != nil {
 		return err
 	}
-	seenPlugins := make(map[string]bool, len(strict.Plugins))
-	for _, plugin := range strict.Plugins {
-		if !portablePluginName.MatchString(plugin.Name) || seenPlugins[plugin.Name] {
-			return fmt.Errorf("invalid or duplicate schema-v2 plugin name %q", plugin.Name)
-		}
-		seenPlugins[plugin.Name] = true
-	}
-	templateMember, ok := members["prompt/template.json"]
-	if !ok {
-		return errors.New("schema-v2 prompt template is missing")
-	}
-	if templateMember.mode != 0o600 {
-		return errors.New("schema-v2 prompt template has invalid mode")
-	}
-	var template PromptTemplate
-	if err := decodeStrictMember(templateMember.body, &template); err != nil {
-		return fmt.Errorf("invalid schema-v2 prompt template: %w", err)
-	}
-	if err := ValidatePromptTemplate(template); err != nil {
+	template, err := readV2PortableTemplate(members, strict.PromptTemplateSHA256)
+	if err != nil {
 		return err
-	}
-	if strict.PromptTemplateSHA256 != template.SHA256 {
-		return errors.New("manifest prompt template digest mismatch")
 	}
 	want := map[string]bool{"manifest.json": true, "prompt/template.json": true}
-	var totalPromptBytes int64
-	for i, entry := range template.Entries {
-		if entry.Kind != "file" {
-			continue
-		}
-		if entry.ArchivePath == "" || !strings.HasPrefix(entry.ArchivePath, "prompt/layers/") {
-			return fmt.Errorf("template entry %d has invalid layer path", i)
-		}
-		member, ok := members[entry.ArchivePath]
-		if !ok {
-			return fmt.Errorf("template entry %d layer is missing", i)
-		}
-		if member.mode != 0o600 || int64(len(member.body)) != entry.Size || sha256hex(member.body) != entry.SHA256 {
-			return fmt.Errorf("template entry %d layer integrity mismatch", i)
-		}
-		if totalPromptBytes > maxV2PromptBytes-entry.Size {
-			return fmt.Errorf("prompt layers exceed %d aggregate bytes", maxV2PromptBytes)
-		}
-		totalPromptBytes += entry.Size
-		want[entry.ArchivePath] = true
+	if err := checkV2PromptLayers(template, members, want); err != nil {
+		return err
 	}
-	preparedSkills := make([]agentskills.Prepared, 0, len(strict.Skills))
-	seenSkillRoots := make(map[string]bool, len(strict.Skills))
-	for i, skill := range strict.Skills {
-		if skill.Source == "" || !validSkillCategory(skill.Category) || skill.ArchiveRoot != "skills/"+skill.Name || seenSkillRoots[skill.ArchiveRoot] {
-			return fmt.Errorf("invalid schema-v2 skill metadata at index %d", i)
-		}
-		seenSkillRoots[skill.ArchiveRoot] = true
-		prefix := skill.ArchiveRoot + "/"
-		files := make([]agentskills.File, 0, skill.FileCount)
-		for name, member := range members {
-			if !strings.HasPrefix(name, prefix) {
-				continue
-			}
-			rel := strings.TrimPrefix(name, prefix)
-			sum := sha256.Sum256(member.body)
-			files = append(files, agentskills.File{
-				RelativePath: rel,
-				Size:         int64(len(member.body)),
-				SHA256:       hex.EncodeToString(sum[:]),
-				Executable:   member.mode == 0o700,
-				Body:         member.body,
-			})
-			want[name] = true
-		}
-		sort.Slice(files, func(i, j int) bool { return files[i].RelativePath < files[j].RelativePath })
-		prepared := agentskills.Prepared{Metadata: skill, Files: files}
-		if err := agentskills.ValidatePrepared(prepared); err != nil {
-			return fmt.Errorf("invalid schema-v2 skill %q: %w", skill.Name, err)
-		}
-		preparedSkills = append(preparedSkills, prepared)
-	}
-	if err := agentskills.ValidateSet(preparedSkills); err != nil {
+	if err := checkV2PortableSkills(strict.Skills, members, want); err != nil {
 		return err
 	}
 	for name := range members {
@@ -410,6 +330,126 @@ func validateV2PortableMembers(manifestBody []byte, members map[string]portableI
 		}, resolver)
 	}
 	return nil
+}
+
+// validateV2ManifestFields checks the fields of a schema-v2 manifest that need
+// no other archive member.
+func validateV2ManifestFields(strict v2PortableManifest, ref Ref, manifestBody []byte) error {
+	if strict.SchemaVersion != 2 || strict.Name != ref.Name || strict.PromptTemplateSHA256 == "" {
+		return errors.New("invalid schema-v2 manifest identity")
+	}
+	if strict.ImageVersion != "" {
+		if err := imagefile.ValidateImageVersion(strict.ImageVersion); err != nil {
+			return err
+		}
+	}
+	if _, err := store.ParseInputTime(strict.BuiltAt); err != nil {
+		return errors.New("invalid schema-v2 manifest built_at")
+	}
+	if err := validatePortableRole(strict.Role, manifestBody); err != nil {
+		return err
+	}
+	seenPlugins := make(map[string]bool, len(strict.Plugins))
+	for _, plugin := range strict.Plugins {
+		if !portablePluginName.MatchString(plugin.Name) || seenPlugins[plugin.Name] {
+			return fmt.Errorf("invalid or duplicate schema-v2 plugin name %q", plugin.Name)
+		}
+		seenPlugins[plugin.Name] = true
+	}
+	return nil
+}
+
+// readV2PortableTemplate decodes the prompt template member and requires the
+// digest the manifest declares for it.
+func readV2PortableTemplate(members map[string]portableImageMember, wantSHA256 string) (PromptTemplate, error) {
+	templateMember, ok := members["prompt/template.json"]
+	if !ok {
+		return PromptTemplate{}, errors.New("schema-v2 prompt template is missing")
+	}
+	if templateMember.mode != 0o600 {
+		return PromptTemplate{}, errors.New("schema-v2 prompt template has invalid mode")
+	}
+	var template PromptTemplate
+	if err := decodeStrictMember(templateMember.body, &template); err != nil {
+		return PromptTemplate{}, fmt.Errorf("invalid schema-v2 prompt template: %w", err)
+	}
+	if err := ValidatePromptTemplate(template); err != nil {
+		return PromptTemplate{}, err
+	}
+	if wantSHA256 != template.SHA256 {
+		return PromptTemplate{}, errors.New("manifest prompt template digest mismatch")
+	}
+	return template, nil
+}
+
+// checkV2PromptLayers verifies the member of each file entry and marks it in
+// want.
+func checkV2PromptLayers(template PromptTemplate, members map[string]portableImageMember, want map[string]bool) error {
+	var totalPromptBytes int64
+	for i, entry := range template.Entries {
+		if entry.Kind != "file" {
+			continue
+		}
+		if entry.ArchivePath == "" || !strings.HasPrefix(entry.ArchivePath, "prompt/layers/") {
+			return fmt.Errorf("template entry %d has invalid layer path", i)
+		}
+		member, ok := members[entry.ArchivePath]
+		if !ok {
+			return fmt.Errorf("template entry %d layer is missing", i)
+		}
+		if member.mode != 0o600 || int64(len(member.body)) != entry.Size || sha256hex(member.body) != entry.SHA256 {
+			return fmt.Errorf("template entry %d layer integrity mismatch", i)
+		}
+		if totalPromptBytes > maxV2PromptBytes-entry.Size {
+			return fmt.Errorf("prompt layers exceed %d aggregate bytes", maxV2PromptBytes)
+		}
+		totalPromptBytes += entry.Size
+		want[entry.ArchivePath] = true
+	}
+	return nil
+}
+
+// checkV2PortableSkills rebuilds each manifest skill from its archive members,
+// which it marks in want, and validates the rebuilt set.
+func checkV2PortableSkills(skills []agentskills.Metadata, members map[string]portableImageMember, want map[string]bool) error {
+	preparedSkills := make([]agentskills.Prepared, 0, len(skills))
+	seenSkillRoots := make(map[string]bool, len(skills))
+	for i, skill := range skills {
+		if skill.Source == "" || !validSkillCategory(skill.Category) || skill.ArchiveRoot != "skills/"+skill.Name || seenSkillRoots[skill.ArchiveRoot] {
+			return fmt.Errorf("invalid schema-v2 skill metadata at index %d", i)
+		}
+		seenSkillRoots[skill.ArchiveRoot] = true
+		prepared := agentskills.Prepared{Metadata: skill, Files: portableSkillFiles(skill, members, want)}
+		if err := agentskills.ValidatePrepared(prepared); err != nil {
+			return fmt.Errorf("invalid schema-v2 skill %q: %w", skill.Name, err)
+		}
+		preparedSkills = append(preparedSkills, prepared)
+	}
+	return agentskills.ValidateSet(preparedSkills)
+}
+
+// portableSkillFiles collects the members under the skill's archive root,
+// sorted by relative path, and marks them in want.
+func portableSkillFiles(skill agentskills.Metadata, members map[string]portableImageMember, want map[string]bool) []agentskills.File {
+	prefix := skill.ArchiveRoot + "/"
+	files := make([]agentskills.File, 0, skill.FileCount)
+	for name, member := range members {
+		if !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		rel := strings.TrimPrefix(name, prefix)
+		sum := sha256.Sum256(member.body)
+		files = append(files, agentskills.File{
+			RelativePath: rel,
+			Size:         int64(len(member.body)),
+			SHA256:       hex.EncodeToString(sum[:]),
+			Executable:   member.mode == 0o700,
+			Body:         member.body,
+		})
+		want[name] = true
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].RelativePath < files[j].RelativePath })
+	return files
 }
 
 // ValidateUnpackedContract checks a staged schema-v2 image before any bridge,

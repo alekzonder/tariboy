@@ -52,100 +52,12 @@ func Stage(r io.Reader, compressedSize int64, destination string, limits Limits)
 		return Manifest{}, fmt.Errorf("portable archive: gzip: %w", err)
 	}
 	defer gz.Close()
-	tr := tar.NewReader(gz)
-	seen := map[string]bool{}
-	written := map[string]File{}
-	var manifest Manifest
-	manifestSeen := false
-	checker := MemberChecker{Format: FormatPortable, Limits: MemberLimits{MaxPathBytes: limits.MaxPathBytes, MaxMembers: limits.MaxFiles, MaxExpanded: limits.MaxExpandedBytes}}
-	for {
-		h, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return Manifest{}, fmt.Errorf("portable archive: tar: %w", err)
-		}
-		name, err := archivePath(h.Name, limits.MaxPathBytes)
-		if err != nil {
-			return Manifest{}, err
-		}
-		if seen[name] {
-			return Manifest{}, fmt.Errorf("portable archive: duplicate path %s", name)
-		}
-		seen[name] = true
-		// archivePath already enforced the path length, so the checker's
-		// ErrMemberPath cannot occur here.
-		if err := checker.Check(h); err != nil {
-			switch {
-			case errors.Is(err, ErrMemberCount):
-				return Manifest{}, errors.New("portable archive: too many entries")
-			case errors.Is(err, ErrMemberSize):
-				return Manifest{}, errors.New("portable archive: expanded size exceeded")
-			}
-			return Manifest{}, fmt.Errorf("portable archive: unsupported entry type for %s", name)
-		}
-		if name == "manifest.json" {
-			if h.Typeflag == tar.TypeDir {
-				return Manifest{}, errors.New("portable archive: manifest is not a file")
-			}
-			data, err := io.ReadAll(io.LimitReader(tr, h.Size+1))
-			if err != nil || int64(len(data)) != h.Size {
-				return Manifest{}, errors.New("portable archive: invalid manifest body")
-			}
-			if err := safefs.DecodeStrictJSON(bytes.NewReader(data), &manifest); err != nil {
-				return Manifest{}, fmt.Errorf("portable archive: manifest: %w", err)
-			}
-			if manifest.Format != "tariboy-portable" || manifest.Version != 1 || manifest.Kind == "" {
-				return Manifest{}, errors.New("portable archive: unsupported manifest")
-			}
-			manifestSeen = true
-			continue
-		}
-		target := filepath.Join(stage, filepath.FromSlash(name))
-		if h.Typeflag == tar.TypeDir {
-			if err := os.MkdirAll(target, 0o700); err != nil {
-				return Manifest{}, err
-			}
-			continue
-		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
-			return Manifest{}, err
-		}
-		out, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-		if err != nil {
-			return Manifest{}, err
-		}
-		hash := sha256.New()
-		n, copyErr := io.CopyN(io.MultiWriter(out, hash), tr, h.Size)
-		closeErr := out.Close()
-		if copyErr != nil || n != h.Size {
-			return Manifest{}, errors.New("portable archive: truncated file")
-		}
-		if closeErr != nil {
-			return Manifest{}, closeErr
-		}
-		written[name] = File{Path: name, Size: h.Size, SHA256: hex.EncodeToString(hash.Sum(nil))}
+	manifest, written, err := extractStage(tar.NewReader(gz), stage, limits)
+	if err != nil {
+		return Manifest{}, err
 	}
-	if !manifestSeen {
-		return Manifest{}, errors.New("portable archive: manifest missing")
-	}
-	want := map[string]File{}
-	for _, f := range manifest.Files {
-		clean, err := archivePath(f.Path, limits.MaxPathBytes)
-		if err != nil || clean == "manifest.json" || want[clean].Path != "" {
-			return Manifest{}, errors.New("portable archive: invalid manifest file list")
-		}
-		want[clean] = f
-	}
-	if len(want) != len(written) {
-		return Manifest{}, errors.New("portable archive: manifest does not match files")
-	}
-	for name, got := range written {
-		expected, ok := want[name]
-		if !ok || got.Size != expected.Size || got.SHA256 != expected.SHA256 {
-			return Manifest{}, fmt.Errorf("portable archive: file mismatch %s", name)
-		}
+	if err := verifyStagedFiles(manifest, written, limits.MaxPathBytes); err != nil {
+		return Manifest{}, err
 	}
 	if _, err := os.Lstat(destination); err == nil {
 		return Manifest{}, errors.New("portable archive: destination exists")
@@ -157,6 +69,140 @@ func Stage(r io.Reader, compressedSize int64, destination string, limits Limits)
 	}
 	published = true
 	return manifest, nil
+}
+
+// extractStage reads every tar member into stage, except the manifest, which
+// it decodes and returns with the files it wrote.
+func extractStage(tr *tar.Reader, stage string, limits Limits) (Manifest, map[string]File, error) {
+	seen := map[string]bool{}
+	written := map[string]File{}
+	var manifest Manifest
+	manifestSeen := false
+	checker := MemberChecker{Format: FormatPortable, Limits: MemberLimits{MaxPathBytes: limits.MaxPathBytes, MaxMembers: limits.MaxFiles, MaxExpanded: limits.MaxExpandedBytes}}
+	for {
+		h, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return Manifest{}, nil, fmt.Errorf("portable archive: tar: %w", err)
+		}
+		name, err := admitStageMember(h, limits.MaxPathBytes, seen, &checker)
+		if err != nil {
+			return Manifest{}, nil, err
+		}
+		if name == "manifest.json" {
+			if manifest, err = readStageManifest(tr, h); err != nil {
+				return Manifest{}, nil, err
+			}
+			manifestSeen = true
+			continue
+		}
+		target := filepath.Join(stage, filepath.FromSlash(name))
+		if h.Typeflag == tar.TypeDir {
+			if err := os.MkdirAll(target, 0o700); err != nil {
+				return Manifest{}, nil, err
+			}
+			continue
+		}
+		file, err := writeStageFile(tr, h, name, target)
+		if err != nil {
+			return Manifest{}, nil, err
+		}
+		written[name] = file
+	}
+	if !manifestSeen {
+		return Manifest{}, nil, errors.New("portable archive: manifest missing")
+	}
+	return manifest, written, nil
+}
+
+// admitStageMember returns the cleaned name of h once its path, uniqueness,
+// type and sizes are acceptable, and records it in seen.
+func admitStageMember(h *tar.Header, maxPathBytes int, seen map[string]bool, checker *MemberChecker) (string, error) {
+	name, err := archivePath(h.Name, maxPathBytes)
+	if err != nil {
+		return "", err
+	}
+	if seen[name] {
+		return "", fmt.Errorf("portable archive: duplicate path %s", name)
+	}
+	seen[name] = true
+	// archivePath already enforced the path length, so the checker's
+	// ErrMemberPath cannot occur here.
+	if err := checker.Check(h); err != nil {
+		switch {
+		case errors.Is(err, ErrMemberCount):
+			return "", errors.New("portable archive: too many entries")
+		case errors.Is(err, ErrMemberSize):
+			return "", errors.New("portable archive: expanded size exceeded")
+		}
+		return "", fmt.Errorf("portable archive: unsupported entry type for %s", name)
+	}
+	return name, nil
+}
+
+func readStageManifest(r io.Reader, h *tar.Header) (Manifest, error) {
+	if h.Typeflag == tar.TypeDir {
+		return Manifest{}, errors.New("portable archive: manifest is not a file")
+	}
+	data, err := io.ReadAll(io.LimitReader(r, h.Size+1))
+	if err != nil || int64(len(data)) != h.Size {
+		return Manifest{}, errors.New("portable archive: invalid manifest body")
+	}
+	var manifest Manifest
+	if err := safefs.DecodeStrictJSON(bytes.NewReader(data), &manifest); err != nil {
+		return Manifest{}, fmt.Errorf("portable archive: manifest: %w", err)
+	}
+	if manifest.Format != "tariboy-portable" || manifest.Version != 1 || manifest.Kind == "" {
+		return Manifest{}, errors.New("portable archive: unsupported manifest")
+	}
+	return manifest, nil
+}
+
+// writeStageFile copies the body of h to target, which must not exist yet, and
+// returns its record.
+func writeStageFile(r io.Reader, h *tar.Header, name, target string) (File, error) {
+	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+		return File{}, err
+	}
+	out, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return File{}, err
+	}
+	hash := sha256.New()
+	n, copyErr := io.CopyN(io.MultiWriter(out, hash), r, h.Size)
+	closeErr := out.Close()
+	if copyErr != nil || n != h.Size {
+		return File{}, errors.New("portable archive: truncated file")
+	}
+	if closeErr != nil {
+		return File{}, closeErr
+	}
+	return File{Path: name, Size: h.Size, SHA256: hex.EncodeToString(hash.Sum(nil))}, nil
+}
+
+// verifyStagedFiles requires the manifest's file list to describe exactly the
+// files written.
+func verifyStagedFiles(manifest Manifest, written map[string]File, maxPathBytes int) error {
+	want := map[string]File{}
+	for _, f := range manifest.Files {
+		clean, err := archivePath(f.Path, maxPathBytes)
+		if err != nil || clean == "manifest.json" || want[clean].Path != "" {
+			return errors.New("portable archive: invalid manifest file list")
+		}
+		want[clean] = f
+	}
+	if len(want) != len(written) {
+		return errors.New("portable archive: manifest does not match files")
+	}
+	for name, got := range written {
+		expected, ok := want[name]
+		if !ok || got.Size != expected.Size || got.SHA256 != expected.SHA256 {
+			return fmt.Errorf("portable archive: file mismatch %s", name)
+		}
+	}
+	return nil
 }
 
 func Write(w io.Writer, root string, manifest Manifest, paths []string) error {

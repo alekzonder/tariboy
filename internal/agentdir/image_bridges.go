@@ -278,15 +278,8 @@ func validatePublishedBridge(finalDir string, expected []agentskills.Metadata, p
 	if err != nil {
 		return err
 	}
-	body, err := os.ReadFile(filepath.Join(finalDir, "bridge-manifest.json"))
+	manifest, err := readBridgeManifest(finalDir)
 	if err != nil {
-		return err
-	}
-	var manifest BridgeManifest
-	if err := safefs.DecodeStrictJSON(bytes.NewReader(body), &manifest); err != nil {
-		if errors.Is(err, safefs.ErrTrailingData) {
-			return errors.New("image bridge manifest contains trailing JSON")
-		}
 		return err
 	}
 	if manifest.ImageDigest != digest || manifest.ContractVersion != contractVersion || manifest.Harness != harness || manifest.SkillDestination != destination {
@@ -304,61 +297,12 @@ func validatePublishedBridge(finalDir string, expected []agentskills.Metadata, p
 	for _, skill := range expected {
 		skillPrefixes = append(skillPrefixes, path.Join(destination, skill.Name)+"/")
 	}
-	seen := make(map[string]bool, len(manifest.Files))
-	rootInfo, err := os.Lstat(finalDir)
-	if err != nil {
+	walk := publishedBridgeWalk{
+		finalDir: finalDir, generated: generated, skillPrefixes: skillPrefixes,
+		records: manifest.Files, seen: make(map[string]bool, len(manifest.Files)),
+	}
+	if err := walk.run(harness); err != nil {
 		return err
-	}
-	if rootInfo.IsDir() && rootInfo.Mode().Perm() != 0o700 {
-		return errors.New("image bridge directory has invalid mode")
-	}
-	skip := func(rel string) bool {
-		_, isGenerated := generated[rel]
-		return harness == "opencode" && openCodeInstallFiles[rel] && !isGenerated
-	}
-	err = safefs.WalkRegular(finalDir, safefs.WalkOptions{Dirs: true, Skip: skip}, func(rel string, _ fs.DirEntry, info fs.FileInfo) error {
-		if info.IsDir() {
-			if info.Mode().Perm() != 0o700 {
-				return errors.New("image bridge directory has invalid mode")
-			}
-			return nil
-		}
-		member := filepath.Join(finalDir, filepath.FromSlash(rel))
-		if rel == "bridge-manifest.json" {
-			return nil
-		}
-		allowed := false
-		if _, ok := generated[rel]; ok {
-			allowed = true
-		}
-		for _, prefix := range skillPrefixes {
-			if strings.HasPrefix(rel, prefix) {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
-			return fmt.Errorf("unexpected image bridge file %q", rel)
-		}
-		record, ok := manifest.Files[rel]
-		if !ok || uint32(info.Mode().Perm()) != record.Mode || info.Size() != record.Size {
-			return fmt.Errorf("image bridge file %q metadata mismatch", rel)
-		}
-		data, err := os.ReadFile(member)
-		if err != nil {
-			return err
-		}
-		if fileRecord(data, info.Mode()).SHA256 != record.SHA256 {
-			return fmt.Errorf("image bridge file %q integrity mismatch", rel)
-		}
-		seen[rel] = true
-		return nil
-	})
-	if err != nil {
-		return bridgeWalkError(err)
-	}
-	if len(seen) != len(manifest.Files) {
-		return errors.New("image bridge files are missing")
 	}
 	for _, skill := range expected {
 		dir := filepath.Join(finalDir, filepath.FromSlash(destination), skill.Name)
@@ -371,6 +315,97 @@ func validatePublishedBridge(finalDir string, expected []agentskills.Metadata, p
 		}
 	}
 	return nil
+}
+
+func readBridgeManifest(finalDir string) (BridgeManifest, error) {
+	body, err := os.ReadFile(filepath.Join(finalDir, "bridge-manifest.json"))
+	if err != nil {
+		return BridgeManifest{}, err
+	}
+	var manifest BridgeManifest
+	if err := safefs.DecodeStrictJSON(bytes.NewReader(body), &manifest); err != nil {
+		if errors.Is(err, safefs.ErrTrailingData) {
+			return BridgeManifest{}, errors.New("image bridge manifest contains trailing JSON")
+		}
+		return BridgeManifest{}, err
+	}
+	return manifest, nil
+}
+
+// publishedBridgeWalk checks the entries of a published bridge against its
+// manifest and records the verified files in seen.
+type publishedBridgeWalk struct {
+	finalDir      string
+	generated     map[string]BridgeFile
+	skillPrefixes []string
+	records       map[string]bridgeFileRecord
+	seen          map[string]bool
+}
+
+// run checks the bridge root and every entry below it, then requires that each
+// manifest record was seen.
+func (w publishedBridgeWalk) run(harness string) error {
+	rootInfo, err := os.Lstat(w.finalDir)
+	if err != nil {
+		return err
+	}
+	if rootInfo.IsDir() && rootInfo.Mode().Perm() != 0o700 {
+		return errors.New("image bridge directory has invalid mode")
+	}
+	skip := func(rel string) bool {
+		_, isGenerated := w.generated[rel]
+		return harness == "opencode" && openCodeInstallFiles[rel] && !isGenerated
+	}
+	err = safefs.WalkRegular(w.finalDir, safefs.WalkOptions{Dirs: true, Skip: skip}, w.check)
+	if err != nil {
+		return bridgeWalkError(err)
+	}
+	if len(w.seen) != len(w.records) {
+		return errors.New("image bridge files are missing")
+	}
+	return nil
+}
+
+func (w publishedBridgeWalk) check(rel string, _ fs.DirEntry, info fs.FileInfo) error {
+	if info.IsDir() {
+		if info.Mode().Perm() != 0o700 {
+			return errors.New("image bridge directory has invalid mode")
+		}
+		return nil
+	}
+	member := filepath.Join(w.finalDir, filepath.FromSlash(rel))
+	if rel == "bridge-manifest.json" {
+		return nil
+	}
+	if !w.allowed(rel) {
+		return fmt.Errorf("unexpected image bridge file %q", rel)
+	}
+	record, ok := w.records[rel]
+	if !ok || uint32(info.Mode().Perm()) != record.Mode || info.Size() != record.Size {
+		return fmt.Errorf("image bridge file %q metadata mismatch", rel)
+	}
+	data, err := os.ReadFile(member)
+	if err != nil {
+		return err
+	}
+	if fileRecord(data, info.Mode()).SHA256 != record.SHA256 {
+		return fmt.Errorf("image bridge file %q integrity mismatch", rel)
+	}
+	w.seen[rel] = true
+	return nil
+}
+
+// allowed reports whether rel is a generated file or lies under a skill.
+func (w publishedBridgeWalk) allowed(rel string) bool {
+	if _, ok := w.generated[rel]; ok {
+		return true
+	}
+	for _, prefix := range w.skillPrefixes {
+		if strings.HasPrefix(rel, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func equalBridgeSkills(a, b []bridgeSkill) bool {

@@ -77,6 +77,34 @@ func ParseV2(path string) (*V2, error) {
 	if err := yaml.Unmarshal(data, &header); err == nil && header.SchemaVersion == 1 {
 		return nil, errors.New(SchemaV1MigrationMessage)
 	}
+	out, err := decodeV2(path, data)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateVersionField(data); err != nil {
+		return nil, err
+	}
+	if out.SchemaVersion != 2 {
+		return nil, fmt.Errorf("imagefile schema_version must be 2, got %d", out.SchemaVersion)
+	}
+	if err := validateV2Extends(out.Extends); err != nil {
+		return nil, err
+	}
+	if err := validateV2Plugins(out.Plugins); err != nil {
+		return nil, err
+	}
+	if err := validateV2Skills(out.Skills); err != nil {
+		return nil, err
+	}
+	if err := validateV2Prompts(out.Prompts); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// decodeV2 decodes the single YAML document of the source at path, refusing
+// unknown fields.
+func decodeV2(path string, data []byte) (*V2, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 	var out V2
@@ -91,52 +119,62 @@ func ParseV2(path string) (*V2, error) {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	out.Dir = filepath.Dir(path)
-	if err := validateVersionField(data); err != nil {
-		return nil, err
-	}
-	if out.SchemaVersion != 2 {
-		return nil, fmt.Errorf("imagefile schema_version must be 2, got %d", out.SchemaVersion)
-	}
-	for i, parent := range out.Extends {
+	return &out, nil
+}
+
+func validateV2Extends(extends []string) error {
+	for i, parent := range extends {
 		if !strings.HasPrefix(parent, "./") && !strings.HasPrefix(parent, "../") && !filepath.IsAbs(parent) {
-			return nil, fmt.Errorf("extends[%d]: path %q must use ./, ../, or an absolute path", i, parent)
+			return fmt.Errorf("extends[%d]: path %q must use ./, ../, or an absolute path", i, parent)
 		}
 	}
+	return nil
+}
+
+func validateV2Plugins(plugins []V2Plugin) error {
 	seenPlugins := map[string]bool{}
-	for i, plugin := range out.Plugins {
+	for i, plugin := range plugins {
 		if plugin.Name == "" {
-			return nil, fmt.Errorf("plugins[%d]: name is required", i)
+			return fmt.Errorf("plugins[%d]: name is required", i)
 		}
 		if seenPlugins[plugin.Name] {
-			return nil, fmt.Errorf("plugins[%d]: duplicate plugin %q", i, plugin.Name)
+			return fmt.Errorf("plugins[%d]: duplicate plugin %q", i, plugin.Name)
 		}
 		seenPlugins[plugin.Name] = true
 	}
-	if len(out.Skills) > maxV2SkillEntries {
-		return nil, fmt.Errorf("skills has %d entries, maximum is %d", len(out.Skills), maxV2SkillEntries)
+	return nil
+}
+
+func validateV2Skills(skills []SkillEntry) error {
+	if len(skills) > maxV2SkillEntries {
+		return fmt.Errorf("skills has %d entries, maximum is %d", len(skills), maxV2SkillEntries)
 	}
-	for i, skill := range out.Skills {
+	for i, skill := range skills {
 		if skill.Dir == "" {
-			return nil, fmt.Errorf("skills[%d]: dir is required", i)
+			return fmt.Errorf("skills[%d]: dir is required", i)
 		}
 	}
+	return nil
+}
+
+func validateV2Prompts(prompts []PromptEntry) error {
 	seenRuntime := map[string]bool{}
-	if len(out.Prompts) > maxV2PromptEntries {
-		return nil, fmt.Errorf("prompts has %d entries, maximum is %d", len(out.Prompts), maxV2PromptEntries)
+	if len(prompts) > maxV2PromptEntries {
+		return fmt.Errorf("prompts has %d entries, maximum is %d", len(prompts), maxV2PromptEntries)
 	}
-	for i, prompt := range out.Prompts {
+	for i, prompt := range prompts {
 		if (prompt.File == "") == (prompt.Runtime == "") {
-			return nil, fmt.Errorf("prompts[%d]: exactly one of file or runtime is required", i)
+			return fmt.Errorf("prompts[%d]: exactly one of file or runtime is required", i)
 		}
 		if prompt.Runtime != "" {
 			if _, ok := imagecontract.Runtime(prompt.Runtime); !ok {
-				return nil, fmt.Errorf("prompts[%d]: unknown runtime placeholder %q", i, prompt.Runtime)
+				return fmt.Errorf("prompts[%d]: unknown runtime placeholder %q", i, prompt.Runtime)
 			}
 			if seenRuntime[prompt.Runtime] {
-				return nil, fmt.Errorf("prompts[%d]: duplicate runtime placeholder %q", i, prompt.Runtime)
+				return fmt.Errorf("prompts[%d]: duplicate runtime placeholder %q", i, prompt.Runtime)
 			}
 			seenRuntime[prompt.Runtime] = true
 		}
 	}
-	return &out, nil
+	return nil
 }
