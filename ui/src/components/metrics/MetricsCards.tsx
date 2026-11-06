@@ -144,6 +144,15 @@ export function MetricsCards({ slice, usage = true }: { slice: MetricsSlice; usa
           <Card label="Runs" value={slice.usage.iterations} />
           <Card label="Cost" value={fmtMoney(slice.usage.cost_usd)} />
           <Card
+            label="Without a task"
+            value={fmtMoney(slice.usage_without_task.cost_usd)}
+            detail={
+              slice.usage.cost_usd > 0
+                ? `${Math.round((slice.usage_without_task.cost_usd / slice.usage.cost_usd) * 100)}% of cost`
+                : undefined
+            }
+          />
+          <Card
             label="Tokens"
             value={
               <span title={tokenTitle(slice.usage.tokens)}>

@@ -66,7 +66,7 @@ describe("MetricsPage", () => {
       within(row)
         .getAllByRole("cell")
         .map((c) => c.textContent),
-    ).toEqual(["7", "12h 30m", "$1.37", "2.3", "0.4", "0.1", "0.6", "74", "23", "$12.40"]);
+    ).toEqual(["7", "12h 30m", "$1.37", "2.3", "0.4", "0.1", "0.6", "74", "23", "$12.40", "$1.86"]);
     expect(
       screen.getByText("A task with several agents counts for each of them. Total counts it once."),
     ).toBeInTheDocument();

@@ -57,7 +57,7 @@ func (f Filter) matchTask(e *taskEval) bool {
 
 type sliceAcc struct {
 	name, version string
-	usage         usageAcc
+	usage, noTask usageAcc
 	tasks         []*taskEval
 	mixed         int
 }
@@ -107,10 +107,12 @@ func (d *data) report(f Filter, rows []iterRow, since, until string, now time.Ti
 		if (f.Agent != "" && it.agent != f.Agent) || !f.matchImage(it.image) || !f.matchWorkflow(wf) {
 			continue
 		}
-		total.usage.add(it)
-		agents.get(it.agent, "").usage.add(it)
-		images.get(it.image.name, it.image.version).usage.add(it)
-		workflows.get(wf.name, wf.version).usage.add(it)
+		for _, acc := range []*sliceAcc{total, agents.get(it.agent, ""), images.get(it.image.name, it.image.version), workflows.get(wf.name, wf.version)} {
+			acc.usage.add(it)
+			if it.taskKey == "" {
+				acc.noTask.add(it)
+			}
+		}
 	}
 	for _, id := range slices.Sorted(maps.Keys(d.tasks)) {
 		t := d.tasks[id]
@@ -135,7 +137,7 @@ func (d *data) report(f Filter, rows []iterRow, since, until string, now time.Ti
 }
 
 func (acc *sliceAcc) slice() MetricsSlice {
-	return MetricsSlice{Name: acc.name, Version: acc.version, Usage: acc.usage.usage(), Tasks: stats(acc.tasks, acc.mixed)}
+	return MetricsSlice{Name: acc.name, Version: acc.version, Usage: acc.usage.usage(), UsageWithoutTask: acc.noTask.usage(), Tasks: stats(acc.tasks, acc.mixed)}
 }
 
 // stats aggregates the metrics of done tasks.

@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 const LINES = [
   "Completed tasks: tasks done in this period. Their runs, tokens and cost count the whole life of each task.",
   "AI usage in this period: only AI requests made in this period.",
+  "Without a task: AI requests that are not linked to a task, for example runs without a selected Goal. Completed tasks do not count them.",
   "Mixed tasks: done tasks that ran on more than one version. Version rows do not count them, so a version comparison stays fair.",
   "— means the value is not known, for example lead time before any task is done. It is not zero.",
   "unknown version: the image version of a run is not recorded.",

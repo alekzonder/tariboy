@@ -72,6 +72,7 @@ const METRICS: Array<[string, string, Format, CompareRow["better"], Pick]> = [
 const PERIOD: Array<[string, string, Format, Pick]> = [
   ["runs_period", "Runs in period", "count", (s) => s.usage.iterations],
   ["cost_period", "Cost in period", "money", (s) => s.usage.cost_usd],
+  ["cost_no_task", "Cost without task", "money", (s) => s.usage_without_task.cost_usd],
 ];
 
 /** The rows for slices A and B; a version without data is undefined. */

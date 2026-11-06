@@ -113,6 +113,27 @@ func TestMetricsPrintsHoursAndMinutes(t *testing.T) {
 	}
 }
 
+func TestMetricsReportPrintsCostWithoutTask(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	rep := metrics.MetricsReport{Total: metrics.MetricsSlice{Usage: metrics.MetricsUsage{Iterations: 3, CostUSD: 2.5},
+		UsageWithoutTask: metrics.MetricsUsage{Iterations: 1, CostUSD: 0.75}}}
+	if err := printReport(&out, rep); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(out.String(), "\n")
+	header, total := strings.Fields(lines[1]), strings.Fields(lines[2])
+	at := -1
+	for i, h := range header {
+		if h == "NO_TASK_COST_USD" {
+			at = i
+		}
+	}
+	if at < 1 || header[at-1] != "COST_USD" || len(total) != len(header) || total[at-1] != "2.5" || total[at] != "0.75" {
+		t.Fatalf("report output:\n%s", out.String())
+	}
+}
+
 func init() { typedCallSets["metrics"] = metricsTypedCalls }
 
 func metricsTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {

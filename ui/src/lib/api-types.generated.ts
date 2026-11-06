@@ -4265,6 +4265,8 @@ export interface components {
       name?: string;
       tasks: components["schemas"]["MetricsTaskStats"];
       usage: components["schemas"]["MetricsUsage"];
+      /** @description the part of usage whose requests have no task; iterations counts iterations with at least one such request and cannot be subtracted from usage.iterations */
+      usage_without_task: components["schemas"]["MetricsUsage"];
       version?: string;
     };
     MetricsTaskAgentUsage: {

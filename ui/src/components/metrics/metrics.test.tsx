@@ -88,6 +88,21 @@ describe("MetricsCards", () => {
     expect(card("Runs").value).toBe("23");
   });
 
+  it("shows the cost without a task and its share of the cost", () => {
+    render(<MetricsCards slice={metricsSlice()} />);
+    expect(card("Without a task")).toMatchObject({ value: "$1.86", detail: "15% of cost" });
+  });
+
+  it("leaves out the share when the cost is 0", () => {
+    const s = metricsSlice();
+    s.usage = { ...s.usage, cost_usd: 0 };
+    s.usage_without_task = { ...s.usage_without_task, cost_usd: 0 };
+    render(<MetricsCards slice={s} />);
+    const noTask = card("Without a task");
+    expect(noTask.value).toBe("$0.00");
+    expect(noTask.el.querySelector("[data-detail]")).toBeNull();
+  });
+
   it("can leave out the AI usage group", () => {
     render(<MetricsCards slice={metricsSlice()} usage={false} />);
     expect(screen.queryByRole("region", { name: "AI usage in this period" })).toBeNull();
@@ -167,7 +182,10 @@ describe("VersionGroups", () => {
       "74",
       "23",
       "$12.40",
+      "$1.86",
     ]);
+    const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
+    expect(headers.indexOf("Cost without task")).toBe(headers.indexOf("Cost in period") + 1);
   });
 
   it("offers Compare versions only for a name with two versions, and ⇄ per row", () => {
@@ -240,6 +258,9 @@ describe("AboutNumbers", () => {
     expect(button).toHaveAttribute("aria-expanded", "true");
     const panel = document.getElementById(button.getAttribute("aria-controls")!);
     expect(panel).toHaveTextContent("unknown version: the image version of a run is not recorded.");
+    expect(panel).toHaveTextContent(
+      "Without a task: AI requests that are not linked to a task, for example runs without a selected Goal. Completed tasks do not count them.",
+    );
   });
 });
 

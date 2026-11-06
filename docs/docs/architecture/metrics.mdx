@@ -120,14 +120,30 @@ the request. `--since` is an inclusive bound and `--until` is an exclusive
 bound.
 
 The report has `total`, `agents[]`, `images[]` and `workflows[]`. Each slice
-has two blocks:
+has three blocks:
 
 - `usage`: the iterations, tokens and cost of the AI requests with `ts` in the
   period. Each iteration goes to the exact agent, image version and workflow
   version of that iteration.
+- `usage_without_task`: the part of `usage` whose requests have no task.
+  A request without a task has a `task_id` that is `NULL` or empty. Such a
+  request comes from an iteration without a selected Goal, or from an
+  iteration before it ran `scripts/goal.sh set`. These requests go to the
+  workflow slice `none`. The filters limit this block the same way as `usage`.
+  A period without such requests gives zeros, not `null`.
 - `tasks`: the aggregates of the tasks with `status = done` and
   `completed_at` in the period. The iterations, tokens and cost in this
   block are for the whole life of each task, not only for the period.
+
+In `usage_without_task`, the tokens and `cost_usd` are an exact part of
+`usage`, and `cost_usd` is never more than `usage.cost_usd`. `iterations`
+counts the iterations with at least one request without a task. An
+iteration that selected its Goal after its first requests counts in both
+`usage.iterations` and `usage_without_task.iterations`. So you cannot
+subtract `usage_without_task.iterations` from `usage.iterations` to get the
+iterations with a task. The `tasks` block does not include requests without a
+task. `tariboy metrics server` shows `usage_without_task.cost_usd` in the
+column `NO_TASK_COST_USD`, after `COST_USD`.
 
 | `tasks` field | Unit | Definition |
 | --- | --- | --- |
