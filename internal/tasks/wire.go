@@ -29,7 +29,7 @@ import (
 //	http:"-"         the key is not an HTTP argument
 //
 // Field types are string, *string (omitted versus empty), int, int64, bool,
-// *bool, and []string (comma-separated in a flag); another type panics when
+// *bool, *float64, and []string (comma-separated in a flag); another type panics when
 // the fields are first read. A request with a Validate method checks its
 // cross-field rules on the command line.
 type Spec struct {
@@ -114,6 +114,7 @@ const (
 	KindBool
 	KindOptBool
 	KindStrings
+	KindOptFloat
 )
 
 // Field is one request field as its tags describe it.
@@ -152,7 +153,7 @@ var fieldKinds = map[reflect.Type]FieldKind{
 	reflect.TypeOf(""): KindString, reflect.TypeOf((*string)(nil)): KindOptString,
 	reflect.TypeOf(0): KindInt, reflect.TypeOf(int64(0)): KindInt64,
 	reflect.TypeOf(false): KindBool, reflect.TypeOf((*bool)(nil)): KindOptBool,
-	reflect.TypeOf([]string(nil)): KindStrings,
+	reflect.TypeOf([]string(nil)): KindStrings, reflect.TypeOf((*float64)(nil)): KindOptFloat,
 }
 
 func readField(sf reflect.StructField, index int) Field {
@@ -239,6 +240,12 @@ func (f Field) Set(request any, text, name string) error {
 		}
 	case KindStrings:
 		v.Set(reflect.ValueOf(splitList(text)))
+	case KindOptFloat:
+		n, err := strconv.ParseFloat(strings.TrimSpace(text), 64)
+		if err != nil {
+			return fmt.Errorf("%s must be a number, got %q", name, text)
+		}
+		v.Set(reflect.ValueOf(&n))
 	}
 	return nil
 }
@@ -269,7 +276,7 @@ func Payload(request any) map[string]any {
 			continue
 		}
 		switch f.Kind {
-		case KindOptString, KindOptBool:
+		case KindOptString, KindOptBool, KindOptFloat:
 			out[f.Name] = v.Elem().Interface()
 		case KindStrings:
 			out[f.Name] = strings.Join(v.Interface().([]string), ",")
@@ -312,6 +319,10 @@ func Decode(body map[string]any, request any) {
 			}
 		case KindStrings:
 			v.Set(reflect.ValueOf(listValue(raw)))
+		case KindOptFloat:
+			if n, ok := floatValue(raw); ok {
+				v.Set(reflect.ValueOf(&n))
+			}
 		}
 	}
 }
@@ -362,6 +373,22 @@ func wholeNumber(raw any) (int64, bool) {
 		return int64(n), true
 	case string:
 		parsed, err := strconv.ParseInt(strings.TrimSpace(n), 10, 64)
+		return parsed, err == nil
+	}
+	return 0, false
+}
+
+// floatValue reads a JSON number or its text; the service validates the range.
+func floatValue(raw any) (float64, bool) {
+	switch n := raw.(type) {
+	case float64:
+		return n, true
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case string:
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(n), 64)
 		return parsed, err == nil
 	}
 	return 0, false

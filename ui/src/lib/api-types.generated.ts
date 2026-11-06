@@ -2652,6 +2652,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/tasks/{key}/budget": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Show the AI spending limit of a task and what its subtree spent */
+    get: operations["tasks.budget"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/tasks/{key}/cancel": {
     parameters: {
       query?: never;
@@ -4714,6 +4731,8 @@ export interface components {
       assignee: string;
       author: string;
       blocked: boolean;
+      /** @description The AI spending limit in USD for the task and its subtree; 0 means no limit */
+      budget_usd: number;
       /** @enum {string} */
       category: "open" | "in_progress" | "wait_customer" | "done" | "cancelled";
       completed_at: string;
@@ -4810,6 +4829,15 @@ export interface components {
     TaskArtifactList: {
       artifacts: components["schemas"]["Artifact"][];
       count: number;
+    };
+    TaskBudget: {
+      /** @description The limit in USD; 0 means no limit */
+      budget_usd: number;
+      /** @description True when the limit is set and the spending reached it */
+      exhausted: boolean;
+      key: string;
+      /** @description The AI spending of the task and its subtree in USD */
+      spent_usd: number;
     };
     TaskCommentList: {
       comments: components["schemas"]["Comment"][];
@@ -5527,6 +5555,7 @@ export type TaskAgentPoolDeleted = components["schemas"]["TaskAgentPoolDeleted"]
 export type TaskAgentPoolList = components["schemas"]["TaskAgentPoolList"];
 export type TaskArtifactHistory = components["schemas"]["TaskArtifactHistory"];
 export type TaskArtifactList = components["schemas"]["TaskArtifactList"];
+export type TaskBudget = components["schemas"]["TaskBudget"];
 export type TaskCommentList = components["schemas"]["TaskCommentList"];
 export type TaskDetail = components["schemas"]["TaskDetail"];
 export type TaskEventList = components["schemas"]["TaskEventList"];
@@ -14586,6 +14615,7 @@ export interface operations {
         "application/json": {
           /** @description Task assignee */
           assignee?: string;
+          budget_usd?: number;
           /** @description Task description */
           description?: string;
           /** @description Manual block reason */
@@ -14801,6 +14831,48 @@ export interface operations {
           "application/json": {
             ok: boolean;
             result: components["schemas"]["Artifact"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "tasks.budget": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        key: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["TaskBudget"];
           };
         };
       };

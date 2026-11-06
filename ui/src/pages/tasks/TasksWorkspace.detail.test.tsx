@@ -22,6 +22,7 @@ const api = vi.hoisted(() => ({
   deleteTaskRelation: vi.fn(),
   advanceTask: vi.fn(),
   getTask: vi.fn(),
+  getTaskBudget: vi.fn(),
   getTaskWorkflow: vi.fn(),
   getQueueWorkflow: vi.fn(),
   listAgentPools: vi.fn(),
@@ -52,6 +53,7 @@ const hostArgument = vi.hoisted((): Record<string, number> => ({
   deleteTaskRelation: 3,
   advanceTask: 4,
   getTask: 1,
+  getTaskBudget: 1,
   getTaskWorkflow: 1,
   getQueueWorkflow: 1,
   listAgentPools: 1,
@@ -107,6 +109,9 @@ beforeEach(() => {
   setActiveDaemon(null);
   daemonContext.activeId = "";
   taskSocket.options = undefined;
+  api.getTaskBudget.mockImplementation((key: string) =>
+    Promise.resolve({ key, budget_usd: 0, spent_usd: 0, exhausted: false }),
+  );
   mockWorkspaceDefaults(api);
 });
 

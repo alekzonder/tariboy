@@ -12,6 +12,7 @@ import { customerView, workflowTask } from "@/test/fixtures/workflowFixtures";
 const api = vi.hoisted(() => ({
   addTaskComment: vi.fn(),
   getTask: vi.fn(),
+  getTaskBudget: vi.fn(),
   getTaskWorkflow: vi.fn(),
   listTaskEvents: vi.fn(),
   listTaskPrincipals: vi.fn(),
@@ -70,6 +71,7 @@ const task: Task = {
   assignee: "agent:worker",
   manual_block_reason: "",
   blocked: false,
+  budget_usd: 0,
   revision: 2,
   created_at: "2026-07-31T10:00:00Z",
   updated_at: "2026-07-31T10:00:00Z",
@@ -189,6 +191,12 @@ beforeEach(() => {
     revision: 3,
   });
   api.addTaskComment.mockResolvedValue({ comment: null, created_waits: [], resolved_waits: [] });
+  api.getTaskBudget.mockResolvedValue({
+    key: "TEST-1",
+    budget_usd: 0,
+    spent_usd: 0,
+    exhausted: false,
+  });
 });
 
 it("loads the task it was given and closes without touching the tasks list", async () => {
@@ -211,6 +219,38 @@ it("saves task edits from the drawer itself", async () => {
       expect.objectContaining({ revision: 2, status: "in_progress" }),
     ),
   );
+});
+
+it("shows the task budget and saves a new limit", async () => {
+  api.getTaskBudget.mockResolvedValue({
+    key: "TEST-1",
+    budget_usd: 2,
+    spent_usd: 2.5,
+    exhausted: true,
+  });
+  render(<TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />);
+  await screen.findByText("Ship the drawer");
+  expect(await screen.findByText("Spent $2.50 of $2.00 · exhausted")).toBeInTheDocument();
+  expect(api.getTaskBudget).toHaveBeenCalledWith("TEST-1", expect.any(AbortSignal));
+  const field = screen.getByLabelText("Budget, USD");
+  await userEvent.clear(field);
+  await userEvent.type(field, "5");
+  await userEvent.click(screen.getByRole("button", { name: "Save task" }));
+  await waitFor(() =>
+    expect(api.updateTask).toHaveBeenCalledWith(
+      "TEST-1",
+      expect.objectContaining({ revision: 2, budget_usd: 5 }),
+    ),
+  );
+});
+
+it("does not send the budget when only another field changed", async () => {
+  render(<TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />);
+  await screen.findByText("Ship the drawer");
+  await userEvent.selectOptions(screen.getByLabelText("Status"), "in_progress");
+  await userEvent.click(screen.getByRole("button", { name: "Save task" }));
+  await waitFor(() => expect(api.updateTask).toHaveBeenCalled());
+  expect(api.updateTask.mock.calls[0][1].budget_usd).toBeUndefined();
 });
 
 it("posts a comment and reloads the task", async () => {

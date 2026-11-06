@@ -108,17 +108,25 @@ func (s *TaskService) UpdateTask(ctx context.Context, actor Actor, key string, i
 	if err := updateTaskWorkflowGuardTx(ctx, tx, task, &in); err != nil {
 		return Task{}, err
 	}
+	if err := guardBudgetInput(actor, task, in); err != nil {
+		return Task{}, err
+	}
 	if in.Revision <= 0 || in.Revision != task.Revision {
 		return Task{}, &Error{Status: http.StatusConflict, Code: "revision_conflict",
 			Msg: "task was changed by another actor", Data: map[string]any{
 				"current_revision": task.Revision, "current": task,
 			}}
 	}
-	previousAssignee, previousStatus := task.Assignee, task.Status
+	previousAssignee, previousStatus, previousBudget := task.Assignee, task.Status, task.BudgetUSD
 	if err := updateTaskFieldsTx(ctx, tx, &task, in); err != nil {
 		return Task{}, err
 	}
 	now := s.now()
+	if task.BudgetUSD != previousBudget {
+		if err := liftBudgetBlocksTx(ctx, tx, &task, actor, now); err != nil {
+			return Task{}, err
+		}
+	}
 	task.Revision++
 	task.UpdatedAt = now
 	// A workflow task's completion time belongs to the workflow and is kept.
@@ -136,10 +144,10 @@ func (s *TaskService) UpdateTask(ctx context.Context, actor Actor, key string, i
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE tasks
 		SET title = ?, description = ?, status = ?, pull_request = ?, assignee = ?, priority = ?,
-		    manual_block_reason = ?, revision = ?, updated_at = ?, completed_at = ?
+		    manual_block_reason = ?, budget_usd = ?, revision = ?, updated_at = ?, completed_at = ?
 		WHERE id = ?`,
 		task.Title, task.Description, task.Status, task.PullRequest, task.Assignee, task.Priority,
-		task.ManualBlockReason, task.Revision, now, task.CompletedAt, task.ID); err != nil {
+		task.ManualBlockReason, task.BudgetUSD, task.Revision, now, task.CompletedAt, task.ID); err != nil {
 		return Task{}, err
 	}
 	sequence, err := appendEventTx(ctx, tx, task, "task.updated", actor,
@@ -209,6 +217,9 @@ func updateTaskFieldsTx(ctx context.Context, tx *sql.Tx, task *Task, in UpdateTa
 	}
 	if in.ManualBlockReason != nil {
 		task.ManualBlockReason = strings.TrimSpace(*in.ManualBlockReason)
+	}
+	if in.BudgetUSD != nil {
+		task.BudgetUSD = *in.BudgetUSD
 	}
 	if in.Priority != nil {
 		priority, err := NormalizePriority(*in.Priority)

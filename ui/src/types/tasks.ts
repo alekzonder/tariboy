@@ -7,6 +7,7 @@ export type {
   Queue,
   Relation,
   Task,
+  TaskBudget,
   TaskDetail,
   TaskPage,
   TaskParent,
@@ -85,6 +86,7 @@ export interface UpdateTaskInput {
   assignee?: string;
   manual_block_reason?: string;
   priority?: TaskPriority;
+  budget_usd?: number;
   revision: number;
 }
 

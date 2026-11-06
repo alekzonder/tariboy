@@ -51,6 +51,7 @@ export const root: Task = {
   assignee: "agent:worker",
   manual_block_reason: "",
   blocked: false,
+  budget_usd: 0,
   revision: 2,
   created_at: "2026-07-31T10:00:00Z",
   updated_at: "2026-07-31T10:00:00Z",

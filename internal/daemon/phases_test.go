@@ -197,7 +197,7 @@ func TestBuildProxyDoesNotListen(t *testing.T) {
 	t.Parallel()
 	o := phaseOptions(t)
 	proc, c, _ := phaseCore(t, o)
-	px, err := buildProxy(context.Background(), o, proc, c)
+	px, err := buildProxy(context.Background(), o, proc, c, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +217,7 @@ func TestBuildManagerWiresRegistryContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	px, err := buildProxy(context.Background(), o, proc, c)
+	px, err := buildProxy(context.Background(), o, proc, c, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +240,7 @@ func TestBuildManagerWiresMailDeadlines(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	px, err := buildProxy(context.Background(), o, proc, c)
+	px, err := buildProxy(context.Background(), o, proc, c, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func TestStartWorkersShutdownWaitsForWorkers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	px, err := buildProxy(context.Background(), o, proc, c)
+	px, err := buildProxy(context.Background(), o, proc, c, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

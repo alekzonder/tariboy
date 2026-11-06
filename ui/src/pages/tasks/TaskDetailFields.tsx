@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from "react";
+import { useId, type Dispatch, type SetStateAction } from "react";
 import type { PrincipalInfo, Task, TaskStatus, TaskPriority } from "@/types";
 import { isWorkflowTask } from "@/lib/tasks";
 import { Input } from "@/components/ui/input";
@@ -6,7 +6,9 @@ import { SendFilesButton } from "@/components/SendFilesButton";
 import { cn } from "@/lib/utils";
 import { MarkdownEditor, MarkdownModeSegment, type MarkdownMode } from "./TaskMarkdown";
 import { SelectField } from "./TaskDetailControls";
-import { FIELD, FIELD_MONO, LABEL, QUIET_ACTION } from "./panelStyles";
+import { useTaskBudget } from "@/hooks/useTaskBudget";
+import { fmtMoney } from "@/lib/metricsFormat";
+import { COUNT, FIELD, FIELD_MONO, LABEL, QUIET_ACTION } from "./panelStyles";
 import WorkflowAssignee from "./WorkflowAssignee";
 import type { TaskDetailProps } from "./TaskDetailTypes";
 import type { useTaskDetailDraft } from "./useTaskDetailDraft";
@@ -154,8 +156,52 @@ export function TaskDetailProperties({
             onChange={(event) => setBlockReason(event.target.value)}
           />
         </label>
+        <TaskBudgetField task={task} value={draft.budget} onChange={draft.setBudget} />
       </div>
     </fieldset>
+  );
+}
+
+/** The customer's AI spending limit for the task and its subtree, with what
+ *  they spent so far. An empty field means no limit. */
+function TaskBudgetField({
+  task,
+  value,
+  onChange,
+}: {
+  task: Task;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const budget = useTaskBudget(task);
+  const spentId = useId();
+  return (
+    <div className="flex min-w-0 flex-col gap-1.25">
+      <label className="flex min-w-0 flex-col gap-1.25">
+        <span className={LABEL}>Budget, USD</span>
+        <Input
+          className={cn(FIELD, FIELD_MONO)}
+          type="number"
+          min={0}
+          step="0.01"
+          inputMode="decimal"
+          placeholder="No limit"
+          aria-describedby={budget ? spentId : undefined}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </label>
+      {budget && (
+        <span
+          id={spentId}
+          className={cn(COUNT, budget.exhausted && "text-status-failed opacity-100")}
+        >
+          Spent {fmtMoney(budget.spent_usd)}
+          {budget.budget_usd > 0 && ` of ${fmtMoney(budget.budget_usd)}`}
+          {budget.exhausted && " · exhausted"}
+        </span>
+      )}
+    </div>
   );
 }
 

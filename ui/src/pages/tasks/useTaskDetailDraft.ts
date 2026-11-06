@@ -3,6 +3,9 @@ import { taskPriority, type Task, type TaskStatus, type TaskPriority } from "@/l
 import { isWorkflowTask } from "@/lib/tasks";
 import type { TaskDetailProps } from "./TaskDetailTypes";
 
+/** The limit as the field shows it: empty for no limit. */
+const budgetText = (task: Task) => (task.budget_usd ? String(task.budget_usd) : "");
+
 export function useTaskDetailDraft(task: Task, onSave: TaskDetailProps["onSave"]) {
   const workflow = isWorkflowTask(task);
   const [baseline, setBaseline] = useState(task);
@@ -13,8 +16,11 @@ export function useTaskDetailDraft(task: Task, onSave: TaskDetailProps["onSave"]
   const [priority, setPriority] = useState<TaskPriority>(taskPriority(task));
   const [assignee, setAssignee] = useState(task.assignee);
   const [blockReason, setBlockReason] = useState(task.manual_block_reason);
+  const [budget, setBudget] = useState(budgetText(task));
   const [saving, setSaving] = useState(false);
+  const budgetChanged = budget !== budgetText(baseline);
   const dirty =
+    budgetChanged ||
     title !== baseline.title ||
     description !== baseline.description ||
     status !== baseline.category ||
@@ -31,6 +37,7 @@ export function useTaskDetailDraft(task: Task, onSave: TaskDetailProps["onSave"]
     setPriority(taskPriority(next));
     setAssignee(next.assignee);
     setBlockReason(next.manual_block_reason);
+    setBudget(budgetText(next));
   };
   // Refresh pristine forms; keep the revision that an unsaved draft was based on.
   if (baseline !== task && !dirty && !saving) adopt(task);
@@ -46,6 +53,7 @@ export function useTaskDetailDraft(task: Task, onSave: TaskDetailProps["onSave"]
       assignee: assignee !== baseline.assignee ? assignee : task.assignee,
       manual_block_reason:
         blockReason !== baseline.manual_block_reason ? blockReason : task.manual_block_reason,
+      budget_usd: budgetChanged ? Number(budget) || 0 : task.budget_usd,
     };
     adopt(merged);
     setBaseline(task);
@@ -64,6 +72,8 @@ export function useTaskDetailDraft(task: Task, onSave: TaskDetailProps["onSave"]
         // The workflow assigns its task: Save never sends an assignee for it.
         assignee: workflow ? undefined : assignee.trim(),
         manual_block_reason: blockReason,
+        // Sent only when changed: a new limit can lift budget blocks.
+        budget_usd: budgetChanged ? Number(budget) || 0 : undefined,
       });
       adopt(updated);
     } catch {
@@ -89,6 +99,8 @@ export function useTaskDetailDraft(task: Task, onSave: TaskDetailProps["onSave"]
     setAssignee,
     blockReason,
     setBlockReason,
+    budget,
+    setBudget,
     dirty,
     saving,
     adopt,

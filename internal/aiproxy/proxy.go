@@ -72,6 +72,11 @@ type Config struct {
 	Audit  func(agent, kind, dataJSON string)      // Task 9
 	Budget *BudgetCache                            // Task 8
 	Client *http.Client                            // Task 6 (nil = default)
+	// TaskBudget returns the key of the task whose spent limit refuses a
+	// request of the task key. TaskBudgetExhausted is told of each refusal;
+	// it must return at once. Both are optional.
+	TaskBudget          func(taskKey string) (limitKey string, over bool, err error)
+	TaskBudgetExhausted func(taskKey string)
 }
 
 type Proxy struct {
@@ -116,6 +121,9 @@ func (p *Proxy) middlewares() []Middleware {
 	if p.cfg.Budget != nil {
 		mws = append(mws, p.budget)
 	}
+	if p.cfg.TaskBudget != nil {
+		mws = append(mws, p.taskBudget)
+	}
 	return mws
 }
 
@@ -158,14 +166,7 @@ func (p *Proxy) budget(next Handler) Handler {
 			if len(d.Exhausted) > 0 {
 				message += ": " + strings.Join(d.Exhausted, ", ")
 			}
-			if Provider(ex.Provider).spec().connectErrors {
-				// The cursor agent CLI is a Connect client: 429 maps to
-				// resource_exhausted in the Connect error JSON.
-				writeJSONError(ex.W, http.StatusTooManyRequests,
-					connectError{Code: "resource_exhausted", Message: message})
-				return nil
-			}
-			writeJSONError(ex.W, http.StatusTooManyRequests, anthropicError("rate_limit_error", message))
+			writeBudgetBlock(ex, message)
 			return nil
 		}
 		// warn: emit once, keep serving.
@@ -174,6 +175,48 @@ func (p *Proxy) budget(next Handler) Handler {
 		}
 		return next(ex)
 	}
+}
+
+// taskBudget refuses a request of a task under an exhausted task budget. A
+// failed check lets the request through: a database fault never stops work.
+func (p *Proxy) taskBudget(next Handler) Handler {
+	return func(ex *Exchange) error {
+		if ex.Attr.TaskID == "" {
+			return next(ex)
+		}
+		limitKey, over, err := p.cfg.TaskBudget(ex.Attr.TaskID)
+		if err != nil {
+			p.cfg.Log.Warn("task budget check failed", "task", ex.Attr.TaskID, "err", err)
+			return next(ex)
+		}
+		if !over {
+			return next(ex)
+		}
+		ex.Status = "budget_block"
+		if p.cfg.Audit != nil {
+			p.cfg.Audit(ex.Attr.Agent, "budget_block", string(marshalJSON(struct {
+				Scope string `json:"scope"`
+			}{"task:" + limitKey})))
+		}
+		writeBudgetBlock(ex, "budget exceeded: task "+limitKey)
+		if p.cfg.TaskBudgetExhausted != nil {
+			p.cfg.TaskBudgetExhausted(ex.Attr.TaskID)
+		}
+		return nil
+	}
+}
+
+// writeBudgetBlock answers a refused request with a 429 in the client's error
+// format.
+func writeBudgetBlock(ex *Exchange, message string) {
+	if Provider(ex.Provider).spec().connectErrors {
+		// The cursor agent CLI is a Connect client: 429 maps to
+		// resource_exhausted in the Connect error JSON.
+		writeJSONError(ex.W, http.StatusTooManyRequests,
+			connectError{Code: "resource_exhausted", Message: message})
+		return
+	}
+	writeJSONError(ex.W, http.StatusTooManyRequests, anthropicError("rate_limit_error", message))
 }
 
 // record runs outermost: after the chain unwinds it writes the transcript

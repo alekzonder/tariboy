@@ -18,7 +18,7 @@ const taskColumns = `
 SELECT t.id, t.task_key, t.queue_prefix, COALESCE(p.task_key, ''),
        t.position, t.priority, t.title, t.description, t.status, t.pull_request, t.author, t.customer,
        t.group_name, t.assignee, t.manual_block_reason,
-       t.open_blockers > 0 OR t.manual_block_reason <> '',
+       t.open_blockers > 0 OR t.manual_block_reason <> '', t.budget_usd,
        t.revision, t.created_at, t.started_at, t.updated_at, t.completed_at,` + TaskWorkflowColumns
 
 const taskFrom = `
@@ -42,7 +42,7 @@ func scanTask(row rowScanner, extra ...any) (Task, error) {
 	dest := []any{
 		&t.ID, &t.Key, &t.Queue, &t.ParentKey,
 		&t.Position, &t.Priority, &t.Title, &t.Description, &t.Status, &t.PullRequest, &t.Author, &t.Customer,
-		&t.Group, &t.Assignee, &t.ManualBlockReason, &blocked,
+		&t.Group, &t.Assignee, &t.ManualBlockReason, &blocked, &t.BudgetUSD,
 		&t.Revision, &t.CreatedAt, &t.StartedAt, &t.UpdatedAt, &t.CompletedAt,
 	}
 	err := row.Scan(append(append(dest, workflow...), extra...)...)

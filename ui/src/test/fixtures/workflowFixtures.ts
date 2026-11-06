@@ -31,6 +31,7 @@ export const workflowTask: Task = {
   assignee: "agent:writer",
   manual_block_reason: "",
   blocked: false,
+  budget_usd: 0,
   revision: 4,
   created_at: "2026-10-01T10:00:00Z",
   updated_at: "2026-10-01T10:00:00Z",

@@ -1457,7 +1457,7 @@ be turned off. `unavailable_grace: 0` is allowed and pauses at once.
 ## Pauses
 
 A pause stops a task that is stalled and asks the customer what to do. The
-daemon pauses a task for exactly four reasons, the `reason` of the pause.
+daemon pauses a task for exactly five reasons, the `reason` of the pause.
 
 | Reason | When it fires |
 | --- | --- |
@@ -1465,6 +1465,7 @@ daemon pauses a task for exactly four reasons, the `reason` of the pause.
 | `rejected_requests` | A check rejected `rejected_requests` requests in the visit. Every rejection counts; a failed request in between does not reset the count. The detail is the last script message. |
 | `script_failures` | Checks or watches failed `script_failures` times in a row in the visit, including a check interrupted by a daemon restart, an undeclared outcome, or an invalid artifact. The detail is the failure message and the log path. |
 | `holder_unavailable` | The holder of a pool status cannot work (it is disabled, its loop is off, it is halted, it left the pool, or it was deleted) and has been unable for `unavailable_grace`. The daemon notes when it first saw the holder unavailable and checks after every dispatch pass (on each task change and every minute). The mark clears when the holder can work again or the task is dispatched anew. |
+| `budget_exhausted` | The AI proxy refused a request of the task because the task or one of its parents spent its [task budget](/docs/tasks#task-budget). The detail names the task with the limit, the spending and the limit. A resume fails with `budget_exhausted` while the limit is still spent: raise the limit or set `0` first. |
 
 A task that is already paused, or closed, is not paused again.
 

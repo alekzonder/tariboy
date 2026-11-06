@@ -162,6 +162,7 @@ type Task struct {
 	Assignee          string   `json:"assignee"`
 	ManualBlockReason string   `json:"manual_block_reason"`
 	Blocked           bool     `json:"blocked"`
+	BudgetUSD         float64  `json:"budget_usd" jsonschema:"description=The AI spending limit in USD for the task and its subtree; 0 means no limit"`
 	Revision          int64    `json:"revision"`
 	CreatedAt         string   `json:"created_at"`
 	StartedAt         string   `json:"started_at"`
@@ -426,6 +427,7 @@ type UpdateTaskInput struct {
 	Assignee          *string   `json:"assignee"`
 	ManualBlockReason *string   `json:"manual_block_reason"`
 	Priority          *Priority `json:"priority"`
+	BudgetUSD         *float64  `json:"budget_usd"`
 	Revision          int64     `json:"revision"`
 }
 

@@ -20,6 +20,7 @@ export const taskItem = (over: Partial<Task> = {}): Task => ({
   assignee: "agent:bob",
   manual_block_reason: "",
   blocked: false,
+  budget_usd: 0,
   revision: 1,
   created_at: hoursAgo(26),
   updated_at: hoursAgo(26),

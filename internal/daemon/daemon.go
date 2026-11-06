@@ -206,7 +206,7 @@ func Run(ctx context.Context, o Options) error {
 	if err != nil {
 		return err
 	}
-	px, err := buildProxy(ctx, o, proc, c)
+	px, err := buildProxy(ctx, o, proc, c, tk.service)
 	if err != nil {
 		return err
 	}

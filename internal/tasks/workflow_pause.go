@@ -43,6 +43,8 @@ func pauseReasonText(reason string) string {
 		return "scripts failed too many times in a row in this status"
 	case PauseHolderUnavailable:
 		return "the holder cannot work on the task (disabled, halted, out of the pool, or deleted) and the grace period ran out"
+	case PauseBudgetExhausted:
+		return "the AI spending of the task reached a task budget, and the AI proxy refuses its requests; raise or remove the limit with `ttasks update KEY --budget-usd AMOUNT` before you resume"
 	default:
 		return reason
 	}
@@ -176,7 +178,7 @@ func (s *WorkflowEngine) ResumeWorkflow(ctx context.Context, actor Actor, key, d
 	if err != nil {
 		return Task{}, err
 	}
-	status, pool, err := resumeDecisionStatus(task, manifest, decision)
+	status, pool, err := resumeDecisionStatusTx(ctx, tx, task, manifest, decision)
 	if err != nil {
 		return Task{}, err
 	}
@@ -246,6 +248,21 @@ func (s *WorkflowEngine) ResumeWorkflow(ctx context.Context, actor Actor, key, d
 	s.signal()
 	resumed.Access = "write"
 	return resumed, nil
+}
+
+// resumeDecisionStatusTx is resumeDecisionStatus that also refuses a resume
+// while a task budget of the task or a parent is spent.
+func resumeDecisionStatusTx(ctx context.Context, tx *sql.Tx, task Task, manifest workflowimage.Manifest, decision string) (workflowfile.Status, bool, error) {
+	status, pool, err := resumeDecisionStatus(task, manifest, decision)
+	if err != nil {
+		return status, pool, err
+	}
+	block, over, err := exhaustedBudget(ctx, tx, task.Key)
+	if err == nil && over {
+		err = newError(http.StatusConflict, "budget_exhausted",
+			block.text()+"; raise or remove the limit of task "+block.Key+" before you resume")
+	}
+	return status, pool, err
 }
 
 // resumeDecisionStatus returns the current status of paused task and whether

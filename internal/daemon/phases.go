@@ -335,7 +335,7 @@ type proxyParts struct {
 // Pricing and the router are read once here from the "proxy" daemon-config
 // key and env. A runtime `daemon config set proxy '<json>'` is therefore
 // picked up on the next daemon start, not hot-reloaded.
-func buildProxy(ctx context.Context, o Options, proc *process, c *coreParts) (*proxyParts, error) {
+func buildProxy(ctx context.Context, o Options, proc *process, c *coreParts, taskService *tasks.Service) (*proxyParts, error) {
 	log, p, st := proc.log, proc.paths, c.st
 	if err := aiproxy.SeedDefaults(st); err != nil {
 		return nil, fmt.Errorf("seed pricing: %w", err)
@@ -378,7 +378,7 @@ func buildProxy(ctx context.Context, o Options, proc *process, c *coreParts) (*p
 	if err != nil {
 		return nil, err
 	}
-	proxy := aiproxy.New(aiproxy.Config{
+	cfg := aiproxy.Config{
 		Tokens: proxyTokens, Pricing: pricing, Store: aiStore, Router: router,
 		AgentsDir: p.AgentsDir(), Clock: time.Now, Log: log,
 		Ingest:        ingester.Enqueue,
@@ -409,7 +409,12 @@ func buildProxy(ctx context.Context, o Options, proc *process, c *coreParts) (*p
 			c.rec.Record(agent, "budget_warn", fmt.Sprintf(`{"scope":%q,"spent_usd":%g}`, d.Scope, d.SpentUSD))
 		},
 		Audit: c.rec.Record,
-	})
+	}
+	if taskService != nil {
+		hooks := newTaskBudgetHooks(taskService, log)
+		cfg.TaskBudget, cfg.TaskBudgetExhausted = hooks.check, hooks.exhausted
+	}
+	proxy := aiproxy.New(cfg)
 	return &proxyParts{
 		proxy: proxy, tokens: proxyTokens, catalog: pricingCatalog,
 		aiStore: aiStore, ingester: ingester, budget: budgetCache,
