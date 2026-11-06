@@ -1,6 +1,6 @@
 // Package selfupdate implements `tariboy update`: it downloads a published
 // server release from GitHub and installs it with the same fixed installer
-// script the desktop app uploads, so both paths share one activation contract.
+// script the desktop app runs, so both paths share one activation contract.
 package selfupdate
 
 import (

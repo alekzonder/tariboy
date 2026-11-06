@@ -32,7 +32,7 @@ REMOTE_PLATFORM="$(ssh "$TARIBOY_SSH_TEST_HOST" 'printf "%s/%s" "$(uname -s)" "$
 
 VERSION="$(sed -n 's/^const Version = "\(.*\)"$/\1/p; s/^var Version = "\(.*\)"$/\1/p' internal/version/version.go)"
 [ -n "$VERSION" ] || fail "cannot read product version"
-make desktop-binaries
+make desktop-binaries server-archives
 
 STAMP="$(date +%s)-$$"
 REMOTE_ROOT="/tmp/tariboy-product-alpha-$STAMP"
@@ -137,28 +137,19 @@ REMOTE_CLEANUP
 trap cleanup EXIT
 trap 'exit 130' HUP INT TERM
 
-for name in tariboyd tariboy tariboy-tasks tariboy-mail tariboy-scripts tariboy-shim tariboy-plugin-telegram; do
-  [ -f "desktop/src-tauri/resources/bin/linux-x86_64/$name" ] ||
-    fail "missing packaged Linux binary: $name"
-done
-for name in SHA256SUMS VERSION remote-install.sh; do
-  [ -f "desktop/src-tauri/resources/bin/linux-x86_64/$name" ] ||
-    fail "missing packaged Linux metadata: $name"
-done
+# The server archive from `make server-archives`, the payload a release publishes.
+SERVER_ARCHIVE="tariboy_${VERSION}_linux-x86_64.tar.gz"
+[ -f "dist/server-archives/$VERSION/$SERVER_ARCHIVE" ] ||
+  fail "missing server archive: dist/server-archives/$VERSION/$SERVER_ARCHIVE"
 
 echo "--- provision version-matched Linux binaries"
 ssh "$TARIBOY_SSH_TEST_HOST" mkdir -p "$REMOTE_STAGE"
-scp desktop/src-tauri/resources/bin/linux-x86_64/tariboyd \
-  desktop/src-tauri/resources/bin/linux-x86_64/tariboy \
-  desktop/src-tauri/resources/bin/linux-x86_64/tariboy-tasks \
-  desktop/src-tauri/resources/bin/linux-x86_64/tariboy-mail \
-  desktop/src-tauri/resources/bin/linux-x86_64/tariboy-scripts \
-  desktop/src-tauri/resources/bin/linux-x86_64/tariboy-shim \
-  desktop/src-tauri/resources/bin/linux-x86_64/tariboy-plugin-telegram \
-  desktop/src-tauri/resources/bin/linux-x86_64/SHA256SUMS \
-  desktop/src-tauri/resources/bin/linux-x86_64/VERSION \
-  desktop/src-tauri/resources/bin/linux-x86_64/remote-install.sh \
-  "$TARIBOY_SSH_TEST_HOST:$REMOTE_STAGE/"
+scp "dist/server-archives/$VERSION/$SERVER_ARCHIVE" "$TARIBOY_SSH_TEST_HOST:$REMOTE_STAGE/"
+ssh "$TARIBOY_SSH_TEST_HOST" sh -s -- "$REMOTE_STAGE" "$SERVER_ARCHIVE" <<'REMOTE_UNPACK'
+set -eu
+tar -xzf "$1/$2" -C "$1"
+rm -f "$1/$2"
+REMOTE_UNPACK
 
 # This record is intentionally local and non-secret, just like Desktop's native
 # registry. It is removed after the vertical while the remote daemon remains up.

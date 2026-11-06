@@ -46,4 +46,6 @@ desktop/src-tauri/resources/bin/*
 # Locally generated, signed alpha release directories. Publication is a manual
 # reviewed action; DMGs and release checksums are never source-controlled.
 dist/releases/
+# Server archives from `make server-archives`, copied into a release.
+dist/server-archives/
 .DS_Store

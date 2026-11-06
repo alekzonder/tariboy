@@ -45,7 +45,7 @@ endif
 export TARIBOY_VITEST_MAX_WORKERS ?= $(CHECK_JOBS)
 endif
 
-.PHONY: build install uninstall setup check backend-check frontend-check designer-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet staticcheck gocyclo gocyclo-report gocognit gocognit-report e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e tariboy-tasks-e2e smoke full-smoke ui ui-dev ui-fmt-check ui-complexity-report store-ui docs clean up start down attach a desktop desktop-mac desktop-android desktop-binaries desktop-version-check desktop-lock-check desktop-rust-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
+.PHONY: build install uninstall setup check backend-check frontend-check designer-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet staticcheck gocyclo gocyclo-report gocognit gocognit-report e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e tariboy-tasks-e2e smoke full-smoke ui ui-dev ui-fmt-check ui-complexity-report store-ui docs clean up start down attach a desktop desktop-mac desktop-android desktop-binaries server-archives desktop-version-check desktop-lock-check desktop-rust-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
 
 build:
 	$(GO) build -trimpath -o $(BINDIR)/tariboyd ./cmd/tariboyd
@@ -292,10 +292,6 @@ a: attach
 
 DESKTOP     := desktop
 TAURI_DIR   := $(DESKTOP)/src-tauri
-DESKTOP_BIN := $(TAURI_DIR)/resources/bin
-override DESKTOP_DARWIN_BIN := desktop/src-tauri/resources/bin/darwin-arm64
-override DESKTOP_LINUX_BIN := desktop/src-tauri/resources/bin/linux-x86_64
-override DESKTOP_LINUX_ARM64_BIN := desktop/src-tauri/resources/bin/linux-aarch64
 # The single source of truth for the version, read straight out of the Go const.
 VERSION     := $(shell sed -n 's/^const Version = "\(.*\)"$$/\1/p' internal/version/version.go)
 RELEASE_VERSION := $(shell cat scripts/release-version.txt 2>/dev/null)
@@ -308,6 +304,14 @@ HOST_OS     := $(shell uname -s)
 HOST_ARCH   := $(shell uname -m)
 NATIVE_PLATFORM := $(if $(filter Darwin-arm64,$(HOST_OS)-$(HOST_ARCH)),darwin,$(if $(filter Linux-x86_64,$(HOST_OS)-$(HOST_ARCH)),linux,unsupported))
 PLATFORM    ?= $(NATIVE_PLATFORM)
+# The one binary set the native package runs.
+DESKTOP_NATIVE_GOOS   := $(if $(filter darwin,$(NATIVE_PLATFORM)),darwin,linux)
+DESKTOP_NATIVE_GOARCH := $(if $(filter darwin,$(NATIVE_PLATFORM)),arm64,amd64)
+DESKTOP_NATIVE_FORMAT := $(if $(filter darwin,$(NATIVE_PLATFORM)),Mach-O 64-bit.*arm64,ELF 64-bit.*x86-64)
+override DESKTOP_NATIVE_BIN := desktop/src-tauri/resources/bin/$(if $(filter darwin,$(NATIVE_PLATFORM)),darwin-arm64,linux-x86_64)
+# Server archives: platform:GOOS:GOARCH for every SSH server platform.
+SERVER_PLATFORMS := linux-x86_64:linux:amd64 linux-aarch64:linux:arm64 darwin-arm64:darwin:arm64
+SERVER_ARCHIVE_DIR := dist/server-archives/$(VERSION)
 
 # Desktop packaging is native: Tauri's platform bundlers are host tools rather
 # than cross-compilers. Validate the public selector before checking or
@@ -413,59 +417,73 @@ desktop-lock-check:
 		echo "cargo lock ok (crates fetched)"; \
 	fi
 
-# Build every binary set without packaging, useful for tests and remote smoke.
-# The darwin set runs the local daemon; every set is uploaded to SSH servers,
-# picked by the server's `uname -s` and `uname -m`.
+# Build the binary set this host's package runs, without packaging: the
+# darwin-arm64 set in the DMG, the linux-x86_64 set in deb and AppImage. SSH
+# servers download their set from the release (see server-archives), so the
+# package carries no other platform's binaries. Stale sets from older builds
+# are removed so Tauri cannot package them.
 desktop-binaries: desktop-version-check
+	@if [ "$(NATIVE_PLATFORM)" = "unsupported" ]; then \
+		echo "desktop-binaries builds the native set on Darwin-arm64 or Linux-x86_64, found $(HOST_OS)-$(HOST_ARCH)" >&2; \
+		exit 1; \
+	fi
 	rm -rf desktop/src-tauri/resources/bin/darwin-arm64 desktop/src-tauri/resources/bin/linux-x86_64 desktop/src-tauri/resources/bin/linux-aarch64
-	mkdir -p $(DESKTOP_DARWIN_BIN) $(DESKTOP_LINUX_BIN) $(DESKTOP_LINUX_ARM64_BIN)
+	mkdir -p $(DESKTOP_NATIVE_BIN)
 	@for b in $(DESKTOP_BINARIES); do \
-		echo "build darwin/arm64 $$b"; \
-		CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 $(GO) build -trimpath -o $(DESKTOP_DARWIN_BIN)/$$b ./cmd/$$b || exit 1; \
+		echo "build $(DESKTOP_NATIVE_GOOS)/$(DESKTOP_NATIVE_GOARCH) $$b"; \
+		CGO_ENABLED=0 GOOS=$(DESKTOP_NATIVE_GOOS) GOARCH=$(DESKTOP_NATIVE_GOARCH) $(GO) build -trimpath -o $(DESKTOP_NATIVE_BIN)/$$b ./cmd/$$b || exit 1; \
 	done
+	printf '%s\n' "$(VERSION)" > $(DESKTOP_NATIVE_BIN)/VERSION
 	@for b in $(DESKTOP_BINARIES); do \
-		echo "build linux/amd64 $$b"; \
-		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -trimpath -o $(DESKTOP_LINUX_BIN)/$$b ./cmd/$$b || exit 1; \
-	done
-	@for b in $(DESKTOP_BINARIES); do \
-		echo "build linux/arm64 $$b"; \
-		CGO_ENABLED=0 GOOS=linux GOARCH=arm64 $(GO) build -trimpath -o $(DESKTOP_LINUX_ARM64_BIN)/$$b ./cmd/$$b || exit 1; \
-	done
-	@for dir in $(DESKTOP_DARWIN_BIN) $(DESKTOP_LINUX_BIN) $(DESKTOP_LINUX_ARM64_BIN); do \
-		printf '%s\n' "$(VERSION)" > $$dir/VERSION || exit 1; \
-		cp $(TAURI_DIR)/src/remote-install.sh $$dir/remote-install.sh || exit 1; \
-		chmod 0755 $$dir/remote-install.sh || exit 1; \
-		(cd $$dir && shasum -a 256 $(DESKTOP_BINARIES) > SHA256SUMS) || exit 1; \
-	done
-	@case "$$(uname -s)-$$(uname -m)" in \
-		Darwin-arm64) native_dir=$(DESKTOP_DARWIN_BIN) ;; \
-		Linux-x86_64) native_dir=$(DESKTOP_LINUX_BIN) ;; \
-		*) echo "cannot execute a bundled target on this build host" >&2; exit 1 ;; \
-	esac; \
-	for b in $(DESKTOP_BINARIES); do \
-		bundled=$$($$native_dir/$$b --version); \
+		path=$(DESKTOP_NATIVE_BIN)/$$b; \
+		bundled=$$($$path --version); \
 		if [ "$$bundled" != "$(VERSION)" ]; then \
-			echo "bundled $$native_dir/$$b reports $$bundled, expected $(VERSION)" >&2; exit 1; \
+			echo "bundled $$path reports $$bundled, expected $(VERSION)" >&2; exit 1; \
+		fi; \
+		file "$$path" | grep '$(DESKTOP_NATIVE_FORMAT)' >/dev/null || { \
+			echo "$$path has the wrong architecture" >&2; exit 1; \
+		}; \
+		if strings "$$path" | grep -F "0.9.0-dev" >/dev/null; then \
+			echo "$$path still embeds 0.9.0-dev" >&2; exit 1; \
 		fi; \
 	done
-	@for platform in darwin-arm64 linux-x86_64 linux-aarch64; do \
+
+# Build the archives a release publishes for SSH servers, one per server
+# platform, by cross-compiling. The Desktop installer and `tariboy update`
+# download them on the server. Each archive holds the binaries, VERSION,
+# SHA256SUMS and remote-install.sh at its root.
+server-archives: desktop-version-check
+	rm -rf $(SERVER_ARCHIVE_DIR)
+	mkdir -p $(SERVER_ARCHIVE_DIR)
+	@work=$$(mktemp -d "$${TMPDIR:-/tmp}/tariboy-server-archives.XXXXXX") || exit 1; \
+	trap 'rm -rf -- "$$work"' EXIT; \
+	for entry in $(SERVER_PLATFORMS); do \
+		platform=$${entry%%:*}; target=$${entry#*:}; goos=$${target%%:*}; goarch=$${target#*:}; \
 		case "$$platform" in \
 			darwin-arm64) expected_format='Mach-O 64-bit.*arm64' ;; \
 			linux-x86_64) expected_format='ELF 64-bit.*x86-64' ;; \
 			linux-aarch64) expected_format='ELF 64-bit.*ARM aarch64' ;; \
 		esac; \
+		dir=$$work/$$platform; \
+		mkdir "$$dir" || exit 1; \
 		for b in $(DESKTOP_BINARIES); do \
-			path=$(DESKTOP_BIN)/$$platform/$$b; \
-			file "$$path" | grep "$$expected_format" >/dev/null || { \
-				echo "$$path has the wrong architecture" >&2; exit 1; \
+			echo "build $$goos/$$goarch $$b"; \
+			CGO_ENABLED=0 GOOS=$$goos GOARCH=$$goarch $(GO) build -trimpath -o "$$dir/$$b" ./cmd/$$b || exit 1; \
+			file "$$dir/$$b" | grep "$$expected_format" >/dev/null || { \
+				echo "$$platform/$$b has the wrong architecture" >&2; exit 1; \
 			}; \
-			strings "$$path" | grep -F "$(VERSION)" >/dev/null || { \
-				echo "$$path does not embed $(VERSION)" >&2; exit 1; \
+			strings "$$dir/$$b" | grep -F "$(VERSION)" >/dev/null || { \
+				echo "$$platform/$$b does not embed $(VERSION)" >&2; exit 1; \
 			}; \
-			if strings "$$path" | grep -F "0.9.0-dev" >/dev/null; then \
-				echo "$$path still embeds 0.9.0-dev" >&2; exit 1; \
-			fi; \
 		done; \
+		printf '%s\n' "$(VERSION)" > "$$dir/VERSION" || exit 1; \
+		cp $(TAURI_DIR)/src/remote-install.sh "$$dir/remote-install.sh" || exit 1; \
+		chmod 0755 "$$dir/remote-install.sh" || exit 1; \
+		(cd "$$dir" && shasum -a 256 $(DESKTOP_BINARIES) > SHA256SUMS) || exit 1; \
+		archive=$(SERVER_ARCHIVE_DIR)/tariboy_$(VERSION)_$$platform.tar.gz; \
+		COPYFILE_DISABLE=1 tar -czf "$$archive" -C "$$dir" $(DESKTOP_BINARIES) VERSION SHA256SUMS remote-install.sh || exit 1; \
+		chmod 0644 "$$archive" || exit 1; \
+		echo "archive $$archive"; \
 	done
 
 # Build a native production Desktop package. Both platforms always rebuild the

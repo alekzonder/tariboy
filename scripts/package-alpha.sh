@@ -14,8 +14,8 @@ RELEASE_VERSION_FILE="$ROOT/scripts/release-version.txt"
 EXPECTED_VERSION="$(cat "$RELEASE_VERSION_FILE")"
 EXPECTED_NUMERIC_VERSION="${EXPECTED_VERSION%%-*}"
 APP="$ROOT/desktop/src-tauri/target/release/bundle/macos/Tariboy.app"
-BIN_ROOT="$ROOT/desktop/src-tauri/resources/bin"
-SERVER_ARCHES="x86_64 aarch64"
+ARCHIVE_ROOT="$ROOT/dist/server-archives/$VERSION"
+SERVER_PLATFORMS="linux-x86_64 linux-aarch64 darwin-arm64"
 BUILT_DMG="$ROOT/desktop/src-tauri/target/release/bundle/dmg/Tariboy_${NUMERIC_VERSION}_aarch64.dmg"
 RELEASE_ROOT="$ROOT/dist/releases"
 RELEASE_DIR="$RELEASE_ROOT/$VERSION"
@@ -89,19 +89,17 @@ STAGE="$(mktemp -d "$RELEASE_ROOT/.${VERSION}.stage.XXXXXX")"
 ARTIFACT="Tariboy_${VERSION}_aarch64.dmg"
 install -m 0644 "$BUILT_DMG" "$STAGE/$ARTIFACT"
 ARTIFACT_SHA="$(shasum -a 256 "$STAGE/$ARTIFACT" | awk '{print $1}')"
-# The server archives are what `tariboy update` downloads: the same install
-# layout the desktop app uploads over SSH, one per Linux architecture, published
-# so a host can fetch its own.
+# The server archives are what SSH servers download: the Desktop installer on
+# every server platform and `tariboy update` on Linux. One per server platform.
+make -C "$ROOT" server-archives
 SERVER_ARCHIVES=""
-for arch in $SERVER_ARCHES; do
-  payload="$BIN_ROOT/linux-$arch"
-  archive="tariboy_${VERSION}_linux-${arch}.tar.gz"
-  [ -d "$payload" ] || {
-    echo "FAIL: missing bundled Linux payload: $payload" >&2
+for platform in $SERVER_PLATFORMS; do
+  archive="tariboy_${VERSION}_${platform}.tar.gz"
+  [ -f "$ARCHIVE_ROOT/$archive" ] || {
+    echo "FAIL: missing server archive: $ARCHIVE_ROOT/$archive" >&2
     exit 1
   }
-  COPYFILE_DISABLE=1 tar -czf "$STAGE/$archive" -C "$payload" .
-  chmod 0644 "$STAGE/$archive"
+  install -m 0644 "$ARCHIVE_ROOT/$archive" "$STAGE/$archive"
   SERVER_ARCHIVES="$SERVER_ARCHIVES $archive"
 done
 COMMIT="$(git -C "$ROOT" rev-parse HEAD)"

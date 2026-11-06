@@ -63,7 +63,8 @@ git rev-parse HEAD
 make desktop-mac
 ```
 
-The target requires both updater signing variables, builds both binary platforms
+The target requires both updater signing variables, builds the `darwin-arm64`
+binary set of the app, the three server archives (`make server-archives`)
 and the SPA, creates ad-hoc-signed app and DMG bundles plus the Tauri updater
 archive and signature, verifies signatures, and stages the DMG metadata. It fails
 before packaging when either signing variable is missing. Ordinary `make desktop`
@@ -74,17 +75,22 @@ dist/releases/0.109.0/
   Tariboy_0.109.0_aarch64.dmg
   tariboy_0.109.0_linux-x86_64.tar.gz
   tariboy_0.109.0_linux-aarch64.tar.gz
+  tariboy_0.109.0_darwin-arm64.tar.gz
   SHA256SUMS
   release.json
 ```
 
-`tariboy_<version>_linux-x86_64.tar.gz` and
-`tariboy_<version>_linux-aarch64.tar.gz` are the server payloads a Linux host
-of that architecture installs with `tariboy update`. Each is the same install
-layout the desktop app uploads over SSH: the five server binaries, `VERSION`,
-their `SHA256SUMS`, and the fixed `remote-install.sh`. The artifact gate
-extracts each one, checks those entries, their ELF architecture, `VERSION`,
-internal checksums, and that the installer matches the repository copy.
+`tariboy_<version>_linux-x86_64.tar.gz`,
+`tariboy_<version>_linux-aarch64.tar.gz` and
+`tariboy_<version>_darwin-arm64.tar.gz` are the server payloads. An SSH host
+downloads the archive of its platform when the desktop app installs or
+updates it, and a Linux host also downloads it with `tariboy update`. The app
+itself carries no server binaries, so a release without these archives cannot
+install Tariboy on a server. Each archive holds the seven server binaries,
+`VERSION`, their `SHA256SUMS`, and the fixed `remote-install.sh`. The artifact
+gate extracts each one, checks those entries, their architecture, `VERSION`,
+internal checksums, and that the installer matches the repository copy. It
+also makes sure that the app bundles only the `darwin-arm64` set.
 
 DMG creation intentionally uses Tauri's headless-safe mode. It skips Finder
 AppleScript layout automation, so release packaging does not require an
@@ -139,8 +145,9 @@ The release owner and backup reviewer each verify:
 - [ ] commit SHA in `release.json` is the reviewed `main` commit;
 - [ ] artifact gate exits zero on Apple Silicon;
 - [ ] `shasum -a 256 -c SHA256SUMS` exits zero;
-- [ ] the release lists `tariboy_<version>_linux-x86_64.tar.gz` and
-  `tariboy_<version>_linux-aarch64.tar.gz` for `tariboy update`;
+- [ ] the release lists `tariboy_<version>_linux-x86_64.tar.gz`,
+  `tariboy_<version>_linux-aarch64.tar.gz` and
+  `tariboy_<version>_darwin-arm64.tar.gz` for server installs;
 - [ ] release notes and known constraints match the artifact;
 - [ ] support/rollback contacts and process are understood;
 - [ ] a disposable-host product acceptance run is attached;

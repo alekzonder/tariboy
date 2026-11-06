@@ -29,6 +29,10 @@ describe("host progress model", () => {
     expect(HOST_PROGRESS_STEPS.find((step) => step.id === "upload")?.updateLabel).toBe(
       "Get release",
     );
+    // The server downloads the release; the Desktop app uploads nothing.
+    expect(HOST_PROGRESS_STEPS.find((step) => step.id === "upload")?.provisionLabel).toBe(
+      "Download release",
+    );
     expect(hostStepForPhase("rollback")).toBe("install");
     expect(hostStepForPhase("status")).toBe("service");
     expect(hostStepForPhase("unknown")).toBeNull();

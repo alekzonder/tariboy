@@ -398,8 +398,17 @@ writes nothing into `bin/`, and it is the first build step of `full-check`.
 Optional external plugins have their own build under `plugins/`. Canonical
 image sources, Agent Skills, and their static prompts are maintained in the
 separate `tariboy-store` repository rather than embedded in the binaries.
-`desktop-binaries` compiles the local and remote daemon payloads without
-building an agent image.
+`desktop-binaries` compiles only the binary set of the native Desktop package
+into `desktop/src-tauri/resources/bin/`: `darwin-arm64` on a Darwin arm64 host,
+`linux-x86_64` on a Linux x86_64 host. It does not build an agent image. SSH
+servers download their binaries from the release. `server-archives`
+cross-compiles one archive for each server platform into
+`dist/server-archives/<version>/`:
+`tariboy_<version>_linux-x86_64.tar.gz`,
+`tariboy_<version>_linux-aarch64.tar.gz` and
+`tariboy_<version>_darwin-arm64.tar.gz`. Each archive holds the seven
+binaries, `VERSION`, `SHA256SUMS` and `remote-install.sh` at its root. The
+release packager copies them into the release.
 `make install` installs the resulting commands under `$HOME/.local/bin`; it is
 not required for normal unit-test work.
 

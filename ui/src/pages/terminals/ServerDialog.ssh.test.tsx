@@ -117,7 +117,7 @@ describe("ServerDialog desktop SSH connect", () => {
       expect.stringContaining("Connect to host"),
       expect.stringContaining("Check existing Tariboy"),
     ]);
-    expect(screen.queryByText("Upload release")).toBeNull();
+    expect(screen.queryByText("Download release")).toBeNull();
     expect(screen.queryByText("Install release")).toBeNull();
     expect(screen.queryByText("Start Tariboy")).toBeNull();
 
@@ -229,7 +229,7 @@ describe("ServerDialog desktop SSH provisioning and update", () => {
     expect(screen.getAllByTestId("host-progress-step").map((node) => node.textContent)).toEqual([
       expect.stringContaining("Connect to host"),
       expect.stringContaining("Check server"),
-      expect.stringContaining("Upload release"),
+      expect.stringContaining("Download release"),
       expect.stringContaining("Install release"),
       expect.stringContaining("Start Tariboy"),
       expect.stringContaining("Connect to Tariboy"),
