@@ -43,6 +43,7 @@ func (groupsPhase) plan(p *planner, f File, live *liveState) error {
 			}
 		}
 	}
+	p.planInstantSenders(f, live)
 	return nil
 }
 

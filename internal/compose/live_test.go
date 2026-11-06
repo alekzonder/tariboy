@@ -47,3 +47,9 @@ func TestUpConvergedFileMakesNoMutatingCall(t *testing.T) {
 		t.Fatalf("report:\n%s", got)
 	}
 }
+
+func TestCheckAgentViewContractRejectsMissingField(t *testing.T) {
+	if err := CheckAgentViewContract([]byte(`{"model":"m"}`)); err == nil || !strings.Contains(err.Error(), "effort") {
+		t.Fatalf("err = %v, want a missing effort", err)
+	}
+}

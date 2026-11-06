@@ -10,13 +10,11 @@ import (
 // Status reports desired-vs-actual drift from the same Plan `up` applies
 // (spec §5): one line per group, agent, budget, task queue and pool, then the
 // workflow of each existing queue. An agent's line lists every setting `up`
-// would change (group, image, harness, cwd, timeout, loop and Goal settings);
-// an image already pending reads as "image pending" until the agent's next
-// iteration adopts it.
-//
-// Coverage is partial (model/env/plugins are not part of agent.ps's view), so
-// the output always ends with a one-line disclaimer; a bare "drift: N" must
-// never be read as a full convergence guarantee.
+// would change (group, image, harness, model, effort, plugins, cwd, env,
+// timeouts, loop, schedule, mail, display, retention and Goal settings); an
+// image already pending reads as "image pending" until the agent's next
+// iteration adopts it, and the file's plugins as "plugins pending" until then.
+// Each agent secret has a line of its own.
 //
 // After them it lists the agents, groups and task queues tied to the file
 // that the file does not declare ("not declared"); they are not drift.
@@ -52,7 +50,6 @@ func (r *Runner) Status(f File) error {
 		r.logf("%s", line)
 	}
 	r.logf("drift: %d", drift)
-	r.logf("note: model/plugins drift not checked (not exposed by agent.ps)")
 	return nil
 }
 

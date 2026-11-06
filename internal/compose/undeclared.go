@@ -53,6 +53,11 @@ func (r *Runner) undeclared(f File, live *liveState) ([]string, error) {
 			line("group", name, "member "+strings.Join(members, ", "))
 		}
 	}
+	for _, name := range sortedKeys(f.Agents) {
+		if cur, ok := live.agents[name]; ok {
+			out = append(out, agentUndeclared(name, f.Agents[name], cur)...)
+		}
+	}
 	for _, prefix := range sortedKeys(f.TaskQueues) {
 		if _, exists := live.queues[prefix]; exists {
 			out = append(out, queueUndeclared(prefix, f.TaskQueues[prefix], live)...)

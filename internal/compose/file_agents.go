@@ -2,10 +2,12 @@ package compose
 
 import (
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/schedule"
 )
 
 type AgentSpec struct {
@@ -25,6 +27,36 @@ type AgentSpec struct {
 	Timeout string `yaml:"timeout"`
 	// Loop is the optional loop cadence + failure-policy block. See LoopSpec.
 	Loop *LoopSpec `yaml:"loop"`
+
+	// EnvMode is merge (the default: keys the file lacks stay) or replace
+	// (the agent env becomes exactly Env).
+	EnvMode string `yaml:"env_mode,omitempty"`
+	// Secrets names, for each agent secret, the variable of the compose
+	// process that holds its value. The file never holds a secret value.
+	Secrets map[string]SecretSpec `yaml:"secrets,omitempty"`
+	// CreateCwd lets the daemon create Cwd when it does not exist.
+	CreateCwd bool `yaml:"create_cwd,omitempty"`
+
+	// A nil pointer or slice below leaves the live value untouched. An empty
+	// alias, notes or color clears it; an empty mail_instant_senders refuses
+	// every agent. omitempty keeps a team export, which does not set these
+	// fields, from writing an empty mail_instant_senders.
+	UserPrompt         *string        `yaml:"user_prompt,omitempty"`
+	Alias              *string        `yaml:"alias,omitempty"`
+	Notes              *string        `yaml:"notes,omitempty"`
+	Color              *string        `yaml:"color,omitempty"`
+	MessagesBatch      *int           `yaml:"messages_batch,omitempty"`
+	MessagesMaxQueue   *int           `yaml:"messages_max_queue,omitempty"`
+	MailInstantSenders []string       `yaml:"mail_instant_senders,omitempty"`
+	Retention          *RetentionSpec `yaml:"retention,omitempty"`
+}
+
+// RetentionSpec is the agent's own retention override; a field the file
+// omits keeps its live value, and 0 means the daemon default.
+type RetentionSpec struct {
+	KeepIterations *int   `yaml:"keep_iterations,omitempty"`
+	KeepDays       *int   `yaml:"keep_days,omitempty"`
+	MaxBytes       *int64 `yaml:"max_bytes,omitempty"`
 }
 
 // LoopSpec is the per-agent loop cadence + failure policy (mirrors the old
@@ -42,6 +74,13 @@ type LoopSpec struct {
 	// "unset" (nil, leave the daemon default) is distinct from an explicit 0,
 	// which means the feature is disabled. Negative is rejected by Validate.
 	MaxIdleIterations *int `yaml:"max_idle_iterations"`
+	// HardTimeout and AIStallTimeout are durations like Timeout; empty leaves
+	// the live value.
+	HardTimeout    string `yaml:"hard_timeout,omitempty"`
+	AIStallTimeout string `yaml:"ai_stall_timeout,omitempty"`
+	// Schedule is an RFC 5545 RRULE with an optional DTSTART; empty clears
+	// the schedule, nil leaves it.
+	Schedule *string `yaml:"schedule,omitempty"`
 }
 
 type GoalSpec struct {
@@ -205,10 +244,92 @@ func (f File) validateAgent(name string, a AgentSpec) error {
 	if _, _, err := a.goalDeliveryCooldownSeconds(); err != nil {
 		return fmt.Errorf("agent %q %w", name, err)
 	}
+	if err := validateAgentSettings(a); err != nil {
+		return fmt.Errorf("agent %q %w", name, err)
+	}
 	if a.Loop != nil {
 		return validateAgentLoop(name, a)
 	}
 	return nil
+}
+
+var hexColorRE = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+// validateAgentSettings checks the settings the daemon would refuse, so a
+// bad file fails before up changes anything.
+func validateAgentSettings(a AgentSpec) error {
+	if a.EnvMode != "" && a.EnvMode != "merge" && a.EnvMode != "replace" {
+		return fmt.Errorf("env_mode %q must be merge|replace", a.EnvMode)
+	}
+	if a.Color != nil && *a.Color != "" && !hexColorRE.MatchString(*a.Color) {
+		return fmt.Errorf("color %q must be a hex color like #4f8cff", *a.Color)
+	}
+	if err := validateAgentLimits(a); err != nil {
+		return err
+	}
+	for _, sender := range a.MailInstantSenders {
+		if !agent.ValidName(sender) {
+			return fmt.Errorf("mail_instant_senders: invalid agent name %q", sender)
+		}
+	}
+	// Agent secrets follow the queue secret rules; agent env keys keep the
+	// daemon's own rules, so only the secrets are checked here.
+	if err := validateQueueValues(TaskQueueSpec{Secrets: a.Secrets}); err != nil {
+		return err
+	}
+	for key := range a.Secrets {
+		if _, dup := a.Env[key]; dup {
+			return fmt.Errorf("key %q is declared in env and secrets", key)
+		}
+	}
+	if _, _, err := a.hardTimeoutSeconds(); err != nil {
+		return err
+	}
+	if _, _, err := a.aiStallTimeoutSeconds(); err != nil {
+		return err
+	}
+	if a.Loop != nil && a.Loop.Schedule != nil && *a.Loop.Schedule != "" {
+		if _, err := schedule.NormalizeRRule(*a.Loop.Schedule, time.Now(), time.Local); err != nil {
+			return fmt.Errorf("loop schedule: %w", err)
+		}
+	}
+	return nil
+}
+
+// validateAgentLimits checks the mail limits and the retention fields.
+func validateAgentLimits(a AgentSpec) error {
+	for field, v := range map[string]*int{"messages_batch": a.MessagesBatch, "messages_max_queue": a.MessagesMaxQueue} {
+		if v != nil && *v < 1 {
+			return fmt.Errorf("%s %d must be >= 1", field, *v)
+		}
+	}
+	if r := a.Retention; r != nil && (r.KeepIterations != nil && *r.KeepIterations < 0 || r.KeepDays != nil && *r.KeepDays < 0 || r.MaxBytes != nil && *r.MaxBytes < 0) {
+		return fmt.Errorf("retention fields must be >= 0")
+	}
+	return nil
+}
+
+// hardTimeoutSeconds returns loop.hard_timeout in whole seconds; set is
+// false when the file omits it.
+func (a AgentSpec) hardTimeoutSeconds() (int, bool, error) {
+	if a.Loop == nil || a.Loop.HardTimeout == "" {
+		return 0, false, nil
+	}
+	s, err := parseDurationSeconds("loop hard_timeout", a.Loop.HardTimeout)
+	return s, true, err
+}
+
+// aiStallTimeoutSeconds returns loop.ai_stall_timeout, a whole number of
+// seconds of at least 1; set is false when the file omits it.
+func (a AgentSpec) aiStallTimeoutSeconds() (int, bool, error) {
+	if a.Loop == nil || a.Loop.AIStallTimeout == "" {
+		return 0, false, nil
+	}
+	d, err := time.ParseDuration(a.Loop.AIStallTimeout)
+	if err != nil || d < time.Second || d%time.Second != 0 {
+		return 0, true, fmt.Errorf("loop ai_stall_timeout %q must be a whole number of seconds, at least 1s", a.Loop.AIStallTimeout)
+	}
+	return int(d / time.Second), true, nil
 }
 
 // validateAgentLoop checks the loop block of an agent that has one.

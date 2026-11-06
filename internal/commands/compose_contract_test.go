@@ -32,3 +32,24 @@ func TestAgentPsOutputSatisfiesComposeLiveView(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// compose reads GET /api/agents/{name} (agent.inspect) for the settings
+// agent.ps does not return. Pin those fields the same way.
+func TestAgentInspectOutputSatisfiesComposeLiveView(t *testing.T) {
+	t.Parallel()
+	c, as, _ := ctxWithStore(t)
+	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", HarnessType: "stub", Cwd: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := h(t, "agent.inspect")(c, registry.Params{"name": "worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := compose.CheckAgentViewContract(raw); err != nil {
+		t.Fatal(err)
+	}
+}

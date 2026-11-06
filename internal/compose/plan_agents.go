@@ -67,9 +67,14 @@ func (p *planner) planNewAgent(f File, name string, a AgentSpec) error {
 	if err != nil {
 		return err
 	}
-	for _, c := range changes {
+	settings, err := settingChanges(name, a, nil)
+	if err != nil {
+		return err
+	}
+	for _, c := range append(changes, settings...) {
 		p.provide("settings:"+name, p.addChange(id, c, create))
 	}
+	p.planAgentSecrets(name, a, nil)
 	return nil
 }
 
@@ -121,7 +126,7 @@ func (p *planner) planExistingAgent(f File, name string, a AgentSpec, cur liveAg
 			Call: Call{"POST", "/api/agents/" + name + "/reprovision", map[string]any{"image": a.Image}}}, image...)
 		p.provide(id, reprovision)
 		base = []int{reprovision}
-		cur.Image, cur.Enabled, cur.State = normalizeImageRef(a.Image), true, "running"
+		cur.Image, cur.Enabled, cur.State, cur.reprovisioned = normalizeImageRef(a.Image), true, "running", true
 	}
 	changes, err := p.r.agentChanges(name, a, cur)
 	if err != nil {
@@ -137,6 +142,7 @@ func (p *planner) planExistingAgent(f File, name string, a AgentSpec, cur liveAg
 		}
 		p.provide("settings:"+name, p.addChange(id, c, deps...))
 	}
+	p.planAgentSecrets(name, a, &cur)
 	return nil
 }
 
@@ -154,6 +160,9 @@ func (p *planner) statusAgent(id, name string, a AgentSpec, cur liveAgent, pendi
 	if a.Group != "" && cur.Group != a.Group {
 		issues = append(issues, fmt.Sprintf("group drift: have=%s want=%s", cur.Group, a.Group))
 	}
+	if c := instantSendersChange(name, a, &cur); c != nil {
+		changes = append(changes, *c)
+	}
 	for _, c := range changes {
 		switch {
 		case c.issue == "":
@@ -162,6 +171,9 @@ func (p *planner) statusAgent(id, name string, a AgentSpec, cur liveAgent, pendi
 		default:
 			issues = append(issues, c.issue)
 		}
+	}
+	if issue := pluginsPending(a, cur); issue != "" {
+		issues = append(issues, issue)
 	}
 	if len(issues) > 0 {
 		p.status(id, true, "agent %-14s DRIFT %s (state=%s)", name, strings.Join(issues, "; "), cur.State)
@@ -189,9 +201,13 @@ func (r *Runner) agentChanges(name string, a AgentSpec, cur liveAgent) ([]change
 	// cwd converges toward the file's value, defaulting to the compose file's
 	// directory so the agent runs on the project.
 	if want := effectiveCwd(a.Cwd, r.workdir); want != "" && cur.Cwd != want {
+		body := map[string]any{"value": want}
+		if a.CreateCwd {
+			body["create"] = true
+		}
 		out = append(out, change{kind: "cwd", issue: fmt.Sprintf("cwd drift: have=%s want=%s", cur.Cwd, want),
 			note: fmt.Sprintf("setting cwd for agent %s -> %s", name, want), fail: "set cwd " + name,
-			call:   Call{"POST", "/api/agents/" + name + "/cwd", map[string]any{"value": want}},
+			call:   Call{"POST", "/api/agents/" + name + "/cwd", body},
 			fields: []Field{{Name: "cwd", From: cur.Cwd, To: want}}})
 	}
 	out = append(out, envChanges(name, a, cur)...)
@@ -203,31 +219,55 @@ func (r *Runner) agentChanges(name string, a AgentSpec, cur liveAgent) ([]change
 	if err != nil {
 		return nil, err
 	}
-	out = append(append(out, loop...), goal...)
+	settings, err := settingChanges(name, a, &cur)
+	if err != nil {
+		return nil, err
+	}
+	out = append(append(append(out, loop...), goal...), settings...)
 	return out, nil
 }
 
 // envChanges converges the env keys the file declares and, when the file has a
 // harness block, the interactive mode. Both apply from the next iteration
-// without a restart. The env call sends the live env merged with the file's
-// keys, so keys the file does not declare (for example image manifest env)
-// are kept. The issue names drifted keys only, never their values.
+// without a restart. With env_mode merge (the default) the env call sends
+// the live env merged with the file's keys, so keys the file does not
+// declare (for example image manifest env) are kept; with env_mode replace
+// it sends the file's env, so the daemon removes those keys. The issue names
+// keys only, never their values.
 func envChanges(name string, a AgentSpec, cur liveAgent) []change {
 	var out []change
-	var drifted []string
+	var drifted, extra []string
 	for _, k := range sortedKeys(a.Env) {
 		if have, ok := cur.Env[k]; !ok || have != a.Env[k] {
 			drifted = append(drifted, k)
 		}
 	}
-	if len(drifted) > 0 {
-		merged := make(map[string]string, len(cur.Env)+len(a.Env))
-		maps.Copy(merged, cur.Env)
-		maps.Copy(merged, a.Env)
-		out = append(out, change{kind: "env", issue: "env drift: " + strings.Join(drifted, ","),
-			note: fmt.Sprintf("setting env %s for agent %s (applied from the next iteration)", strings.Join(drifted, ","), name),
-			fail: "set env " + name, call: Call{"POST", "/api/agents/" + name + "/env", map[string]any{"value": merged}},
-			fields: []Field{{Name: "env keys", To: strings.Join(drifted, ", ")}}})
+	want := make(map[string]string, len(cur.Env)+len(a.Env))
+	if a.EnvMode == "replace" {
+		for _, k := range sortedKeys(cur.Env) {
+			if _, ok := a.Env[k]; !ok {
+				extra = append(extra, k)
+			}
+		}
+	} else {
+		maps.Copy(want, cur.Env)
+	}
+	maps.Copy(want, a.Env)
+	if len(drifted)+len(extra) > 0 {
+		var issues []string
+		var fields []Field
+		if len(drifted) > 0 {
+			issues = append(issues, "env drift: "+strings.Join(drifted, ","))
+			fields = append(fields, Field{Name: "env keys", To: strings.Join(drifted, ", ")})
+		}
+		if len(extra) > 0 {
+			issues = append(issues, "env extra: "+strings.Join(extra, ","))
+			fields = append(fields, Field{Name: "env removed keys", To: strings.Join(extra, ", ")})
+		}
+		out = append(out, change{kind: "env", issue: strings.Join(issues, "; "),
+			note: fmt.Sprintf("setting env for agent %s (applied from the next iteration)", name),
+			fail: "set env " + name, call: Call{"POST", "/api/agents/" + name + "/env", map[string]any{"value": want}},
+			fields: fields})
 	}
 	if h := a.Harness; h != nil && cur.Interactive != h.Interactive {
 		out = append(out, change{kind: "interactive", issue: fmt.Sprintf("interactive drift: have=%t want=%t", cur.Interactive, h.Interactive),
@@ -352,12 +392,18 @@ func goalChanges(name string, a AgentSpec, cur liveAgent) ([]change, error) {
 func (r *Runner) createBody(name string, a AgentSpec) (map[string]any, error) {
 	// Always explicit: the create endpoint defaults interactive to true.
 	body := map[string]any{"image": a.Image, "name": name, "interactive": a.Harness != nil && a.Harness.Interactive}
-	if h := a.Harness; h != nil {
-		for key, value := range map[string]string{"harness": h.Type, "model": h.Model, "effort": h.Effort} {
-			if value != "" {
-				body[key] = value
-			}
-		}
+	if h := a.Harness; h != nil && h.Type != "" {
+		body["harness"] = h.Type
+	}
+	settings, err := a.scalarSettings(liveAgentView{})
+	if err != nil {
+		return nil, fmt.Errorf("agent %s %w", name, err)
+	}
+	for _, s := range settings {
+		body[s.create] = s.want
+	}
+	if a.CreateCwd {
+		body["create_cwd"] = true
 	}
 	if len(a.Env) > 0 {
 		body["env"] = kvList(a.Env)

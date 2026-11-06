@@ -266,21 +266,21 @@ An existing agent converges in place:
 - CWD, timeout, loop settings, and the Goal settings the file sets converge to
   the file's values.
 - **Environment and interactive mode.** When a key in the file's `env` is
-  missing from the agent or has another value, `up` sets the agent env to its
-  current env merged with the file's keys. Keys the file does not declare, such
-  as env from the image manifest, are kept; removing a key from the file does
-  not remove it from the agent (use `tariboy agent env NAME` to replace the
-  whole env). When the file has a `harness` block, `up` sets the interactive
-  mode to `harness.interactive`; without a `harness` block it keeps the
-  agent's mode. Neither change restarts the agent: an iteration that is already
-  running keeps its old values, and the next iteration uses the new ones.
+  missing from the agent or has another value, `up` sets the agent env. With
+  `env_mode: merge`, the default, `up` sends the current env merged with the
+  file's keys. Keys the file does not declare, such as env from the image
+  manifest, stay. With `env_mode: replace`, `up` sends only the file's `env`,
+  and the daemon removes every other key, the image manifest env included.
+  When the file has a `harness` block, `up` sets the interactive mode to
+  `harness.interactive`. Without a `harness` block, `up` keeps the agent's
+  mode.
+- **Other agent settings.** Model, effort, plugins, the timeouts, the
+  schedule, the user prompt, the mail settings, alias, notes, color, retention
+  and secrets converge as [Agent settings](#agent-settings) describes.
 
-Model, effort, and plugins are applied only when compose creates an agent; `up`
-does not change them on an existing agent. The daemon can change the plugins of
-an existing agent with `agent plugins` and the ref of a Git Store with
-`store ref` (see [Plugins](/docs/plugins#plugins-of-an-existing-agent) and
-[Images](/docs/images#the-ref-of-a-git-store)), but compose does not use these
-commands yet.
+The ref of a Git Store changes with `tariboy store ref` (see
+[Images](/docs/images#the-ref-of-a-git-store)). Compose does not use this
+command yet.
 
 ### Entities that are in use
 
@@ -290,6 +290,9 @@ commands yet.
   old image and adopts the new one on the next.
 - A harness change restarts a running agent in the start phase and ends its
   current iteration.
+- Every other agent setting applies from the next iteration of the agent, as
+  [Agent settings](#agent-settings) describes. The current iteration keeps
+  the old values.
 - Rebinding a queue to a new workflow version leaves the tasks that already
   started on the version they pinned; new tasks follow the new binding.
 
@@ -403,10 +406,185 @@ and pools, is not listed. `not declared` lines do not count as drift.
 `compose status` reads the same plan without applying it. It prints one line
 per task queue and pool, agent, budget, and group, then the `not declared`
 entities, then `drift: N`. An agent's line lists each setting `up` would
-change, its group included; an image that is already pending shows as
-`image pending` until the agent adopts it. Environment drift lists the key
-names only, never their values. Model and plugins are not checked, and status
-says so on its last line.
+change, its group, model, effort and plugins included, in the form
+`FIELD drift: have=X want=Y`. An image that is already pending shows as
+`image pending` until the agent adopts it, and the file's plugins show as
+`plugins pending` until then. Environment drift lists the key names only,
+never their values. `user_prompt drift` and `notes drift` do not print the
+text. Each agent secret has a line of its own.
+
+## Agent settings
+
+An agent can declare every setting that the CLI and the API have for an
+agent:
+
+```yaml
+agents:
+  dev:
+    image: developer:latest
+    group: dev
+    harness: {type: claude, model: opus, effort: high, interactive: true}
+    plugins: [loop, mail, tasks]
+    env_mode: merge
+    env: {LOG_LEVEL: info}
+    secrets:
+      GH_TOKEN: {from_env: DEV_GH_TOKEN}
+    cwd: /work/project
+    create_cwd: true
+    user_prompt: |
+      Work only in your branch.
+    alias: Dev
+    notes: Project developer
+    color: "#3366ff"
+    messages_batch: 10
+    messages_max_queue: 100
+    mail_instant_senders: [dev-lead]
+    retention: {keep_iterations: 200, keep_days: 30, max_bytes: 1073741824}
+    budget: {limit_usd: 10, period: 24h, mode: warn}
+    goal: {enabled: true, wait_customer_timeout: 300s, delivery_cooldown: 60s}
+    loop:
+      enabled: true
+      interval: 30s
+      timeout: 60m
+      hard_timeout: 90m
+      ai_stall_timeout: 30m
+      on_timeout: restart
+      on_error: restart
+      max_idle_iterations: 5
+      schedule: "RRULE:FREQ=DAILY;BYHOUR=9;BYMINUTE=0"
+```
+
+If the file omits a field, `up` does not change the live value. The table
+gives the rules of each field and the daemon call that converges it on an
+existing agent. A new agent gets the field in the create request
+(`POST /api/agents`) or in an action right after the create.
+
+| Field | Rules | Call on an existing agent |
+| --- | --- | --- |
+| `image` | Required. A bare name means `NAME:latest`. | `POST /api/agents/{name}/image`, pending until the next iteration |
+| `group` | Must be in `groups`. | `POST /api/groups/{group}/assign`, groups phase |
+| `harness.type` | `claude`, `codex`, `opencode` or `cursor`. | `POST /api/agents/{name}/harness`, then a restart |
+| `harness.model`, `harness.effort` | An empty value keeps the live value. Compose cannot clear them, because the daemon reads an empty value as a read. | `POST /api/agents/{name}/model`, `.../effort` |
+| `harness.interactive` | Default `false`. Set only when the file has a `harness` block. | `POST /api/agents/{name}/interactive` |
+| `plugins` | The exact list of the agent. `[]` sets an empty list. Compared as a set. A new agent on a schema-v2 image starts with the plugins of the image, so `up` sets the list in an action after the create. | `POST /api/agents/{name}/plugins`; see [Plugins and a new image](#plugins-and-a-new-image) |
+| `env` | Keys and values. | `POST /api/agents/{name}/env` |
+| `env_mode` | `merge` (default) or `replace`. | Changes what `env` sends |
+| `secrets` | `KEY: {from_env: VAR}`. The key rules of queue secrets apply. A key cannot be in `env` too. | `POST /api/agents/{name}/secrets`; see [Agent secrets](#agent-secrets) |
+| `cwd` | Default: the directory of the compose file. `$CWD` and `$HOME` expand. | `POST /api/agents/{name}/cwd` |
+| `create_cwd` | `true` lets the daemon create `cwd`. The daemon does not store it, so it shows no drift. | Adds `create: true` to the `cwd` call |
+| `user_prompt` | The standing user prompt. Compared exactly. | `POST /api/agents/{name}/user-prompt` |
+| `alias`, `notes` | An empty string clears the value. | `POST /api/agents/{name}/alias`, `.../notes` |
+| `color` | `#rrggbb`. Compared without case. An empty string clears it. | `POST /api/agents/{name}/color` |
+| `messages_batch`, `messages_max_queue` | Whole numbers, at least 1. | `POST /api/agents/{name}/messages/batch`, `.../max-queue` |
+| `mail_instant_senders` | Agent names. `[]` refuses every agent. A sender can be outside the file. | `POST /api/agents/{name}/messages/instant-senders`, groups phase |
+| `retention` | `keep_iterations`, `keep_days`, `max_bytes`, each at least 0. 0 means the daemon default. | `POST /api/agents/{name}/retention` with the fields of the file |
+| `budget` | `limit_usd`, `period`, `mode`. | `POST /api/budgets` |
+| `goal` | `enabled`, `wait_customer_timeout`, `delivery_cooldown`. | `POST /api/agents/{name}/goal-*` |
+| `loop.enabled` | Default `true`. `false` stops the agent. | `POST /api/agents/{name}/start` or `.../stop` |
+| `loop.interval`, `loop.timeout` | Durations such as `30s` or `60m`. | `POST /api/agents/{name}/loop/interval`, `.../timeout` |
+| `loop.hard_timeout` | A duration of at least `0s`. | `POST /api/agents/{name}/loop/hard-timeout` |
+| `loop.ai_stall_timeout` | A whole number of seconds, at least `1s`, written as a duration. | `POST /api/agents/{name}/loop/ai-stall-timeout` |
+| `loop.on_timeout`, `loop.on_error` | `restart` or `stop`. | `POST /api/agents/{name}/loop/on-timeout`, `.../on-error` |
+| `loop.max_idle_iterations` | At least 0. 0 turns the idle stop off. | `POST /api/agents/{name}/loop/max-idle` |
+| `loop.schedule` | An RFC 5545 `RRULE`, with an optional `DTSTART` before it. An empty string clears the schedule. | `POST /api/agents/{name}/loop/schedule` |
+
+`compose validate` checks these rules. It does not check that a `from_env`
+variable is set or that a sender of `mail_instant_senders` exists.
+
+The daemon accepts a sender of `mail_instant_senders` only when that agent
+exists. For this reason, `up` sets the senders in the groups phase, after the
+create of each sender that the file declares. A failed create of a sender
+skips the action. Compose cannot return the list to "not set", where the lead
+of the agent's group can send instant letters. For that, run
+`tariboy agent messages instant-senders NAME --reset`.
+
+The daemon stores a schedule as a `DTSTART` line and an `RRULE` line. If the
+file has no `DTSTART`, the daemon uses the time of the write, and compose
+compares the `RRULE` only. If the file has a `DTSTART`, compose compares both
+lines.
+
+### When the settings apply
+
+`up` does not wait for an iteration to end. Every setting in the table applies
+from the next iteration of the agent, without a restart. The current iteration
+keeps the old values. These are the exceptions:
+
+- A change of `harness.type` restarts the agent in the start phase and ends
+  its current iteration.
+- A new `image` is pending until the next iteration, and the plugins of the
+  file follow one `up` later. See [Plugins and a new image](#plugins-and-a-new-image).
+- The daemon calculates `loop.schedule` again at once. The time of the next
+  scheduled start changes.
+- `loop.enabled: false` stops the agent at once.
+
+### Plugins and a new image
+
+The daemon checks a plugin list against the active image of the agent. When
+the agent adopts a new image, the daemon replaces the list with the plugins
+of that image. Thus `up` cannot set the plugins in the same run that sets a new
+image:
+
+1. The first `up` sets the pending image and does not set the plugins.
+   `compose status` reports `plugins pending: applied after the agent adopts
+   image NAME:TAG; run up again`, and counts it as drift.
+2. The agent adopts the image at the start of its next iteration. Until the
+   next `up`, the agent runs with the plugins of the image.
+3. The next `up` sets the plugins of the file. Then `status` reports no drift.
+
+After a re-provision of a stopped agent, `up` always sets the plugins of the
+file, because compose cannot predict the list after it. A rebuild of the image
+in `up` with a new digest also replaces the list when the agent adopts the
+image. `status` then reports plugin drift, and the next `up` sets the list
+again.
+
+For a schema-v1 image, the daemon adds the core plugins to the list. To make
+`up` idempotent (a second run changes nothing), list the complete result,
+core plugins included. Otherwise every `up` writes the list again.
+
+### Agent secrets
+
+Agent secrets follow the rules of [queue secrets](#secrets). The file holds
+only the name of the variable. `compose` reads the value from its own
+environment when it writes the secret, and an empty variable counts as not
+set. The value never appears in the output of `up`, `up --dry-run` or
+`status`, in an error, or in the archive of `compose archive`.
+
+| Variable | Secret on the agent | `status` | `up` |
+| --- | --- | --- | --- |
+| Set | Yes | `secret GH_TOKEN ok (value not compared)` | Writes the value again and reports `ok`. |
+| Set | No | `secret GH_TOKEN MISSING` | Writes the value and reports `changed`. |
+| Not set | Yes | `secret GH_TOKEN ok (DEV_GH_TOKEN not set, kept)` | Keeps the secret. |
+| Not set | No | `secret GH_TOKEN MISSING (DEV_GH_TOKEN not set)` | Fails the agent. The error names the variable and the `tariboy secret set` command. |
+
+`up --dry-run` prints `secret GH_TOKEN=from DEV_GH_TOKEN` for a write and does
+not list a rewrite. `up` never removes a secret. `status` and `up --dry-run`
+list a secret of the agent that the file does not declare as
+`agent dev secret OLD not declared`.
+
+### Group settings
+
+A group has two fields. The groups phase applies them:
+
+| Field | Rules | Call |
+| --- | --- | --- |
+| `lead` | Must be a member of the group in the file. A group without `lead` keeps its lead. | `PATCH /api/groups/{name}/lead`, after the members are assigned |
+| `budget` | `limit_usd`, `period`, `mode`. | `POST /api/budgets` |
+
+The members of a group are the agents whose `group` names it.
+
+### Agent settings outside compose
+
+These agent commands have no compose field:
+
+| Command | Reason |
+| --- | --- |
+| `context set`, `script` and its schedules, the iterations, `agent mail clear`, `agent file` | They hold the working state of the agent, not its configuration. |
+| `agent start`, `stop`, `restart`, `kill`, `rm`, `reprovision`, `exec`, `send-keys`, `iteration extend-timeout`, `agent image cancel`, `group rename`, `group member rm` | They are actions, not settings. Compose verbs cover the lifecycle actions. |
+| `retention set default`, `daemon agent-shell-script set` | They are daemon settings, not agent settings. |
+| `agent budget set` (the calendar budget with hour, day, week and month limits) | `budget` already limits the spend of the agent. A second budget mechanism in the file would give two sources for one purpose. |
+| `agent shell-script set` | The shell script is a Bash file in the directory of the agent, which is code, not a parameter. |
+| `secret rm`, `env` keys that the file omits with `env_mode: merge` | `up` never removes them. Use `env_mode: replace` for env. |
+| `agent messages instant-senders --reset` | The file cannot express "not set". Run the command. |
 
 ## Task queues and pools
 

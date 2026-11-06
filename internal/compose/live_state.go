@@ -49,7 +49,14 @@ func (r *Runner) readLive(f File) (*liveState, error) {
 	}
 	for _, name := range sortedKeys(f.Agents) {
 		cur, ok := live.agents[name]
-		if !ok || cur.State == "stopped" || cur.Image == normalizeImageRef(f.Agents[name].Image) {
+		if !ok {
+			continue
+		}
+		if err := r.readAgentDetails(name, f.Agents[name], &cur); err != nil {
+			return nil, fmt.Errorf("agent %s: %w", name, err)
+		}
+		live.agents[name] = cur
+		if cur.State == "stopped" || cur.Image == normalizeImageRef(f.Agents[name].Image) {
 			continue
 		}
 		// A failed read only means the image is set again.
