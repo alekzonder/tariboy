@@ -42,7 +42,7 @@ func composeMembers() []registry.Arg {
 // names the verb that reads it.
 func composeFlags() []registry.Arg {
 	return []registry.Arg{
-		{Name: "file", Flag: "file", Short: "f", Type: registry.String, Default: compose.DefaultFile, Help: "compose file"},
+		{Name: "file", Flag: "file", Short: "f", Type: registry.String, Help: "compose file (default: " + compose.DefaultFile + ", else " + compose.LegacyFile + ", in the current directory)"},
 		{Name: "no_start", Flag: "no-start", Type: registry.Bool, Help: "up: do not start the daemon (also TARIBOY_NO_AUTOSTART)"},
 		{Name: "volumes", Flag: "volumes", Short: "v", Type: registry.Bool, Help: "down: also delete agent data and group shared dirs"},
 		{Name: "tail", Flag: "tail", Type: registry.Int, Default: compose.DefaultTail, Help: "logs: events per agent"},

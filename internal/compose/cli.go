@@ -49,16 +49,13 @@ func loadComposeFile(path string) (File, string, error) {
 	return f, dir, nil
 }
 
-// DefaultFile is the compose file a verb reads when -f is not given.
-const DefaultFile = "tariboy-compose.yaml"
-
 // DefaultTail is how many events `compose logs` asks for per member.
 const DefaultTail = 200
 
 // Options are the parsed arguments of one `tariboy compose VERB` call.
 type Options struct {
 	Verb string
-	// File is the compose file; empty means DefaultFile.
+	// File is the compose file; empty means FindFile in the working directory.
 	File string
 	// Args are the verb's positionals: the member or group names of a
 	// lifecycle verb, rm and logs, or the member and prompt words of exec.
@@ -97,18 +94,23 @@ func VerbFirst(args []string) []string {
 // Run executes one compose verb: it loads the file and drives the Runner, or
 // writes or imports a team archive. It returns a process exit code.
 func Run(ctx context.Context, call Caller, o Options, out, errOut io.Writer) int {
-	file := o.File
-	if file == "" {
-		file = DefaultFile
-	}
 	output, archive, yes, volumes, noStart, tail := o.Output, o.Archive, o.Yes, o.Volumes, o.NoStart, o.Tail
 	verb := o.Verb
 	verbArgs := o.Args
-	switch verb {
-	case "archive":
-		return composeArchive(file, output, out, errOut)
-	case "import":
+	if verb == "import" {
 		return composeImport(call, archive, yes, o.Stdin, out, errOut)
+	}
+	file := o.File
+	if file == "" {
+		found, err := FindFile(".")
+		if err != nil {
+			fmt.Fprintf(errOut, "compose: %v\n", err)
+			return 1
+		}
+		file = found
+	}
+	if verb == "archive" {
+		return composeArchive(file, output, out, errOut)
 	}
 
 	f, workdir, err := loadComposeFile(file)
