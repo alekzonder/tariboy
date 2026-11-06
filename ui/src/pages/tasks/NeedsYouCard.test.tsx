@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@/test/queryRender";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@/test/queryRender";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { TaskDetail, TransitionRequest } from "@/types";
@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   getTask: vi.fn(),
   listTaskPrincipals: vi.fn(),
   addTaskComment: vi.fn(),
+  dismissTaskWaits: vi.fn(),
   getTaskWorkflow: vi.fn(),
   advanceTask: vi.fn(),
   getTransitionRequest: vi.fn(),
@@ -20,6 +21,7 @@ const client = fakeApi({
     getTask: api.getTask,
     listTaskPrincipals: api.listTaskPrincipals,
     addTaskComment: api.addTaskComment,
+    dismissTaskWaits: api.dismissTaskWaits,
   },
   workflows: {
     getTaskWorkflow: api.getTaskWorkflow,
@@ -111,6 +113,15 @@ it("shows an open question and answers it with a customer comment", async () => 
     fireEvent.click(screen.getByRole("button", { name: "Send answer" }));
   });
   expect(api.addTaskComment).toHaveBeenLastCalledWith("TASK-3", "Call it Lark", expect.any(String));
+  const onChanged = vi.fn();
+  api.dismissTaskWaits.mockResolvedValue({ task: flexible, resolved_waits: [] });
+  cleanup();
+  render(<NeedsYouCard taskKey="TASK-3" onChanged={onChanged} />, { api: client });
+  await act(async () => {
+    fireEvent.click(await screen.findByRole("button", { name: "Dismiss question" }));
+  });
+  expect(api.dismissTaskWaits).toHaveBeenCalledWith("TASK-3");
+  expect(onChanged).toHaveBeenCalled();
 });
 
 it("shows the pause reason with Continue for a paused task", async () => {

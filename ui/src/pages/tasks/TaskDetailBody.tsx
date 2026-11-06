@@ -1,6 +1,8 @@
 import { useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { HelpCircle } from "lucide-react";
 import { isWorkflowTask } from "@/lib/tasks";
+import type { Task, WaitingFor } from "@/types";
+import DismissQuestionButton from "./DismissQuestionButton";
 import { taskCommentWaits, taskEventSequence } from "@/lib/taskDetail";
 import TaskComments from "./TaskComments";
 import { WorkflowPanel } from "./WorkflowPanel";
@@ -37,6 +39,36 @@ function Collapsed({
       <summary className={`${LABEL} cursor-pointer select-none py-1`}>{label}</summary>
       <div className="flex min-w-0 flex-col gap-4.5 pt-2.5">{children}</div>
     </details>
+  );
+}
+
+/** The open questions of the task. The customer's question can be dismissed
+ *  in any status, closed tasks included, without an answer. */
+function QuestionBanner({
+  task,
+  openWaits,
+  onTaskChanged,
+}: {
+  task: Task;
+  openWaits: WaitingFor[];
+  onTaskChanged?: () => void;
+}) {
+  const asksCustomer = openWaits.some((wait) => wait.expected_principal === task.customer);
+  return (
+    <Banner
+      tone="primary"
+      icon={<HelpCircle className="mt-0.5 size-3.5 [stroke-width:1.4]" />}
+      text={`Waiting for an answer from ${openWaits.map((wait) => wait.expected_principal).join(", ")} — reply in the comments below.`}
+      actions={
+        asksCustomer && (
+          <DismissQuestionButton
+            taskKey={task.key}
+            className="h-6 px-2.5 text-ui"
+            onChanged={onTaskChanged}
+          />
+        )
+      }
+    />
   );
 }
 
@@ -98,11 +130,7 @@ export function TaskDetailBody({
   return (
     <>
       {openWaits.length > 0 && (
-        <Banner
-          tone="primary"
-          icon={<HelpCircle className="mt-0.5 size-3.5 [stroke-width:1.4]" />}
-          text={`Waiting for an answer from ${openWaits.map((wait) => wait.expected_principal).join(", ")} — reply in the comments below.`}
-        />
+        <QuestionBanner task={task} openWaits={openWaits} onTaskChanged={onTaskChanged} />
       )}
       {editable ? (
         <TaskDetailFields

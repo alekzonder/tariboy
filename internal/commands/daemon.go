@@ -264,6 +264,7 @@ func BuildRegistry() *registry.Registry {
 	mustGroup(r, "tasks.workflow.requests", "Read transition requests of workflow tasks")
 	mustGroup(r, "tasks.workflow.runs", "Read script runs of workflow tasks")
 	mustGroup(r, "tasks.comments", "Manage native task comments")
+	mustGroup(r, "tasks.waits", "Manage the open questions of native tasks")
 	mustGroup(r, "tasks.relations", "Manage native task relations")
 	mustGroup(r, "mail", "Read and send mail as the customer or another principal")
 	mustGroup(r, "assessment", "Read assessments of iterations and tasks")

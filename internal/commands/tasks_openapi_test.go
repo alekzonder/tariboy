@@ -96,6 +96,7 @@ func tasksTypedCalls(t *testing.T) (*registry.Ctx, []typedCall) {
 		{"POST", "/api/tasks/{key}/complete", "/api/tasks/" + completed + "/complete", map[string]any{"revision": completedRev}},
 		{"GET", "/api/tasks/{key}/comments", "/api/tasks/" + target + "/comments", nil},
 		{"GET", "/api/tasks/{key}/comments", "/api/tasks/" + updated + "/comments", nil},
+		{"POST", "/api/tasks/{key}/waits/dismiss", "/api/tasks/" + target + "/waits/dismiss", nil},
 		{"POST", "/api/tasks/{key}/comments", "/api/tasks/" + target + "/comments", map[string]any{"body": "Answered"}},
 		{"GET", "/api/tasks/{key}/relations", "/api/tasks/" + unrelated + "/relations", nil},
 		{"POST", "/api/tasks/{key}/relations", "/api/tasks/" + related + "/relations", map[string]any{"target_key": target, "type": "related", "revision": relatedRev, "idempotency_key": "add"}},

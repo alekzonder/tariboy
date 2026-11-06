@@ -2353,6 +2353,25 @@
         ],
         "type": "object"
       },
+      "DismissWaitsResult": {
+        "additionalProperties": false,
+        "properties": {
+          "resolved_waits": {
+            "items": {
+              "$ref": "#/components/schemas/WaitingFor"
+            },
+            "type": "array"
+          },
+          "task": {
+            "$ref": "#/components/schemas/Task"
+          }
+        },
+        "required": [
+          "task",
+          "resolved_waits"
+        ],
+        "type": "object"
+      },
       "Event": {
         "additionalProperties": false,
         "properties": {
@@ -27942,6 +27961,96 @@
           }
         },
         "summary": "Move a task to another queue as a new task"
+      }
+    },
+    "/api/tasks/{key}/waits/dismiss": {
+      "post": {
+        "operationId": "tasks.waits.dismiss",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "description": "Resource key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/DismissWaitsResult"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Dismiss the customer's open questions on a task without an answer"
       }
     },
     "/api/tasks/{key}/workflow": {

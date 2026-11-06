@@ -91,7 +91,7 @@ leaves it empty and records a `close_note`.
 | `user:*` | the customer replies or archives it | the customer archives it; opening it or `tariboy mail read` only marks it read |
 | `plugin:*` | the plugin's `/deliver` accepts it (`delivered`) | the same |
 | `system:*`, `queue:*` | at once: stored closed | at once |
-| any, `task.question` | the question is answered on the task (`task-comment:<id>`), or a workflow outcome resolves it (`task-outcome:<status>`) | — |
+| any, `task.question` | the question is answered on the task (`task-comment:<id>`), a workflow outcome resolves it (`task-outcome:<status>`), or the customer dismisses it (`task-wait-dismissed`) | — |
 
 An operator can archive any letter without a reply (`tariboy mail close`,
 with an optional note). The agent tool has no archive: an agent answers.
@@ -242,7 +242,10 @@ letters with `close_note = task-comment:<id>`, for an agent recipient and the
 customer alike. The asker is matched by `data.from`, so a question the outbox
 sent as `system:tasks` closes too. A notification whose recipient no longer
 exists is marked failed in the outbox with `last_error` and is not retried. A workflow outcome that resolves the customer's open wait
-closes its question letters with `task-outcome:<status>`.
+closes its question letters with `task-outcome:<status>`. When the customer
+dismisses a question without an answer (`tasks.waits.dismiss`), its letters
+close with `task-wait-dismissed`, and each asker gets a `task.answered`
+letter that says no answer is needed.
 
 A `task.question` goes only to a principal that exists: a registered agent, or
 the customer login. A mention ends at the last letter or digit of the name, so

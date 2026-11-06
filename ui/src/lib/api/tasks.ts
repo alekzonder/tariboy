@@ -1,6 +1,7 @@
 import type {
   AgentPool,
   CommentResult,
+  DismissWaitsResult,
   PrincipalInfo,
   Queue,
   Relation,
@@ -96,6 +97,8 @@ export function tasksApi(t: Transport) {
     listTaskComments: (key: string) => t.get<TaskCommentList>(`${taskPath(key)}/comments`),
     addTaskComment: (key: string, body: string, idempotencyKey?: string) =>
       t.post<CommentResult>(`${taskPath(key)}/comments`, { body, idempotency_key: idempotencyKey }),
+    /** Closes the customer's open questions on the task without an answer. */
+    dismissTaskWaits: (key: string) => t.post<DismissWaitsResult>(`${taskPath(key)}/waits/dismiss`),
     listTaskRelations: (key: string) => t.get<TaskRelationList>(`${taskPath(key)}/relations`),
     addTaskRelation: (
       key: string,

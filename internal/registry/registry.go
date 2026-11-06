@@ -131,6 +131,7 @@ type TaskControl interface {
 	Ready(context.Context, tasks.Actor, tasks.ReadyFilter) ([]tasks.Task, error)
 	ClaimReady(context.Context, tasks.Actor, tasks.ReadyFilter, string) (tasks.Task, error)
 	AddComment(context.Context, tasks.Actor, string, tasks.AddCommentInput) (tasks.CommentResult, error)
+	DismissWaits(context.Context, tasks.Actor, string) (tasks.DismissWaitsResult, error)
 	AddRelation(context.Context, tasks.Actor, string, tasks.RelationInput) (tasks.Relation, error)
 	DeleteRelation(context.Context, tasks.Actor, string, tasks.DeleteRelationInput) error
 	ListEvents(context.Context, tasks.Actor, string, int64, int) ([]tasks.Event, error)
