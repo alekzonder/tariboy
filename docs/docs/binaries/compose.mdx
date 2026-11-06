@@ -1,16 +1,17 @@
 ---
 title: The compose workflow
-description: Bring up a whole set of images, groups, and agents declaratively from a tariboy-compose.yaml.
+description: Bring up a whole set of images, groups, and agents declaratively from a Tariboycompose.yaml.
 sidebar:
   label: Compose
   icon: boxes
 ---
 
 `tariboy compose` (`internal/compose`) brings up a whole set of images,
-groups, and agents declaratively from a `tariboy-compose.yaml`. The daemon
+groups, and agents declaratively from a `Tariboycompose.yaml`. The daemon
 auto-starts if it is down.
 
 ```bash
+tariboy compose validate    # check the file, change nothing
 tariboy compose up          # build images, create groups/agents, start loops
 tariboy compose ps          # what compose manages
 tariboy compose logs        # tail agent logs
@@ -19,8 +20,8 @@ tariboy compose down --volumes  # also drop the shared/agent data
 ```
 
 Verbs: `up`, `down`, `build`, `ps`, `status`, `start`/`stop`/`restart`/`kill`,
-`rm`, `exec`, `logs`. Flags include `-f/--file`, `-v/--volumes`, `--no-start`,
-`--tail`. `compose down` then `up` preserves data by default; `--volumes` is the
+`rm`, `exec`, `logs`, `validate`, `archive`, `import`. Flags include
+`-f/--file`, `-v/--volumes`, `--no-start`, `--tail`, `--daemon`. `compose down` then `up` preserves data by default; `--volumes` is the
 purge path. A plain `down` removes each agent in mode `keep`: the stopped
 agent row stays, so `up` re-provisions it. `compose rm` removes a stopped agent
 in mode `remove`: the agent is gone, and its history stays. See
@@ -50,6 +51,157 @@ agents:
 ```
 
 `wait_customer_timeout` must be a positive whole-second duration.
+
+## The compose file
+
+### File name
+
+If you do not give `-f FILE`, a verb looks for the file in the current
+directory, in this order:
+
+1. `Tariboycompose.yaml`.
+2. `tariboy-compose.yaml`, the earlier default name.
+
+If the directory has both files, the verb stops with an error that names both.
+Remove one file, or give `-f`. If the directory has neither file, the error
+also names both. With `-f`, the verb reads that file and does not look for
+another one. The rule applies to every verb that reads the file, including
+`validate` and `archive`. A team archive still stores the file as
+`tariboy-compose.yaml`.
+
+### Version 1 and version 2
+
+The `version` key selects the schema. The values `1` and `2` are valid.
+
+- Version 1 has the sections `images` (with `context`), `groups`, `agents`,
+  and `task_queues`. A version 1 file works as before.
+- Version 2 also has the `tariboy` key and the `stores` and `workflows`
+  sections, and new source fields for `images`.
+
+If a version 1 file uses a version 2 key (`tariboy`, `stores`, a non-empty
+`workflows`, or an image `path`, `store`, `source` or `version`), the error
+tells you to declare `version: 2`. An empty `workflows: {}`, as written by older
+team exports, is accepted in version 1 and ignored.
+
+The parser is strict in both versions: an unknown field in any section is an
+error.
+
+```yaml
+version: 2
+tariboy: {min: 0.110.0, max: 0.120.0}
+stores:
+  team: {git: https://example.com/store.git, ref: main}
+  local: {path: ./store}
+workflows:
+  development: {store: team, source: development, version: 1.2.0}
+  review: {path: ./workflows/review}
+images:
+  developer: {store: team, source: developer}
+  reviewer: {path: ./images/reviewer}
+groups:
+  dev: {lead: dev-developer}
+agents:
+  dev-developer: {image: developer:latest, group: dev}
+  dev-reviewer: {image: reviewer:latest, group: dev}
+task_queues:
+  DEV:
+    name: Development
+    workflow: team/development
+    pools: {developers: [dev-developer], reviewers: [dev-reviewer]}
+```
+
+The version 2 sections are:
+
+| Section | Fields | Rules |
+| --- | --- | --- |
+| `stores` | `git` and `ref`, or `path` | Exactly one of `git` and `path`. `ref` is valid only with `git`. |
+| `workflows` | `path`, or `store`, `source` and `version` | Exactly one of `path` and `store`. `source` names the entry in the Store; it defaults to the entry name. `version` is valid only with `store` and must be a SemVer version. |
+| `images` | `path`, or `store`, `source` and `version` | The same rules as `workflows`. `context` is version 1 syntax: in version 2, use `path`. |
+| `task_queues`, `agents`, `groups` | As in version 1 | |
+
+A relative `path` is resolved from the directory of the compose file.
+
+In version 2, these references must name an entry of the same file:
+
+- The image of an agent (the name without the tag) must be in `images`.
+- The group of an agent must be in `groups`. This rule also applies in version 1.
+- Each agent of a pool must be in `agents`. This rule also applies in version 1.
+- The workflow of a queue must be in `workflows`. If the value has a `STORE/`
+  prefix, that Store must be in `stores`.
+- The `store` of a workflow or an image must be in `stores`.
+
+In version 1, an agent image and a queue workflow can name objects outside the
+file, as before.
+
+### Sections that are not applied yet
+
+`compose up` and `compose build` do not create Stores, build workflows, or
+build images from a Store yet. If a file has a `stores` or `workflows` section,
+or an image with `store`, `up` and `build` stop before they call the daemon.
+The error tells you to run `compose validate` to check the file. A team import
+(`team.import.yaml` and the archive import) refuses such a file in the same
+way. An image with `path` builds as a version 1 image with `context` does.
+
+### The tariboy version range
+
+The top-level `tariboy` key of a version 2 file gives the tariboy versions that
+the file works with:
+
+```yaml
+tariboy: {min: 0.110.0, max: 0.120.0}
+```
+
+Both bounds are optional and inclusive. A bound has the form
+`MAJOR.MINOR.PATCH` with an optional prerelease label, such as `0.111.0-rc.1`.
+If `min` is greater than `max`, the file is invalid.
+
+Versions compare by the SemVer 2.0.0 rules. A prerelease is lower than its
+release, so `0.111.0-rc.1` is lower than `0.111.0`. Thus `min: 0.111.0` refuses
+a daemon at `0.111.0-rc.1`. A bound can have a label itself: `min: 0.111.0-rc.1`
+accepts `0.111.0-rc.1`, `0.111.0-rc.2`, and `0.111.0`.
+
+If the file has a `tariboy` key, every verb that calls the daemon (`up`,
+`down`, `build`, `ps`, `status`, `start`, `stop`, `restart`, `kill`, `rm`,
+`exec`, `logs`) first reads the daemon version from `GET /api/daemon/status`.
+If the version is outside the range, the verb stops before any change. The
+error names the daemon version, the range, and the file:
+
+```text
+compose up: daemon version 0.109.0 does not satisfy tariboy >= 0.110.0 in /work/Tariboycompose.yaml
+```
+
+`compose up` reads the version after it starts the daemon. A file without the
+`tariboy` key makes no extra call.
+
+## Checking a file with `validate`
+
+```bash
+tariboy compose validate [-f FILE] [--daemon]
+```
+
+`compose validate` checks the file and changes nothing:
+
+1. The schema. If the YAML has unknown fields, it lists each one. A YAML syntax
+   error stops the check.
+2. The references between entries, as listed above.
+3. The existence of each local `path` in `stores`, `workflows`, and `images`,
+   and of each version 1 image `context`.
+4. The `tariboy` range against the version of the CLI.
+5. With `--daemon`, the `tariboy` range against the version of the running
+   daemon. This is one read of `GET /api/daemon/status`. If the file has no
+   `tariboy` key, there is nothing to compare and it makes no call.
+
+Without `--daemon`, `validate` does not call the daemon and does not start it.
+
+If the file has no problems, `validate` prints `PATH: valid` and exits with 0.
+Otherwise it prints each problem on its own line to standard error, then
+`compose validate: N problem(s) in PATH`, and exits with 1:
+
+```text
+- agent "dev-developer" references undeclared image "developer"
+- store "local" path "./store" does not exist
+compose validate: 2 problem(s) in /work/Tariboycompose.yaml
+```
 
 ## How `up` converges
 
@@ -154,9 +306,10 @@ An agent no longer takes a `subscribe:` key: the mailbox replaced channel
 subscriptions, so the key fails as an unknown field. Remove it from older
 files; group mail and task notifications need no declaration.
 
-The top-level `workflows:` map belonged to the removed task workflow engine. A
-non-empty value is rejected with an error that names the key. An empty
-`workflows: {}`, as written by older team exports, is accepted and ignored.
+In version 1, the top-level `workflows:` map belonged to the removed task
+workflow engine. A non-empty value is rejected with an error that names the key
+and tells you to declare `version: 2`. In version 2, `workflows` declares
+workflow sources; see [The compose file](#the-compose-file).
 
 `compose up` first converges images, agents, and groups. It then reconciles the
 queue and its pools through the daemon's Native Tasks API, and last binds queue
