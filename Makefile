@@ -45,7 +45,7 @@ endif
 export TARIBOY_VITEST_MAX_WORKERS ?= $(CHECK_JOBS)
 endif
 
-.PHONY: build install uninstall setup check backend-check frontend-check designer-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet staticcheck gocyclo gocyclo-report e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e tariboy-tasks-e2e smoke full-smoke ui ui-dev ui-fmt-check ui-complexity-report store-ui docs clean up start down attach a desktop desktop-mac desktop-android desktop-binaries desktop-version-check desktop-lock-check desktop-rust-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
+.PHONY: build install uninstall setup check backend-check frontend-check designer-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet staticcheck gocyclo gocyclo-report gocognit gocognit-report e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e tariboy-tasks-e2e smoke full-smoke ui ui-dev ui-fmt-check ui-complexity-report store-ui docs clean up start down attach a desktop desktop-mac desktop-android desktop-binaries desktop-version-check desktop-lock-check desktop-rust-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
 
 build:
 	$(GO) build -trimpath -o $(BINDIR)/tariboyd ./cmd/tariboyd
@@ -194,6 +194,19 @@ gocyclo:
 
 gocyclo-report:
 	@$(GOTOOL) gocyclo -top 30 -avg -ignore '$(GOCYCLO_IGNORE)' . || true
+
+# Cognitive complexity, which also counts nesting. The limit is the current
+# maximum: never raise it, and lower it in the change that simplifies the most
+# complex function. Unlike gocyclo, gocognit walks hidden directories such as
+# .worktrees, so the ignore pattern skips them.
+GOCOGNIT_OVER := 65
+GOCOGNIT_IGNORE := (^|/)(node_modules|\.[^/]+)/|_test\.go$$
+
+gocognit:
+	$(GOTOOL) gocognit -over $(GOCOGNIT_OVER) -ignore '$(GOCOGNIT_IGNORE)' .
+
+gocognit-report:
+	@$(GOTOOL) gocognit -top 30 -avg -ignore '$(GOCOGNIT_IGNORE)' . || true
 
 e2e: build
 	./scripts/e2e.sh
@@ -685,6 +698,7 @@ backend-check:
 	run_step "vet"          '$(SUBMAKE) vet'; \
 	run_step "staticcheck"  '$(SUBMAKE) staticcheck'; \
 	run_step "gocyclo"      '$(SUBMAKE) gocyclo'; \
+	run_step "gocognit"     '$(SUBMAKE) gocognit'; \
 	run_step "test"         '$(SUBMAKE) test'; \
 	run_step "desktop-rust-check" '$(SUBMAKE) desktop-rust-check'; \
 	run_step "tariboy-tasks-e2e" '$(SUBMAKE) tariboy-tasks-e2e'; \

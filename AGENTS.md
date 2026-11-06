@@ -85,7 +85,7 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
   workflow runs `backend-check` and `frontend-check` as two parallel jobs with
   apt, cargo and staticcheck caches; see "Pull request CI" in
   `docs/docs/development.mdx`. Backend checks cover
-  `fmt-check`, `go vet`, `staticcheck`, the `gocyclo` complexity threshold,
+  `fmt-check`, `go vet`, `staticcheck`, the `gocyclo` and `gocognit` complexity thresholds,
   Go unit tests, the desktop crate compile (`desktop-rust-check`, `cargo
   check`), Store skills, the Tasks mode E2E (`tariboy-tasks-e2e`), and
   smoke contracts; the `test` and `tariboy-tasks-e2e` steps also check the

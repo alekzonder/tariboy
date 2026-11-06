@@ -171,7 +171,7 @@ make full-check      # heavy, tens of minutes, includes check
 Run `make backend-check` for backend-only changes and `make frontend-check` for
 frontend- or documentation-only changes. Run `make check` for mixed changes or
 when ownership is unclear. The backend target runs `fmt-check`, `vet`,
-`staticcheck`, `gocyclo`, `test`, Go unit tests, `desktop-rust-check` and
+`staticcheck`, `gocyclo`, `gocognit`, `test`, Go unit tests, `desktop-rust-check` and
 smoke contracts. Its
 `test` and `tariboy-tasks-e2e` steps also check the HTTP API against the
 committed OpenAPI snapshot; see [Go control plane and plugins](#go-control-plane-and-plugins). The
@@ -346,13 +346,14 @@ git clean -ndx
 ### Go control plane and plugins
 
 `make backend-check` covers this subsystem with `fmt-check`, `vet`,
-`staticcheck`, `gocyclo`, and `test`. To run one of them from the repository
-root while iterating:
+`staticcheck`, `gocyclo`, `gocognit`, and `test`. To run one of them from the
+repository root while iterating:
 
 ```bash
 make vet
 make staticcheck
 make gocyclo
+make gocognit
 make test
 make fmt-check
 ```
@@ -361,7 +362,7 @@ Those targets enumerate the module's packages and exclude `node_modules`; a Go
 fixture embedded in an npm dependency is not Tariboy source and must not extend
 the Go quality gate.
 
-The versions of `staticcheck` and `gocyclo` are pinned in `tools.mod` and
+The versions of `staticcheck`, `gocyclo` and `gocognit` are pinned in `tools.mod` and
 `tools.sum` at the repository root. This separate module file keeps the
 dependencies of the linters out of `go.mod`. The targets run each tool with
 `go tool -modfile=tools.mod NAME`, so you do not install anything into
@@ -378,6 +379,15 @@ over `GOCYCLO_OVER` in the `Makefile`, which is 25. Split a function that goes
 over the limit. Do not raise it. Test files are not measured.
 `make gocyclo-report` prints the 30 most complex functions and the average,
 and it never fails.
+
+`make gocognit` fails when a non-test function has a cognitive complexity
+over `GOCOGNIT_OVER` in the `Makefile`, which is 65. Cognitive complexity is
+a score that also counts how deep `if`, `for` and `switch` statements are
+nested. The limit is the current maximum. Do not raise it. Split a function
+that goes over the limit. When a change simplifies the most complex function,
+lower the limit in the same change. Test files, `node_modules` and hidden
+directories such as `.worktrees` are not measured. `make gocognit-report`
+prints the 30 most complex functions and the average, and it never fails.
 
 `make fmt` is not a check: it rewrites files. Only `fmt-check` is part of
 `backend-check`; run `make fmt` yourself when it reports drift.
