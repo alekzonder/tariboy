@@ -101,6 +101,7 @@ tariboy has four command surfaces:
 | `tariboy compose status` | Compare the file with the daemon and report drift |
 | `tariboy compose stop [MEMBERS...]` | Stop the file's agents, or the named agents and groups |
 | `tariboy compose up` | Build, create and start the file's images, groups and agents; start the daemon first |
+| `tariboy compose validate` | Check the file's schema, references, local paths and tariboy version range; --daemon also checks the daemon version |
 | `tariboy context get NAME` | Read the agent's CONTEXT.md |
 | `tariboy context set NAME` | Overwrite the agent's CONTEXT.md |
 | `tariboy cp SRC` | Upload a file to the server: cp LOCAL_FILE; download: cp AGENT:SRC LOCAL_DST |

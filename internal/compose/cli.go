@@ -66,12 +66,13 @@ type Options struct {
 	Volumes bool   // down: also delete agent data and group shared dirs
 	NoStart bool   // up: do not start the daemon
 	Tail    int    // logs: events per member
+	Daemon  bool   // validate: also check the daemon version
 	// Stdin is where import reads its answer when Yes is false.
 	Stdin io.Reader
 }
 
 // Verbs lists every compose verb in the order its usage names them.
-var Verbs = []string{"up", "down", "start", "stop", "restart", "kill", "exec", "ps", "status", "logs", "build", "rm", "archive", "import"}
+var Verbs = []string{"up", "down", "start", "stop", "restart", "kill", "exec", "ps", "status", "logs", "build", "rm", "validate", "archive", "import"}
 
 // VerbFirst moves the verb in front of the flags that precede it, so
 // `compose -f FILE up` resolves like `compose up -f FILE`. args follow
@@ -109,8 +110,11 @@ func Run(ctx context.Context, call Caller, o Options, out, errOut io.Writer) int
 		}
 		file = found
 	}
-	if verb == "archive" {
+	switch verb {
+	case "archive":
 		return composeArchive(file, output, out, errOut)
+	case "validate":
+		return composeValidate(call, file, o.Daemon, out, errOut)
 	}
 
 	f, workdir, err := loadComposeFile(file)
