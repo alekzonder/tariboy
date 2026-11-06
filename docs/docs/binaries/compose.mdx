@@ -21,8 +21,11 @@ tariboy compose down --volumes  # also drop the shared/agent data
 ```
 
 Verbs: `up`, `down`, `build`, `ps`, `status`, `start`/`stop`/`restart`/`kill`,
-`rm`, `exec`, `logs`, `validate`, `archive`, `import`. Flags include
-`-f/--file`, `-v/--volumes`, `--no-start`, `--dry-run`, `--tail`, `--daemon`. `compose down` then `up` preserves data by default; `--volumes` is the
+`rm`, `exec`, `logs`, `validate`, `pack`, `unpack`, and the deprecated aliases
+`archive` and `import`. Flags include `-f/--file`, `-v/--volumes`,
+`--no-start`, `--dry-run`, `--tail`, `--daemon`, `-o/--output`, `--no-build`,
+`--archive`, `--yes`. See
+[Moving a project with `pack` and `unpack`](#moving-a-project-with-pack-and-unpack). `compose down` then `up` preserves data by default; `--volumes` is the
 purge path. A plain `down` removes each agent in mode `keep`: the stopped
 agent row stays, so `up` re-provisions it. `compose rm` removes a stopped agent
 in mode `remove`: the agent is gone, and its history stays. See
@@ -67,8 +70,8 @@ If the directory has both files, the verb stops with an error that names both.
 Remove one file, or give `-f`. If the directory has neither file, the error
 also names both. With `-f`, the verb reads that file and does not look for
 another one. The rule applies to every verb that reads the file, including
-`validate` and `archive`. A team archive still stores the file as
-`tariboy-compose.yaml`.
+`validate` and `pack`. A compose archive stores the file as `compose.yaml`
+and keeps its original name in the archive metadata.
 
 ### Version 1 and version 2
 
@@ -296,6 +299,9 @@ compose up: daemon version 0.109.0 does not satisfy tariboy >= 0.110.0 in /work/
 tariboy compose validate [-f FILE] [--daemon]
 ```
 
+To check a compose archive instead of a file, see
+[Checking an archive with `validate --archive`](#checking-an-archive-with-validate---archive).
+
 `compose validate` checks the file and changes nothing:
 
 1. The schema. If the YAML has unknown fields, it lists each one. A YAML syntax
@@ -323,6 +329,147 @@ Otherwise it prints each problem on its own line to standard error, then
 - store "local" path "./store" does not exist
 compose validate: 2 problem(s) in /work/Tariboycompose.yaml
 ```
+
+## Moving a project with `pack` and `unpack`
+
+```bash
+tariboy compose pack -o FILE [-f COMPOSE] [--no-build]
+tariboy compose unpack FILE [--dry-run] [--yes]
+tariboy compose validate --archive FILE [--daemon]
+```
+
+`pack` writes one compose archive with the file and every image and workflow
+image it needs. `unpack` applies that archive on another daemon without
+network access and without a build. Both verbs need a running daemon. They
+do not start it.
+
+### `pack`
+
+`compose pack` does these steps:
+
+1. It reads and checks the file, as `up` does. If the file has a `tariboy`
+   range, the daemon version must be inside it.
+2. It applies the stores, workflows and images phases, as `compose build`
+   does. With `--no-build`, it builds nothing and takes the images and
+   workflow images that the daemon has. A missing image or workflow image
+   stops `pack` with an error that names it.
+3. It exports the image of each agent and each workflow image of the file
+   from the daemon. The workflow images are each `workflows` entry and the
+   `workflow` of each task queue. It makes sure that each export has the
+   digest that the daemon reports.
+4. It writes the archive to `FILE`. If `FILE` exists, `pack` stops. If a step
+   fails, `pack` removes the incomplete file.
+
+The archive is a `tariboy-portable` archive of kind `compose`. It holds these
+files:
+
+| File | Content |
+| --- | --- |
+| `compose.yaml` | The compose file, without changes |
+| `images/NAME/TAG.tar.gz` | The exported image of each agent (kind `image-artifact`), with its installed skills |
+| `workflows/NAME/VERSION.tar.gz` | The exported workflow image (kind `workflow-image`) |
+
+The manifest metadata gives the schema version (`schema: 1`), the version of
+the daemon that packed the archive (`producer_version`), the name of the
+compose file, and the digest of each image and workflow image. The archive
+holds one workflow image for each workflow name.
+
+An archive does not hold Stores or secret values. The compose file holds only
+the name of each secret and its `from_env` variable. `pack` does not read
+these variables.
+
+| Limit | Value | Reason |
+| --- | --- | --- |
+| Whole archive, compressed | 1 GiB | 16 images of 64 MiB |
+| Whole archive, expanded | 1 GiB | The members are gzip files already, so they do not get larger |
+| Files | 512 | The compose file, the images and the workflow images |
+| One image or workflow image | 64 MiB | The limit of the image and workflow import routes of the daemon |
+
+If one export is larger than 64 MiB, `pack` stops before it writes the
+archive.
+
+### `unpack`
+
+`compose unpack FILE` does these steps:
+
+1. It unpacks the archive into a temporary directory. It makes sure that the
+   sha256 and size of each file match the manifest.
+2. It checks the whole archive before any change. It recomputes the content
+   digest of each image and each workflow image. It checks the compose file
+   and makes sure that the archive has an image for each agent and a
+   workflow image for each workflow of the file.
+3. It reads the daemon version. The daemon must be inside the `tariboy` range
+   of the file, and it must not be older than `producer_version`. If either
+   check fails, `unpack` stops before any change.
+4. It prints the plan by phase, as `up --dry-run` does. With `--dry-run`, it
+   stops here. Without `--yes`, it asks `Apply this archive? [y/N]`.
+5. It applies the file by phase, as `up` does, with these differences:
+   - The stores phase does not call the daemon. Each Store gets the outcome
+     `skipped (archive)`.
+   - The workflows phase imports each workflow image of the archive. Import
+     tags it with its version and `latest`.
+   - The images phase imports each image of the archive.
+   - If a ref already has the digest of the archive, `unpack` does not import
+     it again. The outcome is `ok`.
+
+`unpack` does not build, does not run `npx` or `git`, and does not use the
+network. The temporary directory is removed when `unpack` ends, also after an
+error.
+
+The project directory of an unpacked file is the directory of the archive.
+An agent without `cwd` gets this directory. To use another directory, set
+`cwd` in the file before `pack`.
+
+Secret values do not move. After `unpack`, an agent or a queue gets its
+secret only if the `from_env` variable is set in the environment of
+`unpack`. Otherwise the rule of `up` applies: a secret that is missing fails
+the agent or the queue.
+
+If an import or an action fails after the checks, for example on an
+`image_version` conflict, `unpack` does not undo the actions that it already
+applied. As in `up`, the resource fails, the resources that depend on it get
+`skipped`, and the other resources are applied. Run `unpack` again after you
+correct the cause. It does not import again the images that already have the
+digest of the archive.
+
+After `unpack`, the target daemon has no Store for the images and the
+workflows. It cannot build them again until you register the Store, for
+example with `compose up` and the same file.
+
+### Checking an archive with `validate --archive`
+
+`compose validate --archive FILE` checks an archive and does not call the
+daemon. It checks the sha256 of each file in the manifest, the content digest
+of each image and workflow image, the schema version, the compose file and
+its references, and that the archive has every image and workflow image that
+the file needs. It does not check local paths, because they are paths on the
+machine that packed the archive. It compares the `tariboy` range of the file
+with the version of the CLI, and the `producer_version` with the version of
+the CLI.
+
+With `--daemon`, it also reads the daemon: the daemon version against the
+range and against `producer_version`, and the plugins of the daemon. Each
+external plugin that an image needs must be installed. It never writes to
+the daemon. The full contract check of each image runs at import time.
+
+It prints problems in the same form as `validate` of a file.
+
+### Older archives and the `archive` and `import` verbs
+
+`compose archive` and `compose import` stay for one release as deprecated
+aliases. Each one prints a warning to standard error:
+
+- `compose archive` runs `compose pack`. Its behavior changed: it wrote a
+  team archive without a daemon, and now it writes a compose archive and
+  needs a running daemon.
+- `compose import --archive FILE` runs `compose unpack FILE`.
+
+`compose unpack` also accepts a team archive version 1 that an older
+`compose archive` wrote. It sends that archive to the team import of the
+daemon (`POST /api/team-imports`), prints the preview and applies it after
+`--yes` or a `y` answer, as `compose import` did. The CLI does not write team
+archives any more. To move such a team with its images, apply the old archive,
+then run `compose pack` with the compose file of the team.
 
 ## How `up` converges
 
@@ -678,7 +825,7 @@ Agent secrets follow the rules of [queue secrets](#secrets). The file holds
 only the name of the variable. `compose` reads the value from its own
 environment when it writes the secret, and an empty variable counts as not
 set. The value never appears in the output of `up`, `up --dry-run` or
-`status`, in an error, or in the archive of `compose archive`.
+`status`, in an error, or in the archive of `compose pack`.
 
 | Variable | Secret on the agent | `status` | `up` |
 | --- | --- | --- | --- |

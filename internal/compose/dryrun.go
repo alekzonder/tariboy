@@ -88,7 +88,7 @@ func phaseLines(plan Plan, phase string) []planLine {
 // strongerVerb is the verb a resource line shows: build, create, restart,
 // start and set name the action; anything else is an update.
 func strongerVerb(verb, kind string) string {
-	rank := map[string]int{"update": 0, "set": 1, "start": 2, "restart": 3, "create": 4, "build": 5}
+	rank := map[string]int{"update": 0, "skip": 1, "set": 1, "start": 2, "restart": 3, "create": 4, "build": 5, "import": 5}
 	if r, ok := rank[kind]; ok && r > rank[verb] {
 		return kind
 	}

@@ -61,7 +61,7 @@ func (p *planner) planNewAgent(f File, name string, a AgentSpec) error {
 		return err
 	}
 	create := p.add(Action{Resource: id, Kind: "create", Note: "creating agent " + name, Fail: "create agent " + name,
-		Fields: createFields(a, body), Call: Call{"POST", "/api/agents", body}}, p.needs(imageKey(f, a.Image))...)
+		Fields: createFields(a, body), Call: Call{"POST", "/api/agents", body}}, p.needs(p.imageKey(f, a.Image))...)
 	p.provide(id, create)
 	changes, err := loopChanges(name, a, nil)
 	if err != nil {
@@ -118,7 +118,7 @@ func (p *planner) planExistingAgent(f File, name string, a AgentSpec, cur liveAg
 		p.provide("settings:"+name, p.addChange(id, *harness))
 		cur.Harness = a.Harness.Type
 	}
-	image := p.needs(imageKey(f, a.Image))
+	image := p.needs(p.imageKey(f, a.Image))
 	base := []int(nil)
 	if stopped {
 		reprovision := p.add(Action{Resource: id, Kind: "reprovision", Note: fmt.Sprintf("reprovisioning stopped agent %s (image %s)", name, a.Image),

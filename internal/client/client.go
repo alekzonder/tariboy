@@ -144,6 +144,30 @@ func (c *Client) upload(method, route, contentType string, body io.Reader, size 
 	return env.Result, nil
 }
 
+// Download copies the raw body of a GET route, such as an archive export, to
+// w. A response other than 200 is decoded as the standard error envelope.
+func (c *Client) Download(route string, w io.Writer) (int64, error) {
+	resp, err := c.http.Get("http://unix" + route)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	warnVersionMismatch(resp.Header.Get(version.Header))
+	if resp.StatusCode == http.StatusOK {
+		return io.Copy(w, resp.Body)
+	}
+	var env struct {
+		Error *struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&env); err != nil || env.Error == nil {
+		return 0, fmt.Errorf("download %s: daemon answered %s", route, resp.Status)
+	}
+	return 0, &APIError{Code: env.Error.Code, Msg: env.Error.Message}
+}
+
 // Stream opens a Server-Sent Events request and calls onEvent per event until
 // the connection closes or ctx-less error. Used by `logs -f` / `channel tail -f`.
 func (c *Client) Stream(ctx context.Context, route string, onEvent func(eventType string, data []byte)) error {

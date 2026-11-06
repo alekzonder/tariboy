@@ -217,10 +217,7 @@ func TestComposeUpExitsNonZeroAndPrintsReportOnFailure(t *testing.T) {
 }
 
 func TestComposeImportWithoutYesReadsAnswerFromStdin(t *testing.T) {
-	archivePath := filepath.Join(t.TempDir(), "team.tar.gz")
-	if err := os.WriteFile(archivePath, []byte("archive"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	archivePath, _ := teamArchive(t)
 	for _, tc := range []struct {
 		answer  string
 		applied int

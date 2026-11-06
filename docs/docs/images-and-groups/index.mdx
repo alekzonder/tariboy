@@ -79,17 +79,20 @@ destination must rebuild rather than import an already built artifact. Team
 import progress remains persisted per agent and stays pinned to the host on
 which preview began.
 
-For automation, the operator CLI can create the same archive without a running
-daemon:
+For automation, the operator CLI moves a whole compose project, with its
+runnable images and workflow images, in one compose archive. Both commands
+need a running daemon:
 
 ```bash
-tariboy compose archive -f ./tariboy-compose.yaml --output ./team.tar.gz
+tariboy compose pack -f ./Tariboycompose.yaml -o ./team.tar.gz
+tariboy compose unpack ./team.tar.gz
 ```
 
-The compose file must declare one group. Archive creation strips its `images:`
-build section and serializes only the compose configuration needed to recreate
-the team and agents. Import through a running daemon with `tariboy compose
-import --archive ./team.tar.gz`; it prints the preview and asks for
-confirmation. Use `--yes` in non-interactive automation only after reviewing
-the archive, ensuring every referenced runnable image exists on the destination,
-and checking the destination settings.
+`compose unpack` checks the whole archive before any change, imports the
+images and workflow images without network access and without a build, then
+applies the file. It prints the plan and asks for confirmation. Use `--yes` in
+non-interactive automation only after you read the plan and the destination
+settings. `compose unpack` also accepts a team archive that an older
+`compose archive` wrote. `compose archive` and `compose import` are deprecated
+aliases of `pack` and `unpack` for one release. See
+[Moving a project with `pack` and `unpack`](/docs/binaries/compose#moving-a-project-with-pack-and-unpack).

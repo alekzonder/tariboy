@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/tasks"
+	"github.com/alekzonder/tariboy/internal/teamportable"
 )
 
 type archiveImportCaller struct {
@@ -28,42 +29,35 @@ func (c *archiveImportCaller) Upload(_ string, body io.Reader, _ int64) (json.Ra
 	return json.RawMessage(`{"import_id":"import-1","team":"dev"}`), nil
 }
 
-func TestComposeArchiveWritesPortableTeamArchive(t *testing.T) {
+// teamArchive writes a team v1 archive, the kind the old compose archive
+// wrote, and returns its path and bytes.
+func teamArchive(t *testing.T) (string, []byte) {
+	t.Helper()
 	dir := t.TempDir()
-	for _, name := range []string{"manager", "worker"} {
-		if err := os.Mkdir(filepath.Join(dir, name), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, name, "Tariboyfile.yaml"), []byte("schema_version: 2\n"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
 	composePath := filepath.Join(dir, "tariboy-compose.yaml")
-	if err := os.WriteFile(composePath, []byte("version: 1\nimages:\n  manager: {context: ./manager}\n  worker: {context: ./worker}\ngroups:\n  dev: {lead: manager}\nagents:\n  manager: {image: manager:latest, group: dev}\n  worker: {image: worker:latest, group: dev}\n"), 0o600); err != nil {
+	if err := os.WriteFile(composePath, []byte("version: 1\ngroups:\n  dev: {}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	output := filepath.Join(dir, "dev.tar.gz")
-	var stderr bytes.Buffer
-	if code := Run(context.Background(), newFake(), Options{Verb: "archive", File: composePath, Output: output}, io.Discard, &stderr); code != 0 {
-		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	var buf bytes.Buffer
+	if err := teamportable.CreateFromCompose(composePath, &buf); err != nil {
+		t.Fatal(err)
 	}
-	if info, err := os.Stat(output); err != nil || info.Size() == 0 {
-		t.Fatalf("archive stat=%v err=%v", info, err)
+	archivePath := filepath.Join(dir, "team.tar.gz")
+	if err := os.WriteFile(archivePath, buf.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
 	}
+	return archivePath, buf.Bytes()
 }
 
 func TestComposeImportYesUploadsThenAppliesPreview(t *testing.T) {
-	archivePath := filepath.Join(t.TempDir(), "team.tar.gz")
-	if err := os.WriteFile(archivePath, []byte("archive"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	archivePath, body := teamArchive(t)
 	caller := &archiveImportCaller{fakeCaller: newFake()}
 	var stderr bytes.Buffer
 	if code := Run(context.Background(), caller, Options{Verb: "import", Archive: archivePath, Yes: true}, io.Discard, &stderr); code != 0 {
 		t.Fatalf("code=%d stderr=%s", code, stderr.String())
 	}
-	if string(caller.uploaded) != "archive" {
-		t.Fatalf("uploaded = %q", caller.uploaded)
+	if !bytes.Equal(caller.uploaded, body) {
+		t.Fatalf("uploaded %d bytes, want the archive", len(caller.uploaded))
 	}
 	if countCalls(caller.fakeCaller, "POST /api/team-imports/import-1/apply") != 1 {
 		t.Fatalf("calls = %v", caller.calls)

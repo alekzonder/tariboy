@@ -6,38 +6,9 @@ import (
 	"io"
 	"os"
 	"strings"
-
-	"github.com/alekzonder/tariboy/internal/teamportable"
-	"github.com/alekzonder/tariboy/internal/tidy"
 )
 
-// composeArchive writes the portable team archive of a compose file.
-func composeArchive(file, output string, out, errOut io.Writer) int {
-	if output == "" {
-		fmt.Fprintln(errOut, "compose archive: --output is required")
-		return 2
-	}
-	archiveOut, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		fmt.Fprintf(errOut, "compose archive: %v\n", err)
-		return 1
-	}
-	if err := teamportable.CreateFromCompose(file, archiveOut); err != nil {
-		tidy.Close(nil, archiveOut)
-		tidy.Remove(nil, output)
-		fmt.Fprintf(errOut, "compose archive: %v\n", err)
-		return 1
-	}
-	if err := archiveOut.Close(); err != nil {
-		tidy.Remove(nil, output)
-		fmt.Fprintf(errOut, "compose archive: %v\n", err)
-		return 1
-	}
-	fmt.Fprintln(out, output)
-	return 0
-}
-
-// composeImport uploads a team archive, prints the preview, and applies it
+// composeImport uploads a team v1 archive, prints the preview, and applies it
 // after --yes or a "y" answer read from stdin.
 func composeImport(call Caller, archive string, yes bool, stdin io.Reader, out, errOut io.Writer) int {
 	if archive == "" {

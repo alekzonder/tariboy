@@ -21,6 +21,9 @@ type Runner struct {
 	workdir   string // compose-file dir, to resolve relative image contexts
 	out       io.Writer
 	skipBuild bool // test seam: skip the image build
+	// archive switches the plan to a compose archive: the workflows and
+	// images phases import from it, and the stores phase skips every Store.
+	archive *packed
 }
 
 func NewRunner(call Caller, workdir string, out io.Writer) *Runner {

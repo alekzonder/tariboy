@@ -16,6 +16,10 @@ type workflowsPhase struct{}
 func (workflowsPhase) name() string { return "workflows" }
 
 func (workflowsPhase) plan(p *planner, f File, live *liveState) error {
+	if p.r.archive != nil {
+		p.planArchiveWorkflows(f)
+		return nil
+	}
 	if f.Version == 2 {
 		for _, name := range sortedKeys(f.Workflows) {
 			p.planWorkflowEntry(name, f.Workflows[name].SourceSpec, live.sources)

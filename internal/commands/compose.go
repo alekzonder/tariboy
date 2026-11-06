@@ -30,9 +30,13 @@ var composeVerbs = map[string]struct {
 	"ps":       {summary: "List the file's agents and their live state"},
 	"status":   {summary: "Compare the file with the daemon and report drift"},
 	"build":    {summary: "Build the file's Stores, workflows and images"},
-	"validate": {summary: "Check the file's schema, references, local paths and tariboy version range; --daemon also checks the daemon version"},
-	"archive":  {summary: "Create a compose-only portable team archive; transfer runnable images separately"},
-	"import":   {summary: "Preview and import compose-only team/runtime configuration"},
+	"validate": {summary: "Check the file's schema, references, local paths and tariboy version range; --archive checks a compose archive offline; --daemon also checks the daemon"},
+	"pack":     {summary: "Build the file's workflows and images, then write the file and their archives to one compose archive (-o FILE)"},
+	"unpack": {summary: "Check a compose archive, then import its images and workflows without network and apply the file; --dry-run prints the plan", args: []registry.Arg{
+		{Name: "path", Type: registry.String, Help: "compose archive file (or --archive)"},
+	}},
+	"archive": {summary: "Deprecated alias of pack; removed in the next release"},
+	"import":  {summary: "Deprecated alias of unpack --archive FILE; removed in the next release"},
 }
 
 func composeMembers() []registry.Arg {
@@ -45,13 +49,14 @@ func composeFlags() []registry.Arg {
 	return []registry.Arg{
 		{Name: "file", Flag: "file", Short: "f", Type: registry.String, Help: "compose file (default: " + compose.DefaultFile + ", else " + compose.LegacyFile + ", in the current directory)"},
 		{Name: "no_start", Flag: "no-start", Type: registry.Bool, Help: "up: do not start the daemon (also TARIBOY_NO_AUTOSTART)"},
-		{Name: "dry_run", Flag: "dry-run", Type: registry.Bool, Help: "up: print the plan by phase; build nothing and change nothing"},
+		{Name: "dry_run", Flag: "dry-run", Type: registry.Bool, Help: "up, unpack: print the plan by phase; build nothing and change nothing"},
 		{Name: "volumes", Flag: "volumes", Short: "v", Type: registry.Bool, Help: "down: also delete agent data and group shared dirs"},
 		{Name: "tail", Flag: "tail", Type: registry.Int, Default: compose.DefaultTail, Help: "logs: events per agent"},
-		{Name: "output", Flag: "output", Type: registry.String, Help: "archive: archive file to create (required)"},
-		{Name: "archive", Flag: "archive", Type: registry.String, Help: "import: archive file to upload (required)"},
-		{Name: "yes", Flag: "yes", Type: registry.Bool, Help: "import: apply without asking"},
-		{Name: "daemon", Flag: "daemon", Type: registry.Bool, Help: "validate: also check the daemon version (read-only)"},
+		{Name: "output", Flag: "output", Short: "o", Type: registry.String, Help: "pack: archive file to create (required)"},
+		{Name: "no_build", Flag: "no-build", Type: registry.Bool, Help: "pack: take the images and workflows already built"},
+		{Name: "archive", Flag: "archive", Type: registry.String, Help: "unpack: archive file; validate: check this compose archive instead of a file"},
+		{Name: "yes", Flag: "yes", Type: registry.Bool, Help: "unpack: apply without asking"},
+		{Name: "daemon", Flag: "daemon", Type: registry.Bool, Help: "validate: also check the daemon version, and for an archive its plugins (read-only)"},
 	}
 }
 
@@ -76,6 +81,7 @@ func composeLocal(verb string) registry.HandlerFunc {
 			Output:  p.String("output"),
 			Archive: p.String("archive"),
 			Yes:     p.Bool("yes"),
+			NoBuild: p.Bool("no_build"),
 			Daemon:  p.Bool("daemon"),
 			Volumes: p.Bool("volumes"),
 			NoStart: p.Bool("no_start"),
@@ -83,7 +89,7 @@ func composeLocal(verb string) registry.HandlerFunc {
 			Tail:    p.IntOr("tail", compose.DefaultTail),
 			Stdin:   os.Stdin,
 		}
-		for _, name := range []string{"member", "members", "prompt"} {
+		for _, name := range []string{"member", "members", "prompt", "path"} {
 			opts.Args = append(opts.Args, positionals(p.Params, name)...)
 		}
 		if code := compose.Run(p.Ctx, client.New(c.Socket), opts, c.Out, c.ErrOut); code != 0 {

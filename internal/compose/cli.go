@@ -60,29 +60,30 @@ type Options struct {
 	// Args are the verb's positionals: the member or group names of a
 	// lifecycle verb, rm and logs, or the member and prompt words of exec.
 	Args    []string
-	Output  string // archive: the archive file to create
-	Archive string // import: the archive file to upload
-	Yes     bool   // import: apply without asking
+	Output  string // pack: the archive file to create
+	Archive string // unpack (import): the archive file; validate: check this archive
+	Yes     bool   // unpack (import): apply without asking
+	NoBuild bool   // pack: take the images and workflows already built
 	Volumes bool   // down: also delete agent data and group shared dirs
 	NoStart bool   // up: do not start the daemon
-	DryRun  bool   // up: print the plan by phase; build and change nothing
+	DryRun  bool   // up, unpack: print the plan by phase; change nothing
 	Tail    int    // logs: events per member
 	Daemon  bool   // validate: also check the daemon version
-	// Stdin is where import reads its answer when Yes is false.
+	// Stdin is where unpack reads its answer when Yes is false.
 	Stdin io.Reader
 }
 
 // Verbs lists every compose verb in the order its usage names them.
-var Verbs = []string{"up", "down", "start", "stop", "restart", "kill", "exec", "ps", "status", "logs", "build", "rm", "validate", "archive", "import"}
+var Verbs = []string{"up", "down", "start", "stop", "restart", "kill", "exec", "ps", "status", "logs", "build", "rm", "validate", "pack", "unpack", "archive", "import"}
 
 // VerbFirst moves the verb in front of the flags that precede it, so
 // `compose -f FILE up` resolves like `compose up -f FILE`. args follow
-// "compose"; a value after -f, --file, --output, --archive or --tail is not
-// the verb.
+// "compose"; a value after -f, --file, -o, --output, --archive or --tail is
+// not the verb.
 func VerbFirst(args []string) []string {
 	for i := 0; i < len(args); i++ {
 		switch a := args[i]; {
-		case a == "-f" || a == "--file" || a == "--output" || a == "--archive" || a == "--tail":
+		case a == "-f" || a == "--file" || a == "-o" || a == "--output" || a == "--archive" || a == "--tail":
 			i++
 		case strings.HasPrefix(a, "-"):
 		default:
@@ -94,26 +95,18 @@ func VerbFirst(args []string) []string {
 }
 
 // Run executes one compose verb: it loads the file and drives the Runner, or
-// writes or imports a team archive. It returns a process exit code.
+// packs, checks or unpacks a compose archive. It returns a process exit code.
 func Run(ctx context.Context, call Caller, o Options, out, errOut io.Writer) int {
-	output, archive, yes, noStart := o.Output, o.Archive, o.Yes, o.NoStart
-	verb := o.Verb
-	if verb == "import" {
-		return composeImport(call, archive, yes, o.Stdin, out, errOut)
+	if code, ok := runArchiveVerb(call, o, out, errOut); ok {
+		return code
 	}
-	file := o.File
-	if file == "" {
-		found, err := FindFile(".")
-		if err != nil {
-			fmt.Fprintf(errOut, "compose: %v\n", err)
-			return 1
-		}
-		file = found
+	noStart, verb := o.NoStart, o.Verb
+	file, err := resolveFile(o.File)
+	if err != nil {
+		fmt.Fprintf(errOut, "compose: %v\n", err)
+		return 1
 	}
-	switch verb {
-	case "archive":
-		return composeArchive(file, output, out, errOut)
-	case "validate":
+	if verb == "validate" {
 		return composeValidate(call, file, o.Daemon, out, errOut)
 	}
 

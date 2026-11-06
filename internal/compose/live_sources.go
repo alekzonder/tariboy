@@ -57,7 +57,8 @@ func (r *Runner) readSources(f File) (liveSources, error) {
 	if f.Version != 2 {
 		return live, nil
 	}
-	if len(f.Stores) > 0 {
+	// An archive skips the Stores, so unpack does not read them either.
+	if len(f.Stores) > 0 && r.archive == nil {
 		var list []liveStore
 		if err := r.get("/api/stores", &list); err != nil {
 			return live, fmt.Errorf("stores: %w", err)
