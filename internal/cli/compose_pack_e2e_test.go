@@ -207,7 +207,7 @@ func (g guardCaller) Download(route string, w io.Writer) (int64, error) {
 }
 
 // stubOfflineTools puts npx and git stubs first on PATH; each call writes
-// the marker file and fails.
+// the marker file and fails. It also adds a claude stub for the skill probe.
 func stubOfflineTools(t *testing.T) string {
 	t.Helper()
 	bin := t.TempDir()
@@ -217,6 +217,11 @@ func stubOfflineTools(t *testing.T) string {
 		if err := os.WriteFile(filepath.Join(bin, tool), []byte(script), 0o700); err != nil {
 			t.Fatal(err)
 		}
+	}
+	// The image skill bridge probes `claude --version`; CI has no claude binary.
+	claude := "#!/bin/sh\necho '9.9.9 (Claude Code)'\n"
+	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(claude), 0o700); err != nil {
+		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return marker
