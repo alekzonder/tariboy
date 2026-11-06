@@ -699,58 +699,89 @@ func (s *scriptSupervisor) RemoveScript(agentName, id string) error {
 	if definition.State == script.StateActive {
 		return fmt.Errorf("cannot remove active script %q; cancel it first: %w", id, script.ErrActive)
 	}
-	runs, err := s.cfg.Scripts.ListRuns(agentName, id)
+	logPaths, err := s.removableScriptLogs(agentName, id)
 	if err != nil {
 		return err
+	}
+	moved, err := s.quarantineScriptLogs(logPaths)
+	if err != nil {
+		return err
+	}
+	if err := s.cfg.Scripts.RemoveDefinition(agentName, id); err != nil {
+		s.restoreScriptLogs(moved)
+		return err
+	}
+	s.discardScriptLogs(moved, logPaths)
+	return nil
+}
+
+// removableScriptLogs returns the validated log path of every run of a script,
+// or an error when one of the runs is still active.
+func (s *scriptSupervisor) removableScriptLogs(agentName, id string) ([]string, error) {
+	runs, err := s.cfg.Scripts.ListRuns(agentName, id)
+	if err != nil {
+		return nil, err
 	}
 	logPaths := make([]string, 0, len(runs))
 	for _, run := range runs {
 		if run.Status == script.RunPending || run.Status == script.RunRunning {
-			return fmt.Errorf("cannot remove script %q with an active run: %w", id, script.ErrActive)
+			return nil, fmt.Errorf("cannot remove script %q with an active run: %w", id, script.ErrActive)
 		}
 		if run.LogPath == "" {
 			continue
 		}
 		_, path, err := s.scriptLogLocation(agentName, run.LogPath)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		logPaths = append(logPaths, path)
 	}
-	type movedLog struct{ from, to string }
-	moved := make([]movedLog, 0, len(logPaths))
-	rollback := func() {
-		for i := len(moved) - 1; i >= 0; i-- {
-			if err := os.Rename(moved[i].to, moved[i].from); err != nil && !os.IsNotExist(err) {
-				s.cfg.Log.Error("restore script log after failed removal", "from", moved[i].to, "to", moved[i].from, "err", err)
-			}
-		}
-	}
+	return logPaths, nil
+}
+
+// quarantinedScriptLog is a run log moved aside while its script is removed.
+type quarantinedScriptLog struct{ from, to string }
+
+// quarantineScriptLogs moves the existing logs aside so that a failed removal
+// can restore them. On an error every log is already back in place.
+func (s *scriptSupervisor) quarantineScriptLogs(logPaths []string) ([]quarantinedScriptLog, error) {
+	moved := make([]quarantinedScriptLog, 0, len(logPaths))
 	for index, path := range logPaths {
 		if _, err := os.Lstat(path); os.IsNotExist(err) {
 			continue
 		} else if err != nil {
-			rollback()
-			return err
+			s.restoreScriptLogs(moved)
+			return nil, err
 		}
 		quarantine := fmt.Sprintf("%s.deleting-%d-%d", path, s.cfg.Clock().UnixNano(), index)
 		if _, err := os.Lstat(quarantine); err == nil {
-			rollback()
-			return fmt.Errorf("script log quarantine path already exists: %s", quarantine)
+			s.restoreScriptLogs(moved)
+			return nil, fmt.Errorf("script log quarantine path already exists: %s", quarantine)
 		} else if !os.IsNotExist(err) {
-			rollback()
-			return err
+			s.restoreScriptLogs(moved)
+			return nil, err
 		}
 		if err := os.Rename(path, quarantine); err != nil {
-			rollback()
-			return err
+			s.restoreScriptLogs(moved)
+			return nil, err
 		}
-		moved = append(moved, movedLog{from: path, to: quarantine})
+		moved = append(moved, quarantinedScriptLog{from: path, to: quarantine})
 	}
-	if err := s.cfg.Scripts.RemoveDefinition(agentName, id); err != nil {
-		rollback()
-		return err
+	return moved, nil
+}
+
+// restoreScriptLogs undoes quarantineScriptLogs, last move first.
+func (s *scriptSupervisor) restoreScriptLogs(moved []quarantinedScriptLog) {
+	for i := len(moved) - 1; i >= 0; i-- {
+		if err := os.Rename(moved[i].to, moved[i].from); err != nil && !os.IsNotExist(err) {
+			s.cfg.Log.Error("restore script log after failed removal", "from", moved[i].to, "to", moved[i].from, "err", err)
+		}
 	}
+}
+
+// discardScriptLogs deletes the quarantined logs and the state files of a
+// removed script. A failure is logged: the script is already gone.
+func (s *scriptSupervisor) discardScriptLogs(moved []quarantinedScriptLog, logPaths []string) {
 	for _, log := range moved {
 		if err := os.Remove(log.to); err != nil && !os.IsNotExist(err) {
 			s.cfg.Log.Error("remove quarantined script log", "path", log.to, "err", err)
@@ -761,7 +792,6 @@ func (s *scriptSupervisor) RemoveScript(agentName, id string) error {
 			s.cfg.Log.Error("remove script state", "path", scriptStatePath(path), "err", err)
 		}
 	}
-	return nil
 }
 
 // LogScript returns a bounded tail after confirming the record belongs to the

@@ -648,20 +648,59 @@ func (p *Proxy) BaseURL() string { return "http://" + p.Addr() }
 // doForward proxies to the resolved upstream and parses usage/model/cost.
 // Provider credentials are forwarded as the harness sent them.
 func (p *Proxy) doForward(ex *Exchange) error {
+	if rejectForwardAuth(ex) {
+		return nil
+	}
+	outReq := newForwardRequest(ex, p.upstreamFor(ex))
+	if outReq == nil {
+		return nil
+	}
+
+	client := sameOriginRedirectClient(p.cfg.Client)
+	resp, err := client.Do(outReq)
+	if err != nil {
+		ex.Status = ex.failureStatus()
+		ex.W.Header().Set("Content-Type", "application/json")
+		ex.W.WriteHeader(http.StatusBadGateway)
+		ex.W.Write([]byte(`{"type":"error","error":{"type":"api_error","message":"upstream unreachable"}}`))
+		return nil
+	}
+	defer resp.Body.Close()
+	ex.UpstreamStatus = resp.StatusCode
+
+	copyHeaders(ex.W.Header(), resp.Header)
+	ex.W.WriteHeader(resp.StatusCode)
+
+	p.relayForwardBody(ex, resp)
+	if resp.StatusCode >= 400 || ex.Status != "" || ex.R.Context().Err() != nil {
+		ex.Status = ex.failureStatus()
+	} else {
+		ex.Status = "ok"
+	}
+	return nil
+}
+
+// rejectForwardAuth answers a request that must not reach any upstream and
+// reports whether it did.
+func rejectForwardAuth(ex *Exchange) bool {
 	if ex.Route != nil && headerContainsToken(ex.R.Header, ex.Token) {
 		ex.Status = "auth_error"
 		ex.W.WriteHeader(http.StatusUnauthorized)
-		return nil
+		return true
 	}
 	if ex.Route == nil && Provider(ex.Provider).spec().requireAuthorization && ex.R.Header.Get("Authorization") == "" {
 		ex.Status = "auth_error"
 		ex.W.Header().Set("Content-Type", "application/json")
 		ex.W.WriteHeader(http.StatusUnauthorized)
 		ex.W.Write([]byte(`{"type":"error","error":{"type":"authentication_error","message":"missing upstream authorization"}}`))
-		return nil
+		return true
 	}
+	return false
+}
 
-	up := p.upstreamFor(ex)
+// newForwardRequest builds the request for up. On a failure it answers the
+// client itself and returns nil, and nothing may be sent upstream.
+func newForwardRequest(ex *Exchange, up Upstream) *http.Request {
 	target, err := url.Parse(strings.TrimRight(up.BaseURL, "/") + ex.Path)
 	if err != nil {
 		ex.Status = "upstream_error"
@@ -670,15 +709,7 @@ func (p *Proxy) doForward(ex *Exchange) error {
 	}
 	target.RawQuery = ex.R.URL.RawQuery
 
-	forwardBody := ex.ReqBody
-	if ex.Route != nil && ex.Provider == string(ProviderOpenAI) && (ex.Path == "/chat/completions" || ex.Path == "/v1/chat/completions") {
-		forwardBody = includeStreamUsage(forwardBody)
-	}
-	reqBody := io.Reader(bytes.NewReader(forwardBody))
-	if Provider(ex.Provider).spec().passthrough {
-		reqBody = ex.R.Body
-	}
-	outReq, err := http.NewRequestWithContext(ex.R.Context(), ex.R.Method, target.String(), reqBody)
+	outReq, err := http.NewRequestWithContext(ex.R.Context(), ex.R.Method, target.String(), forwardRequestBody(ex))
 	if err != nil {
 		ex.Status = "upstream_error"
 		ex.W.WriteHeader(http.StatusBadGateway)
@@ -707,22 +738,26 @@ func (p *Proxy) doForward(ex *Exchange) error {
 		outReq.Header.Del("x-api-key")
 		outReq.Header.Set("Authorization", "Bearer "+key)
 	}
+	return outReq
+}
 
-	client := sameOriginRedirectClient(p.cfg.Client)
-	resp, err := client.Do(outReq)
-	if err != nil {
-		ex.Status = ex.failureStatus()
-		ex.W.Header().Set("Content-Type", "application/json")
-		ex.W.WriteHeader(http.StatusBadGateway)
-		ex.W.Write([]byte(`{"type":"error","error":{"type":"api_error","message":"upstream unreachable"}}`))
-		return nil
+// forwardRequestBody is the client's stream for a passthrough provider and the
+// buffered request otherwise.
+func forwardRequestBody(ex *Exchange) io.Reader {
+	forwardBody := ex.ReqBody
+	if ex.Route != nil && ex.Provider == string(ProviderOpenAI) && (ex.Path == "/chat/completions" || ex.Path == "/v1/chat/completions") {
+		forwardBody = includeStreamUsage(forwardBody)
 	}
-	defer resp.Body.Close()
-	ex.UpstreamStatus = resp.StatusCode
+	reqBody := io.Reader(bytes.NewReader(forwardBody))
+	if Provider(ex.Provider).spec().passthrough {
+		reqBody = ex.R.Body
+	}
+	return reqBody
+}
 
-	copyHeaders(ex.W.Header(), resp.Header)
-	ex.W.WriteHeader(resp.StatusCode)
-
+// relayForwardBody copies the upstream body to the client and records usage.
+// A failure while copying sets ex.Status.
+func (p *Proxy) relayForwardBody(ex *Exchange, resp *http.Response) {
 	if Provider(ex.Provider).spec().passthrough {
 		ex.Streamed = true
 		if err := copyFlush(ex.W, resp.Body); err != nil {
@@ -746,12 +781,6 @@ func (p *Proxy) doForward(ex *Exchange) error {
 			p.parseUsage(ex, body)
 		}
 	}
-	if resp.StatusCode >= 400 || ex.Status != "" || ex.R.Context().Err() != nil {
-		ex.Status = ex.failureStatus()
-	} else {
-		ex.Status = "ok"
-	}
-	return nil
 }
 
 func headerContainsToken(h http.Header, token string) bool {

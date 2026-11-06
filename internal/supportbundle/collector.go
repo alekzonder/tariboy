@@ -287,40 +287,18 @@ func readAllowedSourceWithHook(
 		relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return nil, "not_regular", nil
 	}
-	rootInfo, err := os.Lstat(rootPath)
-	if err != nil {
-		return nil, fileIssueCode(err), nil
+	root, code := openVerifiedRoot(rootPath)
+	if code != "" {
+		return nil, code, nil
 	}
-	if !rootInfo.IsDir() || rootInfo.Mode()&os.ModeSymlink != 0 {
-		return nil, "not_regular", nil
-	}
-	root, err := os.OpenRoot(rootPath)
-	if err != nil {
-		return nil, "read_failed", nil
-	}
+	// root moves down the walk; this closes whichever level the read ended on.
 	defer func() { _ = root.Close() }()
-	openedRootInfo, err := root.Stat(".")
-	if err != nil || !os.SameFile(rootInfo, openedRootInfo) {
-		return nil, "not_regular", nil
-	}
 	parts := strings.Split(relative, string(filepath.Separator))
 	current := ""
 	for _, part := range parts[:len(parts)-1] {
-		parentInfo, err := root.Lstat(part)
-		if err != nil {
-			return nil, fileIssueCode(err), nil
-		}
-		if !parentInfo.IsDir() || parentInfo.Mode()&os.ModeSymlink != 0 {
-			return nil, "not_regular", nil
-		}
-		child, err := root.OpenRoot(part)
-		if err != nil {
-			return nil, "read_failed", nil
-		}
-		openedParentInfo, err := child.Stat(".")
-		if err != nil || !os.SameFile(parentInfo, openedParentInfo) {
-			tidy.Close(nil, child)
-			return nil, "not_regular", nil
+		child, code := openVerifiedParent(root, part)
+		if code != "" {
+			return nil, code, nil
 		}
 		tidy.Close(nil, root)
 		root = child
@@ -329,7 +307,56 @@ func readAllowedSourceWithHook(
 			afterParent(current)
 		}
 	}
-	leaf := parts[len(parts)-1]
+	return readVerifiedLeaf(root, parts[len(parts)-1], remaining)
+}
+
+// openVerifiedRoot opens rootPath as an os.Root and confirms it is the
+// directory, not a symlink, that Lstat saw. A non-empty code means failure.
+func openVerifiedRoot(rootPath string) (*os.Root, string) {
+	rootInfo, err := os.Lstat(rootPath)
+	if err != nil {
+		return nil, fileIssueCode(err)
+	}
+	if !rootInfo.IsDir() || rootInfo.Mode()&os.ModeSymlink != 0 {
+		return nil, "not_regular"
+	}
+	root, err := os.OpenRoot(rootPath)
+	if err != nil {
+		return nil, "read_failed"
+	}
+	openedRootInfo, err := root.Stat(".")
+	if err != nil || !os.SameFile(rootInfo, openedRootInfo) {
+		_ = root.Close()
+		return nil, "not_regular"
+	}
+	return root, ""
+}
+
+// openVerifiedParent opens the directory part of root and confirms it is the
+// entry Lstat saw. A non-empty code means failure, and root stays open.
+func openVerifiedParent(root *os.Root, part string) (*os.Root, string) {
+	parentInfo, err := root.Lstat(part)
+	if err != nil {
+		return nil, fileIssueCode(err)
+	}
+	if !parentInfo.IsDir() || parentInfo.Mode()&os.ModeSymlink != 0 {
+		return nil, "not_regular"
+	}
+	child, err := root.OpenRoot(part)
+	if err != nil {
+		return nil, "read_failed"
+	}
+	openedParentInfo, err := child.Stat(".")
+	if err != nil || !os.SameFile(parentInfo, openedParentInfo) {
+		tidy.Close(nil, child)
+		return nil, "not_regular"
+	}
+	return child, ""
+}
+
+// readVerifiedLeaf reads the regular file leaf of the validated parent root,
+// within the remaining byte budget.
+func readVerifiedLeaf(root *os.Root, leaf string, remaining int64) ([]byte, string, error) {
 	info, err := root.Lstat(leaf)
 	if err != nil {
 		return nil, fileIssueCode(err), nil

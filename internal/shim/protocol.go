@@ -245,84 +245,104 @@ func dispatch(h Handler, req Request) (any, *RPCError) {
 		}
 		return ScreenResult{Screen: screen}, nil
 	case MethodSendKeys:
-		var p SendKeysParams
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return nil, &RPCError{Code: -32602, Message: err.Error()}
-			}
-		}
-		if err := h.SendKeys(p); err != nil {
-			return nil, &RPCError{Code: -32002, Message: err.Error()}
-		}
-		return map[string]bool{"ok": true}, nil
+		return dispatchSendKeys(h, req)
 	case MethodReport:
 		return h.Report(), nil
 	case MethodResize:
-		sh, ok := h.(StreamHandler)
-		if !ok {
-			return nil, &RPCError{Code: -32601, Message: "resize unsupported"}
-		}
-		var p ResizeParams
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return nil, &RPCError{Code: -32602, Message: err.Error()}
-		}
-		if err := sh.Resize(p); err != nil {
-			return nil, &RPCError{Code: -32003, Message: err.Error()}
-		}
-		return map[string]bool{"ok": true}, nil
+		return dispatchResize(h, req)
 	case MethodSetHardDeadline:
-		setter, ok := h.(HardDeadlineSetter)
-		if !ok {
-			return nil, &RPCError{Code: -32601, Message: "hard deadline updates unsupported"}
-		}
-		var p struct {
-			Deadline string `json:"deadline"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.Deadline == "" {
-			if err == nil {
-				err = fmt.Errorf("deadline is required")
-			}
-			return nil, &RPCError{Code: -32602, Message: err.Error()}
-		}
-		if err := setter.SetHardDeadline(p.Deadline); err != nil {
-			return nil, &RPCError{Code: -32602, Message: err.Error()}
-		}
-		return map[string]bool{"ok": true}, nil
+		return dispatchSetHardDeadline(h, req)
 	case MethodHarnessExited:
-		n, ok := h.(HarnessExitNotifier)
-		if !ok {
-			return nil, &RPCError{Code: -32601, Message: "harness exit report unsupported"}
-		}
-		var p struct {
-			Token string `json:"token"`
-		}
-		_ = json.Unmarshal(req.Params, &p) // absent params leave an empty token, which the shim rejects
-		if err := n.HarnessExited(p.Token); err != nil {
-			return nil, &RPCError{Code: -32602, Message: err.Error()}
-		}
-		return map[string]bool{"ok": true}, nil
+		return dispatchHarnessExited(h, req)
 	case MethodHarnessStarted:
-		n, ok := h.(HarnessStartNotifier)
-		if !ok {
-			return nil, &RPCError{Code: -32601, Message: "harness start report unsupported"}
-		}
-		var p struct {
-			PID   int    `json:"pid"`
-			Token string `json:"token"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.PID <= 0 {
-			if err == nil {
-				err = fmt.Errorf("pid is required")
-			}
-			return nil, &RPCError{Code: -32602, Message: err.Error()}
-		}
-		if err := n.HarnessStarted(p.PID, p.Token); err != nil {
-			return nil, &RPCError{Code: -32602, Message: err.Error()}
-		}
-		return map[string]bool{"ok": true}, nil
+		return dispatchHarnessStarted(h, req)
 	default:
 		return nil, &RPCError{Code: -32601, Message: "unknown method " + req.Method}
 	}
+}
+
+func dispatchSendKeys(h Handler, req Request) (any, *RPCError) {
+	var p SendKeysParams
+	if len(req.Params) > 0 {
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return nil, &RPCError{Code: -32602, Message: err.Error()}
+		}
+	}
+	if err := h.SendKeys(p); err != nil {
+		return nil, &RPCError{Code: -32002, Message: err.Error()}
+	}
+	return map[string]bool{"ok": true}, nil
+}
+
+func dispatchResize(h Handler, req Request) (any, *RPCError) {
+	sh, ok := h.(StreamHandler)
+	if !ok {
+		return nil, &RPCError{Code: -32601, Message: "resize unsupported"}
+	}
+	var p ResizeParams
+	if err := json.Unmarshal(req.Params, &p); err != nil {
+		return nil, &RPCError{Code: -32602, Message: err.Error()}
+	}
+	if err := sh.Resize(p); err != nil {
+		return nil, &RPCError{Code: -32003, Message: err.Error()}
+	}
+	return map[string]bool{"ok": true}, nil
+}
+
+func dispatchSetHardDeadline(h Handler, req Request) (any, *RPCError) {
+	setter, ok := h.(HardDeadlineSetter)
+	if !ok {
+		return nil, &RPCError{Code: -32601, Message: "hard deadline updates unsupported"}
+	}
+	var p struct {
+		Deadline string `json:"deadline"`
+	}
+	if err := json.Unmarshal(req.Params, &p); err != nil || p.Deadline == "" {
+		if err == nil {
+			err = fmt.Errorf("deadline is required")
+		}
+		return nil, &RPCError{Code: -32602, Message: err.Error()}
+	}
+	if err := setter.SetHardDeadline(p.Deadline); err != nil {
+		return nil, &RPCError{Code: -32602, Message: err.Error()}
+	}
+	return map[string]bool{"ok": true}, nil
+}
+
+func dispatchHarnessExited(h Handler, req Request) (any, *RPCError) {
+	n, ok := h.(HarnessExitNotifier)
+	if !ok {
+		return nil, &RPCError{Code: -32601, Message: "harness exit report unsupported"}
+	}
+	var p struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(req.Params, &p) // absent params leave an empty token, which the shim rejects
+	if err := n.HarnessExited(p.Token); err != nil {
+		return nil, &RPCError{Code: -32602, Message: err.Error()}
+	}
+	return map[string]bool{"ok": true}, nil
+}
+
+func dispatchHarnessStarted(h Handler, req Request) (any, *RPCError) {
+	n, ok := h.(HarnessStartNotifier)
+	if !ok {
+		return nil, &RPCError{Code: -32601, Message: "harness start report unsupported"}
+	}
+	var p struct {
+		PID   int    `json:"pid"`
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(req.Params, &p); err != nil || p.PID <= 0 {
+		if err == nil {
+			err = fmt.Errorf("pid is required")
+		}
+		return nil, &RPCError{Code: -32602, Message: err.Error()}
+	}
+	if err := n.HarnessStarted(p.PID, p.Token); err != nil {
+		return nil, &RPCError{Code: -32602, Message: err.Error()}
+	}
+	return map[string]bool{"ok": true}, nil
 }
 
 func writeResp(conn net.Conn, resp Response) {

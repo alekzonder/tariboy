@@ -870,20 +870,9 @@ func RunTmuxSupervisor(_ string, statusPath string, argv []string) (retErr error
 
 	exitSock := os.Getenv(tmuxSupervisorSockEnv)
 	token := os.Getenv(tmuxSupervisorTokenEnv)
-	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.Env = envWithout(envWithout(os.Environ(), tmuxSupervisorSockEnv), tmuxSupervisorTokenEnv)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	stdinFD := int(os.Stdin.Fd())
-	if _, err := unix.IoctlGetInt(stdinFD, unix.TIOCGPGRP); err == nil {
-		// Foreground performs setpgid and TIOCSPGRP in the child before exec,
-		// closing the race where an interactive harness reads before a parent-side
-		// tcsetpgrp. The supervisor never reads the terminal again, so no restore is
-		// needed before it writes status and exits.
-		cmd.SysProcAttr.Foreground = true
-		cmd.SysProcAttr.Ctty = stdinFD
-	} else if !isNonTerminalStdinError(err) {
-		return fmt.Errorf("inspect harness terminal: %w", err)
+	cmd, err := newTmuxHarnessCommand(argv)
+	if err != nil {
+		return err
 	}
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start harness: %w", err)
@@ -900,6 +889,49 @@ func RunTmuxSupervisor(_ string, statusPath string, argv []string) (retErr error
 		}
 	}()
 
+	if err := awaitTmuxHarnessExit(pid, events); err != nil {
+		return err
+	}
+	if err := signalTmuxGroup(pid, syscall.SIGKILL); err != nil {
+		return fmt.Errorf("clean up harness group: %w", err)
+	}
+	status, err := reapTmuxHarness(pid)
+	if err != nil {
+		return err
+	}
+	reaped = true
+	if err := writeTmuxExitStatus(statusPath, waitStatusExitCode(status)); err != nil {
+		return err
+	}
+	notifyHarnessExited(exitSock, token)
+	return nil
+}
+
+// newTmuxHarnessCommand builds the harness command in its own process group,
+// without the supervisor's socket and token, and hands it the foreground of a
+// terminal stdin.
+func newTmuxHarnessCommand(argv []string) (*exec.Cmd, error) {
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Env = envWithout(envWithout(os.Environ(), tmuxSupervisorSockEnv), tmuxSupervisorTokenEnv)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	stdinFD := int(os.Stdin.Fd())
+	if _, err := unix.IoctlGetInt(stdinFD, unix.TIOCGPGRP); err == nil {
+		// Foreground performs setpgid and TIOCSPGRP in the child before exec,
+		// closing the race where an interactive harness reads before a parent-side
+		// tcsetpgrp. The supervisor never reads the terminal again, so no restore is
+		// needed before it writes status and exits.
+		cmd.SysProcAttr.Foreground = true
+		cmd.SysProcAttr.Ctty = stdinFD
+	} else if !isNonTerminalStdinError(err) {
+		return nil, fmt.Errorf("inspect harness terminal: %w", err)
+	}
+	return cmd, nil
+}
+
+// awaitTmuxHarnessExit returns once the harness leader has exited, on its own
+// or after a SIGHUP in events ended it. The leader stays unreaped.
+func awaitTmuxHarnessExit(pid int, events <-chan os.Signal) error {
 	// Hidden supervisor mode starts no other child before or after cmd.Start.
 	exited := make(chan error, 1)
 	go func() { exited <- waitTmuxChildExit(pid) }()
@@ -908,33 +940,43 @@ func RunTmuxSupervisor(_ string, statusPath string, argv []string) (retErr error
 		if err != nil {
 			return fmt.Errorf("observe harness exit: %w", err)
 		}
+		return nil
 	case <-events:
-		if err := signalTmuxGroup(pid, syscall.SIGTERM); err != nil {
-			return fmt.Errorf("terminate harness: %w", err)
-		}
-		select {
-		case err := <-exited:
-			if err != nil {
-				return fmt.Errorf("observe harness exit after SIGTERM: %w", err)
-			}
-		case <-time.After(tmuxTermWait):
-			if err := signalTmuxGroup(pid, syscall.SIGKILL); err != nil {
-				return fmt.Errorf("kill harness: %w", err)
-			}
-			select {
-			case err := <-exited:
-				if err != nil {
-					return fmt.Errorf("observe harness exit after SIGKILL: %w", err)
-				}
-			case <-time.After(tmuxKillWait):
-				return errors.New("observe harness exit after SIGKILL: deadline exceeded")
-			}
-		}
+		return terminateTmuxHarness(pid, exited)
 	}
+}
 
-	if err := signalTmuxGroup(pid, syscall.SIGKILL); err != nil {
-		return fmt.Errorf("clean up harness group: %w", err)
+// terminateTmuxHarness sends SIGTERM to the group and escalates to SIGKILL when
+// the leader does not exit within tmuxTermWait.
+func terminateTmuxHarness(pid int, exited <-chan error) error {
+	if err := signalTmuxGroup(pid, syscall.SIGTERM); err != nil {
+		return fmt.Errorf("terminate harness: %w", err)
 	}
+	select {
+	case err := <-exited:
+		if err != nil {
+			return fmt.Errorf("observe harness exit after SIGTERM: %w", err)
+		}
+		return nil
+	case <-time.After(tmuxTermWait):
+	}
+	if err := signalTmuxGroup(pid, syscall.SIGKILL); err != nil {
+		return fmt.Errorf("kill harness: %w", err)
+	}
+	select {
+	case err := <-exited:
+		if err != nil {
+			return fmt.Errorf("observe harness exit after SIGKILL: %w", err)
+		}
+		return nil
+	case <-time.After(tmuxKillWait):
+		return errors.New("observe harness exit after SIGKILL: deadline exceeded")
+	}
+}
+
+// reapTmuxHarness waits for the exited leader. On an error the leader may
+// still be unreaped.
+func reapTmuxHarness(pid int) (syscall.WaitStatus, error) {
 	var status syscall.WaitStatus
 	var waited int
 	var err error
@@ -945,19 +987,12 @@ func RunTmuxSupervisor(_ string, statusPath string, argv []string) (retErr error
 		}
 	}
 	if err != nil {
-		err = fmt.Errorf("reap harness: %w", err)
-	} else if waited != pid {
-		err = errors.New("reap harness: wait returned without child")
+		return status, fmt.Errorf("reap harness: %w", err)
 	}
-	if err != nil {
-		return err
+	if waited != pid {
+		return status, errors.New("reap harness: wait returned without child")
 	}
-	reaped = true
-	if err := writeTmuxExitStatus(statusPath, waitStatusExitCode(status)); err != nil {
-		return err
-	}
-	notifyHarnessExited(exitSock, token)
-	return nil
+	return status, nil
 }
 
 // notifyHarnessExited tells the outer shim that the exit status is recorded,
