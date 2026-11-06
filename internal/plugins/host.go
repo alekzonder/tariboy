@@ -633,31 +633,8 @@ func (h *Host) Install(sourcePath string) (map[string]any, error) {
 		return nil, err
 	}
 	dest := h.versionDir(m.Name, m.Version)
-	if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
+	if err := placeVersion(sourcePath, dest, m); err != nil {
 		return nil, err
-	}
-	if _, statErr := os.Stat(dest); statErr == nil {
-		equal, compareErr := equalTrees(sourcePath, dest)
-		if compareErr != nil {
-			return nil, compareErr
-		}
-		if !equal {
-			return nil, fmt.Errorf("plugin %s version %s already exists with different bytes", m.Name, m.Version)
-		}
-	} else if !os.IsNotExist(statErr) {
-		return nil, statErr
-	} else {
-		tmp, err := os.MkdirTemp(filepath.Dir(dest), m.Version+".tmp-")
-		if err != nil {
-			return nil, err
-		}
-		defer os.RemoveAll(tmp)
-		if err := copyTree(sourcePath, tmp); err != nil {
-			return nil, err
-		}
-		if err := os.Rename(tmp, dest); err != nil {
-			return nil, err
-		}
 	}
 	if err := os.Chmod(filepath.Join(dest, m.Exec), 0o700); err != nil {
 		return nil, err
@@ -666,52 +643,9 @@ func (h *Host) Install(sourcePath string) (map[string]any, error) {
 		Name: m.Name, Version: m.Version, Types: m.Types, ProtocolVersion: m.ProtocolVersion,
 		Exec: m.Exec, SourcePath: sourcePath, Mail: m.Mail, Enabled: true, State: "installed",
 	}
-	previous, hadPrevious, err := h.cfg.Store.Get(m.Name)
+	prior, err := h.capturePriorInstall(m.Name)
 	if err != nil {
 		return nil, err
-	}
-	previousActive, hadPreviousActive, err := h.cfg.Store.ActiveVersion(m.Name)
-	if err != nil {
-		return nil, err
-	}
-	// rollback restores the previous record and active version and returns
-	// every step that failed, so the caller can report them with the cause.
-	rollback := func() error {
-		removeMarker := func() error {
-			if err := os.Remove(filepath.Join(h.dir(m.Name), activeVersionFile)); err != nil && !errors.Is(err, fs.ErrNotExist) {
-				return err
-			}
-			return nil
-		}
-		if !hadPrevious {
-			return errors.Join(h.cfg.Store.Delete(m.Name), removeMarker())
-		}
-		if hadPreviousActive {
-			return errors.Join(h.cfg.Store.Upsert(previous),
-				h.cfg.Store.SetActiveVersion(m.Name, previousActive),
-				writeActiveVersion(h.dir(m.Name), previousActive))
-		}
-		return errors.Join(h.cfg.Store.Upsert(previous), h.cfg.Store.ClearActiveVersion(m.Name), removeMarker())
-	}
-	restartPrevious := func(after *runningPlugin) {
-		if !hadPrevious || !hadPreviousActive || !previous.Enabled {
-			return
-		}
-		restart := func() {
-			active, ok, activeErr := h.cfg.Store.ActiveVersion(m.Name)
-			record, recordOK, recordErr := h.cfg.Store.Get(m.Name)
-			if activeErr == nil && recordErr == nil && ok && recordOK &&
-				active == previousActive && record.Version == previous.Version && record.Enabled {
-				if startErr := h.Start(previous); startErr != nil && !errors.Is(startErr, ErrHostStopping) {
-					h.cfg.Log.Error("restart rolled-back plugin", "plugin", m.Name, "err", startErr)
-				}
-			}
-		}
-		if after == nil {
-			restart()
-			return
-		}
-		h.afterDrain(after, restart)
 	}
 	h.mu.Lock()
 	previousRunning := h.running[m.Name]
@@ -721,35 +655,145 @@ func (h *Host) Install(sourcePath string) (map[string]any, error) {
 		select {
 		case <-previousRunning.done:
 		case <-h.cfg.DrainAfter(restartDrainGrace):
-			restartPrevious(previousRunning)
+			prior.restart(previousRunning)
 			return nil, fmt.Errorf("plugin %s previous version did not drain before activation deadline", m.Name)
 		}
 	}
 	if err := h.Start(rec); err != nil {
-		restartPrevious(nil)
+		prior.restart(nil)
 		return nil, err
 	}
 	h.mu.Lock()
 	newRunning := h.running[m.Name]
 	h.mu.Unlock()
-	persist := func(err error) (map[string]any, error) {
-		h.stop(m.Name)
-		if rollbackErr := rollback(); rollbackErr != nil {
-			err = errors.Join(err, fmt.Errorf("roll back plugin %s: %w", m.Name, rollbackErr))
-		}
-		restartPrevious(newRunning)
-		return nil, err
-	}
-	if err := h.cfg.Store.Upsert(rec); err != nil {
-		return persist(err)
-	}
-	if err := h.cfg.Store.SetActiveVersion(m.Name, m.Version); err != nil {
-		return persist(err)
-	}
-	if err := writeActiveVersion(h.dir(m.Name), m.Version); err != nil {
-		return persist(err)
+	if err := h.activate(rec); err != nil {
+		return nil, prior.abort(newRunning, err)
 	}
 	return map[string]any{"name": m.Name, "version": m.Version, "types": m.Types, "installed": true}, nil
+}
+
+// placeVersion makes dest hold the source tree. An existing version directory
+// is immutable, so it must already have the same bytes. A new one appears
+// whole, by rename: the temporary copy is gone once the rename succeeds.
+func placeVersion(sourcePath, dest string, m Manifest) error {
+	if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
+		return err
+	}
+	if _, statErr := os.Stat(dest); statErr == nil {
+		equal, compareErr := equalTrees(sourcePath, dest)
+		if compareErr != nil {
+			return compareErr
+		}
+		if !equal {
+			return fmt.Errorf("plugin %s version %s already exists with different bytes", m.Name, m.Version)
+		}
+		return nil
+	} else if !os.IsNotExist(statErr) {
+		return statErr
+	}
+	tmp, err := os.MkdirTemp(filepath.Dir(dest), m.Version+".tmp-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmp)
+	if err := copyTree(sourcePath, tmp); err != nil {
+		return err
+	}
+	return os.Rename(tmp, dest)
+}
+
+// activate records rec as the installed and active version of its plugin.
+func (h *Host) activate(rec Record) error {
+	if err := h.cfg.Store.Upsert(rec); err != nil {
+		return err
+	}
+	if err := h.cfg.Store.SetActiveVersion(rec.Name, rec.Version); err != nil {
+		return err
+	}
+	return writeActiveVersion(h.dir(rec.Name), rec.Version)
+}
+
+// priorInstall is what an Install replaces: the stored record and active
+// version of the plugin before Install changed them, kept for undoing it.
+type priorInstall struct {
+	h         *Host
+	name      string
+	record    Record
+	hasRecord bool
+	active    string
+	hasActive bool
+}
+
+func (h *Host) capturePriorInstall(name string) (*priorInstall, error) {
+	record, hasRecord, err := h.cfg.Store.Get(name)
+	if err != nil {
+		return nil, err
+	}
+	active, hasActive, err := h.cfg.Store.ActiveVersion(name)
+	if err != nil {
+		return nil, err
+	}
+	return &priorInstall{h: h, name: name, record: record, hasRecord: hasRecord, active: active, hasActive: hasActive}, nil
+}
+
+// removeMarker removes the active-version marker, which may not exist.
+func (p *priorInstall) removeMarker() error {
+	if err := os.Remove(filepath.Join(p.h.dir(p.name), activeVersionFile)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+// restore puts back the previous record and active version and returns every
+// step that failed, so the caller can report them with the cause.
+func (p *priorInstall) restore() error {
+	s := p.h.cfg.Store
+	if !p.hasRecord {
+		return errors.Join(s.Delete(p.name), p.removeMarker())
+	}
+	if p.hasActive {
+		return errors.Join(s.Upsert(p.record),
+			s.SetActiveVersion(p.name, p.active),
+			writeActiveVersion(p.h.dir(p.name), p.active))
+	}
+	return errors.Join(s.Upsert(p.record), s.ClearActiveVersion(p.name), p.removeMarker())
+}
+
+// restart starts the previous version again if it should be running, once the
+// instance after has drained, or at once when after is nil. The store is read
+// again at that moment, so a later change of the plugin wins over the restart.
+func (p *priorInstall) restart(after *runningPlugin) {
+	if !p.hasRecord || !p.hasActive || !p.record.Enabled {
+		return
+	}
+	h := p.h
+	restart := func() {
+		active, ok, activeErr := h.cfg.Store.ActiveVersion(p.name)
+		record, recordOK, recordErr := h.cfg.Store.Get(p.name)
+		if activeErr == nil && recordErr == nil && ok && recordOK &&
+			active == p.active && record.Version == p.record.Version && record.Enabled {
+			if startErr := h.Start(p.record); startErr != nil && !errors.Is(startErr, ErrHostStopping) {
+				h.cfg.Log.Error("restart rolled-back plugin", "plugin", p.name, "err", startErr)
+			}
+		}
+	}
+	if after == nil {
+		restart()
+		return
+	}
+	h.afterDrain(after, restart)
+}
+
+// abort undoes an activation that failed with cause: it stops the new instance
+// started, restores the store, and restarts the previous version once started
+// has drained. It returns the error Install reports.
+func (p *priorInstall) abort(started *runningPlugin, cause error) error {
+	p.h.stop(p.name)
+	if rollbackErr := p.restore(); rollbackErr != nil {
+		cause = errors.Join(cause, fmt.Errorf("roll back plugin %s: %w", p.name, rollbackErr))
+	}
+	p.restart(started)
+	return cause
 }
 
 // afterDrain runs restart once the previous instance after has fully exited.

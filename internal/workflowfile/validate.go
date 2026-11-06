@@ -226,21 +226,7 @@ func (v *validator) status(f *File, i int, ids map[string]int, artifacts map[str
 	}
 
 	if s.Terminal {
-		if s.Owner.Kind != "" {
-			v.add("terminal_has_work", p+".owner", "terminal status %q must not have an owner", s.ID)
-		}
-		if len(s.Transitions) > 0 {
-			v.add("terminal_has_work", p+".transitions", "terminal status %q must not have transitions", s.ID)
-		}
-		if s.Watch != nil {
-			v.add("terminal_has_work", p+".watch", "terminal status %q must not have a watch", s.ID)
-		}
-		if s.Instructions != "" {
-			v.add("terminal_has_work", p+".instructions", "terminal status %q must not have instructions", s.ID)
-		}
-		if s.Limits != nil {
-			v.add("terminal_has_work", p+".limits", "terminal status %q must not have limits", s.ID)
-		}
+		v.terminalStatus(p, s)
 		return true
 	}
 
@@ -256,9 +242,44 @@ func (v *validator) status(f *File, i int, ids map[string]int, artifacts map[str
 		}
 	}
 	v.limits(p+".limits", s.Limits)
+	v.statusWatch(p, s)
 
-	isScript := s.Owner.Kind == OwnerScript
-	if isScript {
+	if len(s.Transitions) == 0 {
+		v.add("transitions_missing", p+".transitions", "status %q needs at least one transition", s.ID)
+	}
+	outcomes := map[string]bool{}
+	for j := range s.Transitions {
+		tp := fmt.Sprintf("%s.transitions[%d]", p, j)
+		if !v.transition(tp, s, &s.Transitions[j], ids, artifacts, outcomes) {
+			targetsKnown = false
+		}
+	}
+	return targetsKnown
+}
+
+// terminalStatus reports every kind of work a terminal status must not carry.
+func (v *validator) terminalStatus(p string, s *Status) {
+	if s.Owner.Kind != "" {
+		v.add("terminal_has_work", p+".owner", "terminal status %q must not have an owner", s.ID)
+	}
+	if len(s.Transitions) > 0 {
+		v.add("terminal_has_work", p+".transitions", "terminal status %q must not have transitions", s.ID)
+	}
+	if s.Watch != nil {
+		v.add("terminal_has_work", p+".watch", "terminal status %q must not have a watch", s.ID)
+	}
+	if s.Instructions != "" {
+		v.add("terminal_has_work", p+".instructions", "terminal status %q must not have instructions", s.ID)
+	}
+	if s.Limits != nil {
+		v.add("terminal_has_work", p+".limits", "terminal status %q must not have limits", s.ID)
+	}
+}
+
+// statusWatch applies the rule that a script status, and only a script status,
+// has a watch, and validates the watch.
+func (v *validator) statusWatch(p string, s *Status) {
+	if s.Owner.Kind == OwnerScript {
 		if s.Watch == nil {
 			v.add("watch_missing", p+".watch", "script status %q needs a watch", s.ID)
 		}
@@ -271,42 +292,39 @@ func (v *validator) status(f *File, i int, ids map[string]int, artifacts map[str
 	if s.Watch != nil {
 		v.watch(p+".watch", s.Watch)
 	}
+}
 
-	if len(s.Transitions) == 0 {
-		v.add("transitions_missing", p+".transitions", "status %q needs at least one transition", s.ID)
+// transition validates one transition of s at tp and records its outcome in
+// outcomes. It reports false when the target is unknown.
+func (v *validator) transition(tp string, s *Status, t *Transition, ids map[string]int, artifacts, outcomes map[string]bool) bool {
+	targetKnown := true
+	if !identifierPattern.MatchString(t.On) {
+		v.add("outcome_invalid", tp+".on", "outcome %q must match %s", t.On, identifierPattern)
+	} else if outcomes[t.On] {
+		v.add("outcome_duplicate", tp+".on", "outcome %q is used twice in status %q", t.On, s.ID)
 	}
-	outcomes := map[string]bool{}
-	for j := range s.Transitions {
-		t := &s.Transitions[j]
-		tp := fmt.Sprintf("%s.transitions[%d]", p, j)
-		if !identifierPattern.MatchString(t.On) {
-			v.add("outcome_invalid", tp+".on", "outcome %q must match %s", t.On, identifierPattern)
-		} else if outcomes[t.On] {
-			v.add("outcome_duplicate", tp+".on", "outcome %q is used twice in status %q", t.On, s.ID)
+	outcomes[t.On] = true
+	if _, ok := ids[t.To]; !ok {
+		v.add("transition_target_unknown", tp+".to", "transition target %q names no status", t.To)
+		targetKnown = false
+	}
+	if s.Owner.Kind == OwnerCustomer || s.Owner.Kind == OwnerScript {
+		if len(t.Requires) > 0 {
+			v.add("requires_not_allowed", tp+".requires", "requires is allowed only on transitions out of a pool status")
 		}
-		outcomes[t.On] = true
-		if _, ok := ids[t.To]; !ok {
-			v.add("transition_target_unknown", tp+".to", "transition target %q names no status", t.To)
-			targetsKnown = false
-		}
-		if s.Owner.Kind == OwnerCustomer || isScript {
-			if len(t.Requires) > 0 {
-				v.add("requires_not_allowed", tp+".requires", "requires is allowed only on transitions out of a pool status")
-			}
-			if len(t.Checks) > 0 {
-				v.add("checks_not_allowed", tp+".checks", "checks are allowed only on transitions out of a pool status")
-			}
-		}
-		for k, name := range t.Requires {
-			if !artifacts[name] {
-				v.add("artifact_unknown", fmt.Sprintf("%s.requires[%d]", tp, k), "artifact %q is not declared", name)
-			}
-		}
-		for k := range t.Checks {
-			v.check(fmt.Sprintf("%s.checks[%d]", tp, k), &t.Checks[k])
+		if len(t.Checks) > 0 {
+			v.add("checks_not_allowed", tp+".checks", "checks are allowed only on transitions out of a pool status")
 		}
 	}
-	return targetsKnown
+	for k, name := range t.Requires {
+		if !artifacts[name] {
+			v.add("artifact_unknown", fmt.Sprintf("%s.requires[%d]", tp, k), "artifact %q is not declared", name)
+		}
+	}
+	for k := range t.Checks {
+		v.check(fmt.Sprintf("%s.checks[%d]", tp, k), &t.Checks[k])
+	}
+	return targetKnown
 }
 
 func (v *validator) watch(p string, w *Watch) {

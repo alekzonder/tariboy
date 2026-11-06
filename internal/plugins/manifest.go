@@ -176,7 +176,16 @@ func (m Manifest) Validate() error {
 }
 
 func (m Manifest) validateContributions() error {
-	commandTypes := map[string]bool{"string": true, "integer": true, "integer-list": true, "boolean": true, "secret-file": true}
+	if err := m.validateOperatorCommands(); err != nil {
+		return err
+	}
+	if m.Settings == nil {
+		return nil
+	}
+	return m.validateSettings()
+}
+
+func (m Manifest) validateOperatorCommands() error {
 	seenCommands := map[string]bool{}
 	for _, command := range m.OperatorCommands {
 		if command.Path == "" || strings.HasPrefix(command.Path, m.Name+".") {
@@ -197,29 +206,38 @@ func (m Manifest) validateContributions() error {
 		if !ValidName(command.Action) {
 			return fmt.Errorf("plugin %s operator command %q has invalid action %q", m.Name, command.Path, command.Action)
 		}
-		seenArgs, seenFlags := map[string]bool{}, map[string]bool{}
-		for _, arg := range command.Args {
-			if !ValidName(arg.Name) || !commandTypes[arg.Type] {
-				return fmt.Errorf("plugin %s operator command %q has invalid argument %q", m.Name, command.Path, arg.Name)
-			}
-			if seenArgs[arg.Name] {
-				return fmt.Errorf("plugin %s operator command %q repeats argument %q", m.Name, command.Path, arg.Name)
-			}
-			seenArgs[arg.Name] = true
-			if arg.Flag != "" {
-				if !ValidName(arg.Flag) || seenFlags[arg.Flag] {
-					return fmt.Errorf("plugin %s operator command %q has invalid or duplicate flag %q", m.Name, command.Path, arg.Flag)
-				}
-				seenFlags[arg.Flag] = true
-			}
-			if arg.Type == "secret-file" && arg.Flag == "" {
-				return fmt.Errorf("plugin %s operator command %q secret argument %q must be a flag", m.Name, command.Path, arg.Name)
-			}
+		if err := m.validateOperatorArgs(command); err != nil {
+			return err
 		}
 	}
-	if m.Settings == nil {
-		return nil
+	return nil
+}
+
+func (m Manifest) validateOperatorArgs(command OperatorCommand) error {
+	commandTypes := map[string]bool{"string": true, "integer": true, "integer-list": true, "boolean": true, "secret-file": true}
+	seenArgs, seenFlags := map[string]bool{}, map[string]bool{}
+	for _, arg := range command.Args {
+		if !ValidName(arg.Name) || !commandTypes[arg.Type] {
+			return fmt.Errorf("plugin %s operator command %q has invalid argument %q", m.Name, command.Path, arg.Name)
+		}
+		if seenArgs[arg.Name] {
+			return fmt.Errorf("plugin %s operator command %q repeats argument %q", m.Name, command.Path, arg.Name)
+		}
+		seenArgs[arg.Name] = true
+		if arg.Flag != "" {
+			if !ValidName(arg.Flag) || seenFlags[arg.Flag] {
+				return fmt.Errorf("plugin %s operator command %q has invalid or duplicate flag %q", m.Name, command.Path, arg.Flag)
+			}
+			seenFlags[arg.Flag] = true
+		}
+		if arg.Type == "secret-file" && arg.Flag == "" {
+			return fmt.Errorf("plugin %s operator command %q secret argument %q must be a flag", m.Name, command.Path, arg.Name)
+		}
 	}
+	return nil
+}
+
+func (m Manifest) validateSettings() error {
 	if m.Settings.Title == "" {
 		return fmt.Errorf("plugin %s settings title is required", m.Name)
 	}
@@ -230,28 +248,38 @@ func (m Manifest) validateContributions() error {
 		}
 		seenStatus[status.Name] = true
 	}
-	settingTypes := map[string]bool{"string": true, "password": true, "integer-list": true}
 	seenFields := map[string]bool{}
 	for _, section := range m.Settings.Sections {
-		if section.Title == "" {
-			return fmt.Errorf("plugin %s settings section title is required", m.Name)
+		if err := m.validateSettingSection(section, seenFields); err != nil {
+			return err
 		}
-		fields := map[string]bool{}
-		for _, field := range section.Fields {
-			if !ValidName(field.Name) || field.Label == "" || !settingTypes[field.Type] || seenFields[field.Name] {
-				return fmt.Errorf("plugin %s has invalid or duplicate settings field %q", m.Name, field.Name)
-			}
-			seenFields[field.Name] = true
-			fields[field.Name] = true
+	}
+	return nil
+}
+
+// validateSettingSection checks one section. seenFields spans the sections,
+// because every field of the settings form shares one namespace; an action may
+// only name fields of its own section.
+func (m Manifest) validateSettingSection(section SettingSection, seenFields map[string]bool) error {
+	settingTypes := map[string]bool{"string": true, "password": true, "integer-list": true}
+	if section.Title == "" {
+		return fmt.Errorf("plugin %s settings section title is required", m.Name)
+	}
+	fields := map[string]bool{}
+	for _, field := range section.Fields {
+		if !ValidName(field.Name) || field.Label == "" || !settingTypes[field.Type] || seenFields[field.Name] {
+			return fmt.Errorf("plugin %s has invalid or duplicate settings field %q", m.Name, field.Name)
 		}
-		for _, action := range section.Actions {
-			if action.Label == "" || !ValidName(action.Action) {
-				return fmt.Errorf("plugin %s has invalid settings action %q", m.Name, action.Action)
-			}
-			for _, field := range action.Fields {
-				if !fields[field] {
-					return fmt.Errorf("plugin %s settings action %q references unknown field %q", m.Name, action.Action, field)
-				}
+		seenFields[field.Name] = true
+		fields[field.Name] = true
+	}
+	for _, action := range section.Actions {
+		if action.Label == "" || !ValidName(action.Action) {
+			return fmt.Errorf("plugin %s has invalid settings action %q", m.Name, action.Action)
+		}
+		for _, field := range action.Fields {
+			if !fields[field] {
+				return fmt.Errorf("plugin %s settings action %q references unknown field %q", m.Name, action.Action, field)
 			}
 		}
 	}
