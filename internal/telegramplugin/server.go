@@ -128,31 +128,7 @@ func (s *Server) chatSetup(w http.ResponseWriter, r *http.Request, body map[stri
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "allowed_uids_required"})
 		return
 	}
-	chat, err := s.bot.GetChat(r.Context(), state.Token, chatID)
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "telegram_unavailable"})
-		return
-	}
-	if chat.Type != "supergroup" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "chat_must_be_supergroup"})
-		return
-	}
-	if !chat.IsForum {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "topics_must_be_enabled"})
-		return
-	}
-	bot, err := s.bot.GetMe(r.Context(), state.Token)
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "telegram_unavailable"})
-		return
-	}
-	member, err := s.bot.GetChatMember(r.Context(), state.Token, chatID, bot.ID)
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "telegram_unavailable"})
-		return
-	}
-	if member.Status != "creator" && (member.Status != "administrator" || !member.CanManageTopics) {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "bot_must_manage_topics"})
+	if !s.verifySetupChat(w, r, state.Token, chatID) {
 		return
 	}
 	if state.ChatID == chatID && state.ManagementTopicID != 0 {
@@ -163,46 +139,97 @@ func (s *Server) chatSetup(w http.ResponseWriter, r *http.Request, body map[stri
 		writeJSON(w, http.StatusOK, map[string]any{"result": s.status()})
 		return
 	}
-	pending := state.PendingChat
-	if pending == nil || pending.ChatID != chatID {
-		topic, err := s.bot.CreateForumTopic(r.Context(), state.Token, chatID, "tariboyd")
-		if err != nil {
-			writeJSON(w, http.StatusBadGateway, map[string]any{"error": "create_topic_failed"})
-			return
-		}
-		if err := s.state.BeginPendingChat(chatID, topic.MessageThreadID); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "save_failed"})
-			return
-		}
-		state = s.state.Snapshot()
-		pending = state.PendingChat
-	}
-	if s.daemon != nil {
-		agents, err := s.daemon.ListAgents(r.Context())
-		if err != nil {
-			writeJSON(w, http.StatusBadGateway, map[string]any{"error": "list_agents_failed"})
-			return
-		}
-		for _, agent := range agents {
-			if _, ok := pending.AgentTopics[agent.Name]; !ok {
-				topic, err := s.bot.CreateForumTopic(r.Context(), state.Token, chatID, agent.Name)
-				if err != nil {
-					writeJSON(w, http.StatusBadGateway, map[string]any{"error": "create_agent_topics_failed"})
-					return
-				}
-				if err := s.state.SetPendingAgentTopic(chatID, agent.Name, agent.Name, topic.MessageThreadID); err != nil {
-					writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "save_failed"})
-					return
-				}
-				pending = s.state.Snapshot().PendingChat
-			}
-		}
+	state, ok := s.ensurePendingChat(w, r, state, chatID)
+	if !ok || !s.createPendingAgentTopics(w, r, state, chatID) {
+		return
 	}
 	if err := s.state.CommitPendingChat(chatID); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "save_failed"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"result": s.status()})
+}
+
+// verifySetupChat checks that the chat is a forum supergroup where the bot can
+// manage topics. On failure it writes the response and returns false.
+func (s *Server) verifySetupChat(w http.ResponseWriter, r *http.Request, token string, chatID int64) bool {
+	chat, err := s.bot.GetChat(r.Context(), token, chatID)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "telegram_unavailable"})
+		return false
+	}
+	if chat.Type != "supergroup" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "chat_must_be_supergroup"})
+		return false
+	}
+	if !chat.IsForum {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "topics_must_be_enabled"})
+		return false
+	}
+	bot, err := s.bot.GetMe(r.Context(), token)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "telegram_unavailable"})
+		return false
+	}
+	member, err := s.bot.GetChatMember(r.Context(), token, chatID, bot.ID)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "telegram_unavailable"})
+		return false
+	}
+	if member.Status != "creator" && (member.Status != "administrator" || !member.CanManageTopics) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "bot_must_manage_topics"})
+		return false
+	}
+	return true
+}
+
+// ensurePendingChat creates the management topic and the pending binding unless
+// a setup of this chat is being resumed. It returns the state to continue from.
+// On failure it writes the response and returns false.
+func (s *Server) ensurePendingChat(w http.ResponseWriter, r *http.Request, state State, chatID int64) (State, bool) {
+	if state.PendingChat != nil && state.PendingChat.ChatID == chatID {
+		return state, true
+	}
+	topic, err := s.bot.CreateForumTopic(r.Context(), state.Token, chatID, "tariboyd")
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "create_topic_failed"})
+		return state, false
+	}
+	if err := s.state.BeginPendingChat(chatID, topic.MessageThreadID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "save_failed"})
+		return state, false
+	}
+	return s.state.Snapshot(), true
+}
+
+// createPendingAgentTopics adds a topic to the pending binding for each agent
+// that has none. On failure it writes the response and returns false.
+func (s *Server) createPendingAgentTopics(w http.ResponseWriter, r *http.Request, state State, chatID int64) bool {
+	if s.daemon == nil {
+		return true
+	}
+	agents, err := s.daemon.ListAgents(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "list_agents_failed"})
+		return false
+	}
+	pending := state.PendingChat
+	for _, agent := range agents {
+		if _, ok := pending.AgentTopics[agent.Name]; ok {
+			continue
+		}
+		topic, err := s.bot.CreateForumTopic(r.Context(), state.Token, chatID, agent.Name)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]any{"error": "create_agent_topics_failed"})
+			return false
+		}
+		if err := s.state.SetPendingAgentTopic(chatID, agent.Name, agent.Name, topic.MessageThreadID); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "save_failed"})
+			return false
+		}
+		pending = s.state.Snapshot().PendingChat
+	}
+	return true
 }
 
 func int64List(value any) ([]int64, error) {

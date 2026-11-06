@@ -167,33 +167,18 @@ func (s *Server) ProcessUpdate(ctx context.Context, update Update) error {
 	}
 	discard := func() error { return s.state.SetOffset(update.UpdateID + 1) }
 	message := update.Message
-	if len(state.AllowedUIDs) == 0 || message == nil || message.From == nil {
-		return discard()
-	}
-	index := sort.Search(len(state.AllowedUIDs), func(i int) bool { return state.AllowedUIDs[i] >= message.From.ID })
-	if index == len(state.AllowedUIDs) || state.AllowedUIDs[index] != message.From.ID || message.Chat.ID != state.ChatID {
+	if !authorizedMessage(state, message) {
 		return discard()
 	}
 	if message.MessageThreadID == state.ManagementTopicID {
-		if message.ForwardOrigin != nil {
-			return discard()
-		}
-		handled, err := s.handleCommand(ctx, message, "", update.UpdateID)
-		if err != nil {
-			return err
-		}
-		if handled {
-			return discard()
+		if message.ForwardOrigin == nil {
+			if _, err := s.handleCommand(ctx, message, "", update.UpdateID); err != nil {
+				return err
+			}
 		}
 		return discard()
 	}
-	agent := ""
-	for _, topic := range state.AgentTopics {
-		if topic.ThreadID == message.MessageThreadID {
-			agent = topic.Name
-			break
-		}
-	}
+	agent := topicAgent(state, message.MessageThreadID)
 	text := message.Text
 	if text == "" {
 		text = message.Caption
@@ -201,16 +186,9 @@ func (s *Server) ProcessUpdate(ctx context.Context, update Update) error {
 	if agent == "" || text == "" || s.daemon == nil {
 		return discard()
 	}
-	agents, err := s.daemon.ListAgents(ctx)
+	live, err := s.agentIsLive(ctx, agent)
 	if err != nil {
 		return err
-	}
-	live := false
-	for _, candidate := range agents {
-		if candidate.Name == agent {
-			live = true
-			break
-		}
 	}
 	if !live {
 		return discard()
@@ -233,16 +211,53 @@ func (s *Server) ProcessUpdate(ctx context.Context, update Update) error {
 	if IsInboxFull(err) {
 		// The letter is stored dead and a retry would get the same answer:
 		// tell the sender and move on.
-		if s.bot != nil {
-			if _, sendErr := s.bot.SendMessage(ctx, state.Token, state.ChatID, message.MessageThreadID,
-				"The inbox of "+agent+" is full; this message was not delivered. Try again later."); sendErr != nil {
-				return sendErr
-			}
-		}
-		return discard()
+		err = s.notifyInboxFull(ctx, state, message.MessageThreadID, agent)
 	}
 	if err != nil {
 		return err
 	}
 	return discard()
+}
+
+// authorizedMessage reports whether message came from an allowlisted user in
+// the bound chat. AllowedUIDs is sorted.
+func authorizedMessage(state State, message *TelegramMessage) bool {
+	if len(state.AllowedUIDs) == 0 || message == nil || message.From == nil {
+		return false
+	}
+	index := sort.Search(len(state.AllowedUIDs), func(i int) bool { return state.AllowedUIDs[i] >= message.From.ID })
+	return index != len(state.AllowedUIDs) && state.AllowedUIDs[index] == message.From.ID && message.Chat.ID == state.ChatID
+}
+
+// topicAgent returns the name of the agent bound to a thread, or "" when the
+// thread is not an agent topic.
+func topicAgent(state State, threadID int64) string {
+	for _, topic := range state.AgentTopics {
+		if topic.ThreadID == threadID {
+			return topic.Name
+		}
+	}
+	return ""
+}
+
+func (s *Server) agentIsLive(ctx context.Context, agent string) (bool, error) {
+	agents, err := s.daemon.ListAgents(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, candidate := range agents {
+		if candidate.Name == agent {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (s *Server) notifyInboxFull(ctx context.Context, state State, threadID int64, agent string) error {
+	if s.bot == nil {
+		return nil
+	}
+	_, err := s.bot.SendMessage(ctx, state.Token, state.ChatID, threadID,
+		"The inbox of "+agent+" is full; this message was not delivered. Try again later.")
+	return err
 }
