@@ -101,6 +101,7 @@ tariboy has four command surfaces:
 | `tariboy compose status` | Compare the file with the daemon and report drift |
 | `tariboy compose stop [MEMBERS...]` | Stop the file's agents, or the named agents and groups |
 | `tariboy compose up` | Build, create and start the file's images, groups and agents; start the daemon first |
+| `tariboy compose validate` | Check the file's schema, references, local paths and tariboy version range; --daemon also checks the daemon version |
 | `tariboy context get NAME` | Read the agent's CONTEXT.md |
 | `tariboy context set NAME` | Overwrite the agent's CONTEXT.md |
 | `tariboy cp SRC` | Upload a file to the server: cp LOCAL_FILE; download: cp AGENT:SRC LOCAL_DST |
@@ -252,11 +253,17 @@ down:
   published release over this installer-managed installation, restarts a
   running daemon, and with `--cleanup` deletes all but the newest N releases
   (default 5).
-- `tariboy compose VERB` reads a compose file (`-f FILE`, default
-  `tariboy-compose.yaml`) and drives the daemon API; `compose up` starts the
-  daemon first unless `--no-start` or `TARIBOY_NO_AUTOSTART` is set. The
-  compose flags may also come before the verb, as in
-  `tariboy compose -f FILE up`.
+- `tariboy compose VERB` reads a compose file and drives the daemon API.
+  Without `-f FILE`, it reads `Tariboycompose.yaml`, else
+  `tariboy-compose.yaml`, from the current directory; if both files exist, it
+  stops with an error. `compose up` starts the
+  daemon first unless `--no-start` or `TARIBOY_NO_AUTOSTART` is set. If the
+  file has a `tariboy` version range, a verb that calls the daemon stops before
+  any change when the daemon version is outside the range.
+  `tariboy compose validate [-f FILE] [--daemon]` checks the file and changes
+  nothing; only `--daemon` makes it read the daemon version. See
+  [Compose](/docs/binaries/compose). The compose flags may also come before
+  the verb, as in `tariboy compose -f FILE up`.
 
 `tariboy update` updates only an installer-managed `linux-x86_64` or
 `linux-aarch64` installation

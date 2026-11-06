@@ -49,16 +49,13 @@ func loadComposeFile(path string) (File, string, error) {
 	return f, dir, nil
 }
 
-// DefaultFile is the compose file a verb reads when -f is not given.
-const DefaultFile = "tariboy-compose.yaml"
-
 // DefaultTail is how many events `compose logs` asks for per member.
 const DefaultTail = 200
 
 // Options are the parsed arguments of one `tariboy compose VERB` call.
 type Options struct {
 	Verb string
-	// File is the compose file; empty means DefaultFile.
+	// File is the compose file; empty means FindFile in the working directory.
 	File string
 	// Args are the verb's positionals: the member or group names of a
 	// lifecycle verb, rm and logs, or the member and prompt words of exec.
@@ -69,12 +66,13 @@ type Options struct {
 	Volumes bool   // down: also delete agent data and group shared dirs
 	NoStart bool   // up: do not start the daemon
 	Tail    int    // logs: events per member
+	Daemon  bool   // validate: also check the daemon version
 	// Stdin is where import reads its answer when Yes is false.
 	Stdin io.Reader
 }
 
 // Verbs lists every compose verb in the order its usage names them.
-var Verbs = []string{"up", "down", "start", "stop", "restart", "kill", "exec", "ps", "status", "logs", "build", "rm", "archive", "import"}
+var Verbs = []string{"up", "down", "start", "stop", "restart", "kill", "exec", "ps", "status", "logs", "build", "rm", "validate", "archive", "import"}
 
 // VerbFirst moves the verb in front of the flags that precede it, so
 // `compose -f FILE up` resolves like `compose up -f FILE`. args follow
@@ -97,18 +95,26 @@ func VerbFirst(args []string) []string {
 // Run executes one compose verb: it loads the file and drives the Runner, or
 // writes or imports a team archive. It returns a process exit code.
 func Run(ctx context.Context, call Caller, o Options, out, errOut io.Writer) int {
-	file := o.File
-	if file == "" {
-		file = DefaultFile
-	}
 	output, archive, yes, volumes, noStart, tail := o.Output, o.Archive, o.Yes, o.Volumes, o.NoStart, o.Tail
 	verb := o.Verb
 	verbArgs := o.Args
+	if verb == "import" {
+		return composeImport(call, archive, yes, o.Stdin, out, errOut)
+	}
+	file := o.File
+	if file == "" {
+		found, err := FindFile(".")
+		if err != nil {
+			fmt.Fprintf(errOut, "compose: %v\n", err)
+			return 1
+		}
+		file = found
+	}
 	switch verb {
 	case "archive":
 		return composeArchive(file, output, out, errOut)
-	case "import":
-		return composeImport(call, archive, yes, o.Stdin, out, errOut)
+	case "validate":
+		return composeValidate(call, file, o.Daemon, out, errOut)
 	}
 
 	f, workdir, err := loadComposeFile(file)
@@ -119,6 +125,12 @@ func Run(ctx context.Context, call Caller, o Options, out, errOut io.Writer) int
 	if err := f.Validate(); err != nil {
 		fmt.Fprintf(errOut, "compose: %v\n", err)
 		return 1
+	}
+	if verb == "up" || verb == "build" {
+		if err := f.UnappliedSections(); err != nil {
+			fmt.Fprintf(errOut, "compose %s: %v\n", verb, err)
+			return 1
+		}
 	}
 	r := NewRunner(call, workdir, out)
 
@@ -131,7 +143,11 @@ func Run(ctx context.Context, call Caller, o Options, out, errOut io.Writer) int
 		}
 	}
 
-	var runErr error
+	// The daemon must be inside the file's tariboy range before any change.
+	runErr := checkDaemonVersion(call, f, file)
+	if runErr != nil {
+		return reportRunError(verb, runErr, errOut)
+	}
 	switch verb {
 	case "up":
 		runErr = r.Up(f)
@@ -155,13 +171,18 @@ func Run(ctx context.Context, call Caller, o Options, out, errOut io.Writer) int
 		fmt.Fprintf(errOut, "compose: unknown verb %q\n", verb)
 		return 2
 	}
-	if runErr != nil {
-		if client.IsDaemonDown(runErr) {
-			fmt.Fprintln(errOut, "tariboyd is not running (start it with: tariboyd)")
-			return 2
-		}
-		fmt.Fprintf(errOut, "compose %s: %v\n", verb, runErr)
-		return 1
+	return reportRunError(verb, runErr, errOut)
+}
+
+// reportRunError prints the error of a verb and returns its exit code.
+func reportRunError(verb string, err error, errOut io.Writer) int {
+	if err == nil {
+		return 0
 	}
-	return 0
+	if client.IsDaemonDown(err) {
+		fmt.Fprintln(errOut, "tariboyd is not running (start it with: tariboyd)")
+		return 2
+	}
+	fmt.Fprintf(errOut, "compose %s: %v\n", verb, err)
+	return 1
 }

@@ -27,11 +27,12 @@ var composeVerbs = map[string]struct {
 		{Name: "member", Type: registry.String, Required: true, Help: "agent in the compose file"},
 		{Name: "prompt", Type: registry.String, Repeatable: true, Rest: true, Help: "one-shot prompt; the words are joined by spaces"},
 	}},
-	"ps":      {summary: "List the file's agents and their live state"},
-	"status":  {summary: "Compare the file with the daemon and report drift"},
-	"build":   {summary: "Build the file's images"},
-	"archive": {summary: "Create a compose-only portable team archive; transfer runnable images separately"},
-	"import":  {summary: "Preview and import compose-only team/runtime configuration"},
+	"ps":       {summary: "List the file's agents and their live state"},
+	"status":   {summary: "Compare the file with the daemon and report drift"},
+	"build":    {summary: "Build the file's images"},
+	"validate": {summary: "Check the file's schema, references, local paths and tariboy version range; --daemon also checks the daemon version"},
+	"archive":  {summary: "Create a compose-only portable team archive; transfer runnable images separately"},
+	"import":   {summary: "Preview and import compose-only team/runtime configuration"},
 }
 
 func composeMembers() []registry.Arg {
@@ -42,13 +43,14 @@ func composeMembers() []registry.Arg {
 // names the verb that reads it.
 func composeFlags() []registry.Arg {
 	return []registry.Arg{
-		{Name: "file", Flag: "file", Short: "f", Type: registry.String, Default: compose.DefaultFile, Help: "compose file"},
+		{Name: "file", Flag: "file", Short: "f", Type: registry.String, Help: "compose file (default: " + compose.DefaultFile + ", else " + compose.LegacyFile + ", in the current directory)"},
 		{Name: "no_start", Flag: "no-start", Type: registry.Bool, Help: "up: do not start the daemon (also TARIBOY_NO_AUTOSTART)"},
 		{Name: "volumes", Flag: "volumes", Short: "v", Type: registry.Bool, Help: "down: also delete agent data and group shared dirs"},
 		{Name: "tail", Flag: "tail", Type: registry.Int, Default: compose.DefaultTail, Help: "logs: events per agent"},
 		{Name: "output", Flag: "output", Type: registry.String, Help: "archive: archive file to create (required)"},
 		{Name: "archive", Flag: "archive", Type: registry.String, Help: "import: archive file to upload (required)"},
 		{Name: "yes", Flag: "yes", Type: registry.Bool, Help: "import: apply without asking"},
+		{Name: "daemon", Flag: "daemon", Type: registry.Bool, Help: "validate: also check the daemon version (read-only)"},
 	}
 }
 
@@ -73,6 +75,7 @@ func composeLocal(verb string) registry.HandlerFunc {
 			Output:  p.String("output"),
 			Archive: p.String("archive"),
 			Yes:     p.Bool("yes"),
+			Daemon:  p.Bool("daemon"),
 			Volumes: p.Bool("volumes"),
 			NoStart: p.Bool("no_start"),
 			Tail:    p.IntOr("tail", compose.DefaultTail),

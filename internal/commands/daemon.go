@@ -229,7 +229,7 @@ func BuildRegistry() *registry.Registry {
 	mustGroup(r, "daemon", "Control the tariboy daemon")
 	mustGroup(r, "daemon.agent-shell-script", "Manage the global pre-iteration shell script")
 	mustGroup(r, "daemon.config", "Read and set daemon config")
-	mustGroup(r, "compose", "Run a team from a tariboy-compose.yaml file")
+	mustGroup(r, "compose", "Run a team from a Tariboycompose.yaml file")
 	mustGroup(r, "user-prompt", "Per-agent user prompt")
 	mustGroup(r, "context", "Per-agent context document")
 	mustGroup(r, "iteration", "Inspect agent iterations")
