@@ -26,9 +26,10 @@ const api = vi.hoisted(() => ({
   resumeTaskWorkflow: vi.fn(),
   listAgentPools: vi.fn(),
   reassignTaskWorkflow: vi.fn(),
+  dismissTaskWaits: vi.fn(),
 }));
 const localApi = fakeApi({
-  tasks: { listAgentPools: api.listAgentPools },
+  tasks: { listAgentPools: api.listAgentPools, dismissTaskWaits: api.dismissTaskWaits },
   workflows: {
     getTaskWorkflow: api.getTaskWorkflow,
     resumeTaskWorkflow: api.resumeTaskWorkflow,
@@ -267,6 +268,21 @@ it("still shows an agent's question on a workflow task, and every wait on a flex
   cleanup();
   renderDetail(flexible, [wait("system:workflow")]);
   expect(screen.getByText(/Waiting for an answer from user:owner/)).toBeInTheDocument();
+});
+
+it("dismisses the customer's open question of a closed task without an answer", async () => {
+  api.dismissTaskWaits.mockResolvedValue({ task: flexible, resolved_waits: [] });
+  const done: Task = { ...flexible, status: "done", category: "done" };
+  const { onTaskChanged } = renderDetail(done, [wait("agent:worker")]);
+  await userEvent.click(await screen.findByRole("button", { name: "Dismiss question" }));
+  await waitFor(() => expect(api.dismissTaskWaits).toHaveBeenCalledWith("TEST-1"));
+  await waitFor(() => expect(onTaskChanged).toHaveBeenCalled());
+});
+
+it("offers no dismiss for a question to someone other than the customer", async () => {
+  renderDetail(flexible, [{ ...wait("agent:worker"), expected_principal: "agent:reviewer" }]);
+  expect(await screen.findByText(/Waiting for an answer from agent:reviewer/)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Dismiss question" })).not.toBeInTheDocument();
 });
 
 it("shows a workflow task's assignee as text, with no control to change it", async () => {

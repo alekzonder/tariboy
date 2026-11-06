@@ -239,6 +239,26 @@ mentioned principal's next comment resolves only its own open wait. This makes
 “where is my answer required?” directly filterable for both agents and the
 customer.
 
+The customer can also close a question without an answer, for example a
+question an agent asked after the task was done.
+`POST /api/tasks/{key}/waits/dismiss` (`tasks.waits.dismiss`) works for a task
+in any status. Only the customer can call it; another caller gets `forbidden`
+(HTTP 403). In one transaction it:
+
+- closes each open wait on the customer, with no resolving comment;
+- closes the matching `task.question` letters with
+  `close_note = task-wait-dismissed`;
+- moves a flexible task from `wait_customer` to `in_progress` when no question
+  to the customer stays open, as an answer does. A workflow task gets the
+  state an answer gives it. A done or cancelled task keeps its status;
+- records a `task.waits_dismissed` event and sends each asker a
+  `task.answered` letter that says no answer is needed.
+
+The workflow's own wait on the customer stays open: an outcome or
+`workflow resume` resolves it. Questions to agents stay open too. With no open
+question to the customer, the call changes nothing and returns an empty
+`resolved_waits`.
+
 A mentioned name starts and ends with a letter or a digit. A dot, `_` or `-`
 inside the name is part of the name. Punctuation after the name is not part of
 it, so `@agent:worker.` and `(@agent:worker)` both mention `agent:worker`, and
@@ -414,6 +434,9 @@ the reader cannot see the parent. History is collapsed by default. The flexible 
 `wait_customer` reads Waiting for you. The flexible assignee list contains
 Unassigned, me, and each agent. You cannot type a principal. In the comment
 form, Ask an agent mentions an agent, and Reply Ok to the question posts `Ok`.
+When a question to you is open, the "Waiting for an answer" banner at the top
+of the sheet has **Dismiss question**, in every status, also for a done or
+cancelled task. The Needs you card has the same button.
 
 The sheet starts at half the viewport width. Drag its left separator or use
 its keyboard controls to resize it. The chosen width survives reloads.

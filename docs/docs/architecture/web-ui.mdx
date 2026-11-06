@@ -2409,7 +2409,9 @@ key and title. The drawer uses
   block of the workflow panel;
 - for an open question, **Send answer** and **Reply Ok to the question**. Both
   post a customer comment, which resolves the wait. **Reply Ok to the
-  question** shows only while the message box is empty;
+  question** shows only while the message box is empty. **Dismiss question**
+  calls `POST /api/tasks/{key}/waits/dismiss` (`tasks.waits.dismiss`): it
+  closes the question without a comment;
 - for a paused task, the pause reason with **Continue**, **Release holder**
   (pool status only), and **Cancel task**.
 

@@ -14,6 +14,7 @@ import { MarkdownContent } from "./TaskMarkdown";
 import { refreshTasks, taskQueries, writeTask } from "./taskQueries";
 import { formatTaskTime } from "./taskTime";
 import { useWorkflowAdvance } from "./useWorkflowAdvance";
+import DismissQuestionButton from "./DismissQuestionButton";
 import { CheckingStatus, OutcomeNotice } from "./WorkflowOutcomes";
 import WorkflowPauseBanner from "./WorkflowPauseBanner";
 import { requiredBy, stepArtifacts } from "./workflowGraph";
@@ -296,6 +297,9 @@ function CardActions({
         {view && <OutcomeButtons view={view} busy={busy} onAdvance={advance.advance} />}
         {question && (
           <AnswerButtons message={message} busy={busy} secondary={!!view} onSend={send} />
+        )}
+        {question && (
+          <DismissQuestionButton taskKey={taskKey} disabled={busy} onChanged={onChanged} />
         )}
       </div>
       <ActionStatus

@@ -2808,6 +2808,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/tasks/{key}/waits/dismiss": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Dismiss the customer's open questions on a task without an answer */
+    post: operations["tasks.waits.dismiss"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/tasks/{key}/workflow": {
     parameters: {
       query?: never;
@@ -3722,6 +3739,10 @@ export interface components {
     DeclaredArtifact: {
       description: string;
       name: string;
+    };
+    DismissWaitsResult: {
+      resolved_waits: components["schemas"]["WaitingFor"][];
+      task: components["schemas"]["Task"];
     };
     Event: {
       actor: string;
@@ -5350,6 +5371,7 @@ export type DaemonMissingTool = components["schemas"]["DaemonMissingTool"];
 export type DaemonReindexResult = components["schemas"]["DaemonReindexResult"];
 export type DaemonStatus = components["schemas"]["DaemonStatus"];
 export type DeclaredArtifact = components["schemas"]["DeclaredArtifact"];
+export type DismissWaitsResult = components["schemas"]["DismissWaitsResult"];
 export type Event = components["schemas"]["Event"];
 export type FileUploadResult = components["schemas"]["FileUploadResult"];
 export type FsEntry = components["schemas"]["FsEntry"];
@@ -15345,6 +15367,52 @@ export interface operations {
           "application/json": {
             ok: boolean;
             result: components["schemas"]["Task"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "tasks.waits.dismiss": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        key: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": Record<string, unknown>;
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["DismissWaitsResult"];
           };
         };
       };

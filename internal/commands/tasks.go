@@ -111,6 +111,10 @@ func TaskOperatorCommands() []registry.Command {
 				tasks.Decode(p, &in)
 				return control.AddComment(ctx, actor, in.Key, in.Input())
 			}),
+		taskRoute("tasks.waits.dismiss", "POST", "/api/tasks/{key}/waits/dismiss", "Dismiss the customer's open questions on a task without an answer",
+			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
+				return control.DismissWaits(ctx, actor, p.Trimmed("key"))
+			}),
 		taskRoute("tasks.relations.list", "GET", "/api/tasks/{key}/relations", "List task relations",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
 				detail, err := control.GetTask(ctx, actor, p.Trimmed("key"))
@@ -438,6 +442,7 @@ var taskResultTypes = map[string]func(registry.Command) registry.Command{
 	"tasks.complete":                registry.WithResult[tasks.Task],
 	"tasks.comments.list":           registry.WithResult[TaskCommentList],
 	"tasks.comments.add":            registry.WithResult[tasks.CommentResult],
+	"tasks.waits.dismiss":           registry.WithResult[tasks.DismissWaitsResult],
 	"tasks.relations.list":          registry.WithResult[TaskRelationList],
 	"tasks.relations.add":           registry.WithResult[tasks.Relation],
 	"tasks.relations.delete":        registry.WithResult[TaskRelationDeleted],
