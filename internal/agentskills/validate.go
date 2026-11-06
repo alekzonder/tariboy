@@ -206,79 +206,8 @@ func walkSkillDirectory(dir *os.File, root, relDir string, beforeOpen func(strin
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 	for _, entry := range entries {
-		name := entry.Name()
-		if name == "." || name == ".." || strings.ContainsRune(name, filepath.Separator) {
-			return fmt.Errorf("invalid skill member name %q", name)
-		}
-		// Skill evals are authoring evidence, never read during an iteration,
-		// so a root-level evals directory stays out of the packaged image.
-		if relDir == "" && name == "evals" && entry.IsDir() {
-			continue
-		}
-		rel := name
-		if relDir != "" {
-			rel = filepath.Join(relDir, name)
-		}
-		relSlash := filepath.ToSlash(rel)
-		if beforeOpen != nil {
-			if err := beforeOpen(relSlash); err != nil {
-				return err
-			}
-		}
-		displayPath := filepath.Join(root, rel)
-		member, err := openSkillMember(dir, name, displayPath)
-		if err != nil {
-			return fmt.Errorf("open skill member %q: %w", relSlash, err)
-		}
-		opened, statErr := member.Stat()
-		if statErr != nil {
-			member.Close()
-			return statErr
-		}
-		switch {
-		case opened.IsDir():
-			err = walkSkillDirectory(member, root, rel, beforeOpen, files, total)
-		case opened.Mode().IsRegular():
-			if isHardlinked(opened) {
-				err = fmt.Errorf("skill member %q is a hardlink", relSlash)
-				break
-			}
-			if len(*files) >= MaxFilesPerSkill {
-				err = fmt.Errorf("skill has more than %d files", MaxFilesPerSkill)
-				break
-			}
-			var body []byte
-			body, err = readPinnedRegular(member, opened)
-			if err != nil {
-				err = fmt.Errorf("read skill member %q: %w", relSlash, err)
-				break
-			}
-			if *total > MaxSkillBytes-int64(len(body)) {
-				err = fmt.Errorf("skill exceeds %d aggregate bytes", MaxSkillBytes)
-				break
-			}
-			*total += int64(len(body))
-			sum := sha256.Sum256(body)
-			*files = append(*files, File{
-				RelativePath: relSlash,
-				SourcePath:   displayPath,
-				Size:         int64(len(body)),
-				SHA256:       hex.EncodeToString(sum[:]),
-				Executable:   opened.Mode().Perm()&0o100 != 0,
-				Body:         body,
-			})
-		default:
-			err = fmt.Errorf("skill member %q is not a regular file or directory", relSlash)
-		}
-		closeErr := member.Close()
-		if err != nil {
+		if err := walkSkillEntry(dir, entry, root, relDir, beforeOpen, files, total); err != nil {
 			return err
-		}
-		if closeErr != nil {
-			return closeErr
-		}
-		if err := verifyCurrentMember(dir, name, displayPath, opened); err != nil {
-			return fmt.Errorf("verify skill member %q: %w", relSlash, err)
 		}
 	}
 	dirAfter, err := dir.Stat()
@@ -288,6 +217,88 @@ func walkSkillDirectory(dir *os.File, root, relDir string, beforeOpen func(strin
 	if !snapshotUnchanged(dirBefore, dirAfter) {
 		return errors.New("skill directory changed while reading")
 	}
+	return nil
+}
+
+// walkSkillEntry opens one directory entry through its pinned parent, collects
+// it, closes it, and verifies by name that the entry is still the same member.
+func walkSkillEntry(dir *os.File, entry os.DirEntry, root, relDir string, beforeOpen func(string) error, files *[]File, total *int64) error {
+	name := entry.Name()
+	if name == "." || name == ".." || strings.ContainsRune(name, filepath.Separator) {
+		return fmt.Errorf("invalid skill member name %q", name)
+	}
+	// Skill evals are authoring evidence, never read during an iteration,
+	// so a root-level evals directory stays out of the packaged image.
+	if relDir == "" && name == "evals" && entry.IsDir() {
+		return nil
+	}
+	rel := name
+	if relDir != "" {
+		rel = filepath.Join(relDir, name)
+	}
+	relSlash := filepath.ToSlash(rel)
+	if beforeOpen != nil {
+		if err := beforeOpen(relSlash); err != nil {
+			return err
+		}
+	}
+	displayPath := filepath.Join(root, rel)
+	member, err := openSkillMember(dir, name, displayPath)
+	if err != nil {
+		return fmt.Errorf("open skill member %q: %w", relSlash, err)
+	}
+	opened, statErr := member.Stat()
+	if statErr != nil {
+		member.Close()
+		return statErr
+	}
+	switch {
+	case opened.IsDir():
+		err = walkSkillDirectory(member, root, rel, beforeOpen, files, total)
+	case opened.Mode().IsRegular():
+		err = collectSkillFile(member, opened, relSlash, displayPath, files, total)
+	default:
+		err = fmt.Errorf("skill member %q is not a regular file or directory", relSlash)
+	}
+	closeErr := member.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if err := verifyCurrentMember(dir, name, displayPath, opened); err != nil {
+		return fmt.Errorf("verify skill member %q: %w", relSlash, err)
+	}
+	return nil
+}
+
+// collectSkillFile reads an open regular member and appends it to files. The
+// limits are checked here; the caller closes member.
+func collectSkillFile(member *os.File, opened os.FileInfo, relSlash, displayPath string, files *[]File, total *int64) error {
+	if isHardlinked(opened) {
+		return fmt.Errorf("skill member %q is a hardlink", relSlash)
+	}
+	if len(*files) >= MaxFilesPerSkill {
+		return fmt.Errorf("skill has more than %d files", MaxFilesPerSkill)
+	}
+	body, err := readPinnedRegular(member, opened)
+	if err != nil {
+		return fmt.Errorf("read skill member %q: %w", relSlash, err)
+	}
+	if *total > MaxSkillBytes-int64(len(body)) {
+		return fmt.Errorf("skill exceeds %d aggregate bytes", MaxSkillBytes)
+	}
+	*total += int64(len(body))
+	sum := sha256.Sum256(body)
+	*files = append(*files, File{
+		RelativePath: relSlash,
+		SourcePath:   displayPath,
+		Size:         int64(len(body)),
+		SHA256:       hex.EncodeToString(sum[:]),
+		Executable:   opened.Mode().Perm()&0o100 != 0,
+		Body:         body,
+	})
 	return nil
 }
 
@@ -436,32 +447,9 @@ func ValidatePrepared(skill Prepared) error {
 	if skill.Metadata.ArchiveRoot != "skills/"+skill.Metadata.Name {
 		return fmt.Errorf("skill %q has invalid archive root", skill.Metadata.Name)
 	}
-	var total int64
-	var skillBody []byte
-	previous := ""
-	for i, file := range skill.Files {
-		clean := path.Clean(file.RelativePath)
-		if file.RelativePath == "" || clean != file.RelativePath || clean == "." || strings.HasPrefix(clean, "../") || path.IsAbs(clean) || strings.ContainsRune(file.RelativePath, '\\') {
-			return fmt.Errorf("skill %q has invalid member path %q", skill.Metadata.Name, file.RelativePath)
-		}
-		if i > 0 && file.RelativePath <= previous {
-			return fmt.Errorf("skill %q members are duplicate or unsorted", skill.Metadata.Name)
-		}
-		previous = file.RelativePath
-		if file.Size < 0 || file.Size > MaxFileBytes || int64(len(file.Body)) != file.Size {
-			return fmt.Errorf("skill %q member %q has invalid size", skill.Metadata.Name, file.RelativePath)
-		}
-		if total > MaxSkillBytes-file.Size {
-			return fmt.Errorf("skill %q exceeds %d aggregate bytes", skill.Metadata.Name, MaxSkillBytes)
-		}
-		total += file.Size
-		sum := sha256.Sum256(file.Body)
-		if file.SHA256 != hex.EncodeToString(sum[:]) {
-			return fmt.Errorf("skill %q member %q integrity mismatch", skill.Metadata.Name, file.RelativePath)
-		}
-		if file.RelativePath == "SKILL.md" {
-			skillBody = file.Body
-		}
+	skillBody, total, err := validatePreparedMembers(skill)
+	if err != nil {
+		return err
 	}
 	if skillBody == nil {
 		return fmt.Errorf("skill %q is missing SKILL.md", skill.Metadata.Name)
@@ -484,4 +472,43 @@ func ValidatePrepared(skill Prepared) error {
 		return fmt.Errorf("skill %q tree integrity mismatch", skill.Metadata.Name)
 	}
 	return nil
+}
+
+// validatePreparedMembers checks each member's path, order, size and digest. It
+// returns the SKILL.md body, nil when there is none, and the total member size.
+func validatePreparedMembers(skill Prepared) ([]byte, int64, error) {
+	var total int64
+	var skillBody []byte
+	previous := ""
+	for i, file := range skill.Files {
+		if !validMemberPath(file.RelativePath) {
+			return nil, 0, fmt.Errorf("skill %q has invalid member path %q", skill.Metadata.Name, file.RelativePath)
+		}
+		if i > 0 && file.RelativePath <= previous {
+			return nil, 0, fmt.Errorf("skill %q members are duplicate or unsorted", skill.Metadata.Name)
+		}
+		previous = file.RelativePath
+		if file.Size < 0 || file.Size > MaxFileBytes || int64(len(file.Body)) != file.Size {
+			return nil, 0, fmt.Errorf("skill %q member %q has invalid size", skill.Metadata.Name, file.RelativePath)
+		}
+		if total > MaxSkillBytes-file.Size {
+			return nil, 0, fmt.Errorf("skill %q exceeds %d aggregate bytes", skill.Metadata.Name, MaxSkillBytes)
+		}
+		total += file.Size
+		sum := sha256.Sum256(file.Body)
+		if file.SHA256 != hex.EncodeToString(sum[:]) {
+			return nil, 0, fmt.Errorf("skill %q member %q integrity mismatch", skill.Metadata.Name, file.RelativePath)
+		}
+		if file.RelativePath == "SKILL.md" {
+			skillBody = file.Body
+		}
+	}
+	return skillBody, total, nil
+}
+
+// validMemberPath reports whether rel is a clean relative slash path that stays
+// inside the skill.
+func validMemberPath(rel string) bool {
+	clean := path.Clean(rel)
+	return rel != "" && clean == rel && clean != "." && !strings.HasPrefix(clean, "../") && !path.IsAbs(clean) && !strings.ContainsRune(rel, '\\')
 }

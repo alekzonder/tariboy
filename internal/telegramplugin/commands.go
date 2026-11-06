@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+const invalidCommandReply = "Unknown or invalid command. Use /help."
+
 var managementHelp = []string{
 	"/help", "/agents", "/agent create NAME IMAGE", "/agent show NAME", "/agent set NAME FIELD VALUE",
 	"/start NAME", "/stop NAME", "/kill NAME", "/tasks [NAME]", "/task show KEY",
@@ -64,52 +66,73 @@ func (s *Server) runCommand(ctx context.Context, command string, args []string, 
 		}
 		return s.callText(ctx, http.MethodGet, "/api/agents", nil)
 	case "agent":
-		if agent != "" || len(args) < 2 {
+		if agent != "" {
 			break
 		}
-		switch args[0] {
-		case "create":
-			if len(args) != 3 {
-				break
-			}
-			return s.callText(ctx, http.MethodPost, "/api/agents", map[string]any{"name": args[1], "image": args[2]})
-		case "show":
-			if len(args) != 2 {
-				break
-			}
-			return s.callText(ctx, http.MethodGet, "/api/agents/"+url.PathEscape(args[1]), nil)
-		case "set":
-			parts := strings.SplitN(raw, " ", 5)
-			if len(parts) != 5 {
-				break
-			}
-			return s.setAgent(ctx, parts[2], parts[3], parts[4])
-		}
+		return s.agentCommand(ctx, args, raw)
 	case "start", "stop", "kill":
-		target := agent
-		if target == "" && len(args) == 1 {
-			target = args[0]
-		}
-		if target == "" || agent != "" && len(args) != 0 {
-			break
-		}
-		return s.callText(ctx, http.MethodPost, "/api/agents/"+url.PathEscape(target)+"/"+command, map[string]any{"name": target})
+		return s.lifecycleCommand(ctx, command, args, agent)
 	case "tasks":
-		target := agent
-		if target == "" && len(args) == 1 {
-			target = args[0]
-		} else if len(args) > 0 {
-			break
-		}
-		path := "/api/tasks"
-		if target != "" {
-			path += "?scope_agent=" + url.QueryEscape(target)
-		}
-		return s.callText(ctx, http.MethodGet, path, nil)
+		return s.listTasksCommand(ctx, args, agent)
 	case "task":
 		return s.taskCommand(ctx, args, raw, agent, updateID)
 	}
-	return "Unknown or invalid command. Use /help.", nil
+	return invalidCommandReply, nil
+}
+
+// agentCommand runs /agent, which exists only in the management topic.
+func (s *Server) agentCommand(ctx context.Context, args []string, raw string) (string, error) {
+	if len(args) < 2 {
+		return invalidCommandReply, nil
+	}
+	switch args[0] {
+	case "create":
+		if len(args) != 3 {
+			break
+		}
+		return s.callText(ctx, http.MethodPost, "/api/agents", map[string]any{"name": args[1], "image": args[2]})
+	case "show":
+		if len(args) != 2 {
+			break
+		}
+		return s.callText(ctx, http.MethodGet, "/api/agents/"+url.PathEscape(args[1]), nil)
+	case "set":
+		parts := strings.SplitN(raw, " ", 5)
+		if len(parts) != 5 {
+			break
+		}
+		return s.setAgent(ctx, parts[2], parts[3], parts[4])
+	}
+	return invalidCommandReply, nil
+}
+
+// lifecycleCommand runs /start, /stop and /kill. An agent topic targets its own
+// agent and takes no name; the management topic takes exactly one.
+func (s *Server) lifecycleCommand(ctx context.Context, command string, args []string, agent string) (string, error) {
+	target := agent
+	if target == "" && len(args) == 1 {
+		target = args[0]
+	}
+	if target == "" || agent != "" && len(args) != 0 {
+		return invalidCommandReply, nil
+	}
+	return s.callText(ctx, http.MethodPost, "/api/agents/"+url.PathEscape(target)+"/"+command, map[string]any{"name": target})
+}
+
+// listTasksCommand runs /tasks. An agent topic lists its own agent's tasks; the
+// management topic lists all tasks or those of one named agent.
+func (s *Server) listTasksCommand(ctx context.Context, args []string, agent string) (string, error) {
+	target := agent
+	if target == "" && len(args) == 1 {
+		target = args[0]
+	} else if len(args) > 0 {
+		return invalidCommandReply, nil
+	}
+	path := "/api/tasks"
+	if target != "" {
+		path += "?scope_agent=" + url.QueryEscape(target)
+	}
+	return s.callText(ctx, http.MethodGet, path, nil)
 }
 
 func (s *Server) setAgent(ctx context.Context, agent, field, value string) (string, error) {
@@ -146,7 +169,7 @@ func (s *Server) setAgent(ctx context.Context, agent, field, value string) (stri
 
 func (s *Server) taskCommand(ctx context.Context, args []string, raw, agent string, updateID int64) (string, error) {
 	if len(args) < 2 {
-		return "Unknown or invalid command. Use /help.", nil
+		return invalidCommandReply, nil
 	}
 	verb, key := args[0], args[1]
 	switch verb {
@@ -188,7 +211,7 @@ func (s *Server) taskCommand(ctx context.Context, args []string, raw, agent stri
 			"body": parts[3], "idempotency_key": "telegram:" + strconv.FormatInt(updateID, 10),
 		})
 	}
-	return "Unknown or invalid command. Use /help.", nil
+	return invalidCommandReply, nil
 }
 
 func (s *Server) updateTask(ctx context.Context, key string, change map[string]any) (string, error) {
