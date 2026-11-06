@@ -336,145 +336,170 @@ func agentRun() registry.Command {
 			{Name: "notes", Type: registry.String, Help: "operator notes"},
 			{Name: "color", Type: registry.String, Help: "agent accent color as #rrggbb"},
 		},
-		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents"},
-		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
-			interactive := true
-			if value, present := p.OptBool("interactive"); present {
-				interactive = value
-			}
-			goalEnabled := true
-			if value, present := p.OptBool("goal_enabled"); present {
-				goalEnabled = value
-			}
-			goalWaitCustomerTimeoutS := 300
-			if p.Has("goal_wait_customer_timeout_s") {
-				var err error
-				goalWaitCustomerTimeoutS, err = intAtLeast(p.Params, "goal_wait_customer_timeout_s", "bad_goal_wait_customer_timeout", 1)
-				if err != nil {
-					return nil, err
-				}
-			}
-			goalDeliveryCooldownS := 60
-			if p.Has("goal_delivery_cooldown_s") {
-				var err error
-				goalDeliveryCooldownS, err = intAtLeast(p.Params, "goal_delivery_cooldown_s", "bad_goal_delivery_cooldown", 1)
-				if err != nil {
-					return nil, err
-				}
-			}
-			if p.Has("timeout") {
-				if p.Has("timeout_s") {
-					return nil, api.UserError{Code: "ambiguous_timeout", Msg: "timeout and timeout_s cannot be supplied together"}
-				}
-			}
-			env, envErr := parseAgentEnv(p.Params["env"])
-			if envErr != nil {
-				return nil, api.UserError{Code: "bad_env", Msg: envErr.Error()}
-			}
-			pluginList, pluginsErr := parseAgentPlugins(p.Params["plugins"])
-			if pluginsErr != nil {
-				return nil, api.UserError{Code: "bad_plugins", Msg: pluginsErr.Error()}
-			}
-			timeoutS, timeoutErr := parseAgentTimeout(p.String("timeout"))
-			if timeoutErr != nil {
-				return nil, api.UserError{Code: "bad_timeout", Msg: timeoutErr.Error()}
-			}
-			intervalS, err := intAtLeast(p.Params, "interval_s", "bad_interval", 0)
-			if err != nil {
-				return nil, err
-			}
-			if p.Has("timeout_s") {
-				timeoutS, err = intAtLeast(p.Params, "timeout_s", "bad_timeout", 0)
-				if err != nil {
-					return nil, err
-				}
-			}
-			hardTimeoutS, err := intAtLeast(p.Params, "hard_timeout_s", "bad_hard_timeout", 0)
-			if err != nil {
-				return nil, err
-			}
-			maxIdleIterations, err := intAtLeast(p.Params, "max_idle_iterations", "bad_max_idle", 0)
-			if err != nil {
-				return nil, err
-			}
-			aiStallTimeoutS := 1800
-			if p.Has("ai_stall_timeout_s") {
-				aiStallTimeoutS, err = intAtLeast(p.Params, "ai_stall_timeout_s", "bad_ai_stall_timeout", 1)
-				if err != nil {
-					return nil, err
-				}
-			}
-			messagesBatch, err := intAtLeast(p.Params, "messages_batch", "bad_messages_batch", 1)
-			if err != nil {
-				return nil, err
-			}
-			messagesMaxQueue, err := intAtLeast(p.Params, "messages_max_queue", "bad_messages_max_queue", 1)
-			if err != nil {
-				return nil, err
-			}
-			if !p.Has("messages_batch") {
-				messagesBatch = 10
-			}
-			if !p.Has("messages_max_queue") {
-				messagesMaxQueue = 100
-			}
-			onTimeout := p.String("on_timeout")
-			if p.Has("on_timeout") && onTimeout != "restart" && onTimeout != "stop" {
-				return nil, api.UserError{Code: "bad_on_timeout", Msg: "on_timeout must be restart or stop"}
-			}
-			onError := p.String("on_error")
-			if p.Has("on_error") && onError != "restart" && onError != "stop" {
-				return nil, api.UserError{Code: "bad_on_error", Msg: "on_error must be restart or stop"}
-			}
-			color := p.String("color")
-			if color != "" && !agentColorPattern.MatchString(color) {
-				return nil, api.UserError{Code: "bad_color", Msg: "color must be empty or a six-digit #rrggbb value"}
-			}
-			spec := registry.RunSpec{
-				ImageRef: p.String("image"), Name: p.String("name"), Cwd: p.String("cwd"),
-				Harness: p.String("harness"), Model: p.String("model"), Effort: p.String("effort"),
-				Interactive: interactive, Env: env, Plugins: pluginList,
-				IntervalS: intervalS, TimeoutS: timeoutS, HardTimeoutS: hardTimeoutS,
-				OnTimeout: onTimeout, OnError: onError,
-				MaxIdleIterations:        maxIdleIterations,
-				AIStallTimeoutS:          aiStallTimeoutS,
-				UserPrompt:               p.String("user_prompt"),
-				MessagesBatch:            messagesBatch,
-				MessagesMaxQueue:         messagesMaxQueue,
-				GoalEnabled:              &goalEnabled,
-				GoalWaitCustomerTimeoutS: goalWaitCustomerTimeoutS,
-				GoalDeliveryCooldownS:    goalDeliveryCooldownS,
-				Group:                    p.String("group"), Alias: p.String("alias"), Notes: p.String("notes"),
-				Color: strings.ToLower(color),
-			}
-			if spec.ImageRef == "" {
-				return nil, api.UserError{Code: "missing_image", Msg: "image ref is required"}
-			}
-			if p.Has("mail_instant_senders") {
-				if spec.MailInstantSenders, err = instantSenders(c, p.Strings("mail_instant_senders")); err != nil {
-					return nil, err
-				}
-			}
-			// Expand a relative/~ cwd against the daemon's fs root ($HOME) before
-			// validating — the UI cwd picker offers paths relative to that root, so
-			// "tmp/" must become $HOME/tmp rather than be rejected as non-absolute.
-			resolvedCwd, err := resolveCwd(spec.Cwd)
-			if err != nil {
-				return nil, api.UserError{Code: "bad_cwd", Msg: err.Error()}
-			}
-			spec.Cwd = resolvedCwd
-			if err := ensureCwd(spec.Cwd, p.Bool("create_cwd")); err != nil {
-				return nil, err
-			}
-			name, err := c.Control.Run(spec)
-			if err != nil {
-				return nil, api.UserError{Code: "run_failed", Msg: err.Error()}
-			}
-			state, _ := c.Control.LiveState(name)
-			return AgentRunResult{Name: name, State: state,
-				GoalEnabled: goalEnabled, GoalWaitCustomerTimeoutS: goalWaitCustomerTimeoutS, GoalDeliveryCooldownS: goalDeliveryCooldownS}, nil
-		},
+		HTTP:    &registry.HTTPRoute{Method: "POST", Path: "/api/agents"},
+		Handler: agentRunHandler,
 	})
+}
+
+func agentRunHandler(c *registry.Ctx, p registry.Request) (any, error) {
+	spec, err := agentRunSpec(p)
+	if err != nil {
+		return nil, err
+	}
+	if spec.ImageRef == "" {
+		return nil, api.UserError{Code: "missing_image", Msg: "image ref is required"}
+	}
+	if p.Has("mail_instant_senders") {
+		if spec.MailInstantSenders, err = instantSenders(c, p.Strings("mail_instant_senders")); err != nil {
+			return nil, err
+		}
+	}
+	// Expand a relative/~ cwd against the daemon's fs root ($HOME) before
+	// validating — the UI cwd picker offers paths relative to that root, so
+	// "tmp/" must become $HOME/tmp rather than be rejected as non-absolute.
+	resolvedCwd, err := resolveCwd(spec.Cwd)
+	if err != nil {
+		return nil, api.UserError{Code: "bad_cwd", Msg: err.Error()}
+	}
+	spec.Cwd = resolvedCwd
+	if err := ensureCwd(spec.Cwd, p.Bool("create_cwd")); err != nil {
+		return nil, err
+	}
+	name, err := c.Control.Run(spec)
+	if err != nil {
+		return nil, api.UserError{Code: "run_failed", Msg: err.Error()}
+	}
+	state, _ := c.Control.LiveState(name)
+	return AgentRunResult{Name: name, State: state,
+		GoalEnabled: *spec.GoalEnabled, GoalWaitCustomerTimeoutS: spec.GoalWaitCustomerTimeoutS, GoalDeliveryCooldownS: spec.GoalDeliveryCooldownS}, nil
+}
+
+// agentRunSpec validates the agent.run arguments. Callers show only the first
+// error, so the order of the steps is part of the API.
+func agentRunSpec(p registry.Request) (registry.RunSpec, error) {
+	spec := registry.RunSpec{
+		ImageRef: p.String("image"), Name: p.String("name"), Cwd: p.String("cwd"),
+		Harness: p.String("harness"), Model: p.String("model"), Effort: p.String("effort"),
+		Interactive: true,
+		UserPrompt:  p.String("user_prompt"),
+		Group:       p.String("group"), Alias: p.String("alias"), Notes: p.String("notes"),
+	}
+	if value, present := p.OptBool("interactive"); present {
+		spec.Interactive = value
+	}
+	if err := applyAgentRunGoal(p, &spec); err != nil {
+		return registry.RunSpec{}, err
+	}
+	if err := applyAgentRunEnvironment(p, &spec); err != nil {
+		return registry.RunSpec{}, err
+	}
+	if err := applyAgentRunLimits(p, &spec); err != nil {
+		return registry.RunSpec{}, err
+	}
+	if err := applyAgentRunPolicies(p, &spec); err != nil {
+		return registry.RunSpec{}, err
+	}
+	return spec, nil
+}
+
+func applyAgentRunGoal(p registry.Request, spec *registry.RunSpec) error {
+	goalEnabled := true
+	if value, present := p.OptBool("goal_enabled"); present {
+		goalEnabled = value
+	}
+	spec.GoalEnabled = &goalEnabled
+	spec.GoalWaitCustomerTimeoutS = 300
+	spec.GoalDeliveryCooldownS = 60
+	var err error
+	if p.Has("goal_wait_customer_timeout_s") {
+		spec.GoalWaitCustomerTimeoutS, err = intAtLeast(p.Params, "goal_wait_customer_timeout_s", "bad_goal_wait_customer_timeout", 1)
+		if err != nil {
+			return err
+		}
+	}
+	if p.Has("goal_delivery_cooldown_s") {
+		spec.GoalDeliveryCooldownS, err = intAtLeast(p.Params, "goal_delivery_cooldown_s", "bad_goal_delivery_cooldown", 1)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// applyAgentRunEnvironment reads env, plugins and the duration timeout, which a
+// later timeout_s replaces.
+func applyAgentRunEnvironment(p registry.Request, spec *registry.RunSpec) error {
+	if p.Has("timeout") && p.Has("timeout_s") {
+		return api.UserError{Code: "ambiguous_timeout", Msg: "timeout and timeout_s cannot be supplied together"}
+	}
+	env, envErr := parseAgentEnv(p.Params["env"])
+	if envErr != nil {
+		return api.UserError{Code: "bad_env", Msg: envErr.Error()}
+	}
+	pluginList, pluginsErr := parseAgentPlugins(p.Params["plugins"])
+	if pluginsErr != nil {
+		return api.UserError{Code: "bad_plugins", Msg: pluginsErr.Error()}
+	}
+	timeoutS, timeoutErr := parseAgentTimeout(p.String("timeout"))
+	if timeoutErr != nil {
+		return api.UserError{Code: "bad_timeout", Msg: timeoutErr.Error()}
+	}
+	spec.Env, spec.Plugins, spec.TimeoutS = env, pluginList, timeoutS
+	return nil
+}
+
+func applyAgentRunLimits(p registry.Request, spec *registry.RunSpec) error {
+	var err error
+	if spec.IntervalS, err = intAtLeast(p.Params, "interval_s", "bad_interval", 0); err != nil {
+		return err
+	}
+	if p.Has("timeout_s") {
+		if spec.TimeoutS, err = intAtLeast(p.Params, "timeout_s", "bad_timeout", 0); err != nil {
+			return err
+		}
+	}
+	if spec.HardTimeoutS, err = intAtLeast(p.Params, "hard_timeout_s", "bad_hard_timeout", 0); err != nil {
+		return err
+	}
+	if spec.MaxIdleIterations, err = intAtLeast(p.Params, "max_idle_iterations", "bad_max_idle", 0); err != nil {
+		return err
+	}
+	spec.AIStallTimeoutS = 1800
+	if p.Has("ai_stall_timeout_s") {
+		if spec.AIStallTimeoutS, err = intAtLeast(p.Params, "ai_stall_timeout_s", "bad_ai_stall_timeout", 1); err != nil {
+			return err
+		}
+	}
+	if spec.MessagesBatch, err = intAtLeast(p.Params, "messages_batch", "bad_messages_batch", 1); err != nil {
+		return err
+	}
+	if spec.MessagesMaxQueue, err = intAtLeast(p.Params, "messages_max_queue", "bad_messages_max_queue", 1); err != nil {
+		return err
+	}
+	if !p.Has("messages_batch") {
+		spec.MessagesBatch = 10
+	}
+	if !p.Has("messages_max_queue") {
+		spec.MessagesMaxQueue = 100
+	}
+	return nil
+}
+
+func applyAgentRunPolicies(p registry.Request, spec *registry.RunSpec) error {
+	onTimeout := p.String("on_timeout")
+	if p.Has("on_timeout") && onTimeout != "restart" && onTimeout != "stop" {
+		return api.UserError{Code: "bad_on_timeout", Msg: "on_timeout must be restart or stop"}
+	}
+	onError := p.String("on_error")
+	if p.Has("on_error") && onError != "restart" && onError != "stop" {
+		return api.UserError{Code: "bad_on_error", Msg: "on_error must be restart or stop"}
+	}
+	color := p.String("color")
+	if color != "" && !agentColorPattern.MatchString(color) {
+		return api.UserError{Code: "bad_color", Msg: "color must be empty or a six-digit #rrggbb value"}
+	}
+	spec.OnTimeout, spec.OnError, spec.Color = onTimeout, onError, strings.ToLower(color)
+	return nil
 }
 
 func agentPs() registry.Command {
