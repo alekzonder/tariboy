@@ -361,23 +361,46 @@ active host while a Library page is open. The image links of an agent's
 
 ## Home
 
+Home is the first screen of a workspace that has agents. It shows what needs
+the operator now and whether the agents are in order. The user is the operator
+who runs AI agents on one or more hosts. The task is to open the application,
+find the task or the letter that waits for an answer, see which agents run now
+and how the day goes, then go to the right place. Success: the operator
+understands in 5 seconds where an action is needed. At 1280 px all four
+sections (Needs you, Running now, Today, Recent) are visible on the first
+screen, and Needs you shows the most urgent items first, not every item. The
+goal is also recorded in `ui/src/mockups/home/Home.stories.tsx`.
+
 `/` is Home when the workspace has at least one agent
 (`ui/src/pages/home/HomePage.tsx`, loaded on first open). It has a **New
 agent** button and four sections:
 
 - **Needs you (N)**: the tasks that need you on every workspace host, newest
-  first, then your open letters. A question letter about a listed task is not
-  shown again. A task row opens the task drawer on its host, and a letter row
-  opens `/inbox?letter=<id>`. The chevron button **Answer in place** before a
-  task row expands the row into its
+  first, then your open letters. Home shows the 7 most urgent rows, with
+  **Show all (N)** under them. The link opens Inbox when every row is a letter
+  and Tasks otherwise. Letters from one sender about one task are one row of
+  the newest letter, and its meta starts with `N letters`. The inbox read
+  returns at most 100 letters, so when a host returned that many, N is a lower
+  bound and reads `100+`. A question letter about a listed task is not shown
+  again. The prefix `Answer on KEY:` or `Question on KEY:` of a letter subject
+  moves to the meta line, so the subject starts the title. The meta of a task
+  says `waiting for you` (or `paused`), and the age reads `12 min ago` or
+  `2 h ago` for the last 24 hours and a date (`Nov 4`) before that. The rows
+  are formatted in `ui/src/pages/home/needsYouModel.ts`. A task row opens the
+  task drawer on its host, and a letter row opens `/inbox?letter=<id>`. The
+  chevron button **Answer in place** before a task row expands the row into its
   [Needs you card](#needs-you-card), so you can answer without the drawer. With nothing to show it says **Nothing needs
   you.** When no host could be read, it shows the error and **Retry**.
 - **Running now (N)**: the agents in state `running`, with the time since
-  `current_iteration_started_at`. Each row opens the agent's Terminal.
+  `current_iteration_started_at`. Each row opens the agent's Terminal. Home
+  shows 8 rows. With more, **Show all (N)** shows the rest in place and
+  **Show less** folds them again.
 - **Today**: the Activity totals of the page host for the last 24 hours, with
-  **History**, which opens the Activity table at `/activity`.
+  **History**, which opens the Activity table at `/activity`. The number of a
+  tile sits at the bottom of the tile, so a label that wraps does not move it.
 - **Recent**: eight agents, newest `last_iteration_at` first; agents that never
-  ran follow in sidebar order.
+  ran follow in sidebar order. The meta is the time of the last iteration
+  (`2 h ago`), or `not run yet`.
 
 ## First run
 
@@ -1499,8 +1522,7 @@ designer's request, and the interface texts in it are in English.
     reviewer check one by one.
 13. `## Open questions`: questions for the developer.
 
-The reference example is `ui/src/mockups/home/handoff.md`. The reference
-mockup is `ui/src/mockups/home/Home.stories.tsx`.
+The reference mockup is `ui/src/mockups/home/Home.stories.tsx`.
 
 ### Safety
 

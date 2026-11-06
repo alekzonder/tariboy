@@ -26,3 +26,15 @@ export function elapsed(start: string, now: Date): string {
   if (minutes < 48 * 60) return `${Math.floor(minutes / 60)} h`;
   return `${Math.floor(minutes / (24 * 60))} d`;
 }
+
+/** "12 min ago" or "2 h ago" for a time within the last 24 hours, the date
+ *  ("Nov 4") before that, and "—" when it is not a time. */
+export function formatAge(iso: string, now: Date): string {
+  const at = iso ? new Date(iso) : new Date(Number.NaN);
+  if (Number.isNaN(at.getTime())) return "—";
+  const minutes = Math.floor((now.getTime() - at.getTime()) / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} h ago`;
+  return at.toLocaleDateString("en-US", { day: "numeric", month: "short" });
+}

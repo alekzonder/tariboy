@@ -1,44 +1,39 @@
 import { describe, expect, it } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { render, screen } from "@/test/queryRender";
-import { taskItem } from "@/fixtures/tasks";
-import { letter } from "@/test/fixtures/mailFixtures";
-import type { NeedsYouRow } from "@/lib/needsYou";
 import { NeedsYouContext } from "@/pages/terminals/needsYouContext";
 import { NeedsYouList } from "./NeedsYouList";
+import type { NeedsYouViewRow } from "./needsYouModel";
 
 const TITLE = "Approve the release notes for the nightly release candidate of worker:v2";
 const HOST = "a-build-host-with-a-deliberately-long-label";
 
-const rows: NeedsYouRow[] = [
+const rows: NeedsYouViewRow[] = [
   {
+    id: "t1",
     kind: "task",
-    id: "TARIDESIGN-38fp",
     hostId: "",
-    hostLabel: HOST,
-    at: "2026-11-05T09:42:00Z",
-    task: taskItem({
-      key: "TARIDESIGN-38fp",
-      title: TITLE,
-      status: "wait_customer",
-      assignee: "release-candidate-packager-for-the-long-running-nightly",
-    }),
+    ref: "TARIDESIGN-38fp",
+    label: "TARIDESIGN-38fp",
+    title: TITLE,
+    meta: `waiting for you · release-candidate-packager · ${HOST} · 12 min ago`,
   },
   {
+    id: "l1",
     kind: "letter",
-    id: "m1",
     hostId: "",
-    hostLabel: HOST,
-    at: "2026-11-05T09:41:00Z",
-    letter: letter({ id: "m1", subject: "Question about the nightly build" }),
+    ref: "m1",
+    label: "tariboy-release-publisher",
+    title: "Which image builds the docs?",
+    meta: `Answer on TARI-7n7t · ${HOST} · 2 h ago`,
   },
 ];
 
-function renderList() {
+function renderList(showAll: { label: string; href: string } | null = null) {
   render(
     <MemoryRouter>
       <NeedsYouContext.Provider value={{ hosts: [], loaded: true, reload: () => {} }}>
-        <NeedsYouList rows={rows} multiHost onOpenLetter={() => {}} />
+        <NeedsYouList rows={rows} showAll={showAll} onOpenLetter={() => {}} />
       </NeedsYouContext.Provider>
     </MemoryRouter>,
   );
@@ -51,17 +46,29 @@ describe("NeedsYouList row at 360 px", () => {
     renderList();
     const row = screen.getByRole("button", { name: new RegExp(TITLE) });
     expect(row).toHaveClass("grid", "grid-cols-[6rem_minmax(0,1fr)]", "sm:flex");
-    const meta = screen.getByText(new RegExp(`wait_customer .* ${HOST}`));
+    const meta = screen.getByText(new RegExp(`waiting for you .* ${HOST}`));
     expect(meta).toHaveClass("col-start-2", "min-w-0", "truncate", "sm:max-w-1/2", "sm:shrink-0");
     expect(meta).not.toHaveClass("shrink-0");
   });
 
-  it("gives a letter row the same classes", () => {
+  it("gives a letter row the same classes, a one-line sender and a Mail icon that keeps its size", () => {
     renderList();
-    const row = screen.getByRole("button", { name: /Question about the nightly build/ });
+    const row = screen.getByRole("button", { name: /Which image builds the docs/ });
     expect(row).toHaveClass("grid", "grid-cols-[6rem_minmax(0,1fr)]", "sm:flex");
-    const meta = screen.getByText(new RegExp(`letter .* ${HOST}`));
+    const sender = screen.getByText("tariboy-release-publisher");
+    expect(sender).toHaveClass("truncate");
+    expect(sender.previousElementSibling).toHaveClass("shrink-0");
+    const meta = screen.getByText(/Answer on TARI-7n7t/);
     expect(meta).toHaveClass("col-start-2", "truncate", "sm:shrink-0");
-    expect(meta).not.toHaveClass("shrink-0");
+  });
+
+  it("shows no Show all link without a target, and the link with one", () => {
+    renderList();
+    expect(screen.queryByRole("link", { name: /Show all/ })).toBeNull();
+  });
+
+  it("links Show all (N) to its target", () => {
+    renderList({ label: "Show all (100+)", href: "/inbox" });
+    expect(screen.getByRole("link", { name: "Show all (100+)" })).toHaveAttribute("href", "/inbox");
   });
 });

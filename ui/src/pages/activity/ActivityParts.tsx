@@ -118,9 +118,9 @@ export function ActivityTotals({
       )}
     >
       {cards.map(([label, value]) => (
-        <div key={label} data-total={label} className="rounded border p-3">
+        <div key={label} data-total={label} className="flex flex-col rounded border p-3">
           <div className="text-xs text-muted-foreground">{label}</div>
-          <div className="mt-1 font-mono text-lg">{value}</div>
+          <div className="mt-auto pt-1 font-mono text-lg">{value}</div>
         </div>
       ))}
     </div>

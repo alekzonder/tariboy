@@ -95,8 +95,45 @@ describe("HomePage", () => {
 
   it("shows a running agent with the time of its iteration and links to its Terminal", () => {
     renderHome([needs()]);
-    const link = screen.getByRole("link", { name: /techlead\s*12 min/ });
+    const [link, recent] = screen.getAllByRole("link", { name: /techlead\s*12 min/ });
     expect(link).toHaveAttribute("href", "/agents/local/techlead/console");
+    // Recent says when the last iteration was, not whether the agent runs.
+    expect(recent).toHaveTextContent("techlead12 min ago");
+    expect(screen.getByRole("link", { name: /homer\s*not run yet/ })).toBeInTheDocument();
+  });
+
+  it("shows 7 of 100 letters, counts 100+ and links Show all to the Inbox", () => {
+    const letters = Array.from({ length: 100 }, (_, i) =>
+      letter({ id: `m${i}`, subject: `Question ${i}`, data: { task_key: `T-${i}` } }),
+    );
+    renderHome([needs({ letters, open: 100 })]);
+    expect(screen.getByRole("heading", { name: "Needs you (100+)" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Question \d+/ })).toHaveLength(7);
+    expect(screen.getByRole("link", { name: "Show all (100+)" })).toHaveAttribute("href", "/inbox");
+  });
+
+  it("sends Show all to Tasks when a task is among the rows", () => {
+    const letters = Array.from({ length: 7 }, (_, i) =>
+      letter({ id: `m${i}`, subject: `Question ${i}`, data: { task_key: `T-${i}` } }),
+    );
+    renderHome([needs({ tasks: [task], letters })]);
+    expect(screen.getByRole("link", { name: "Show all (8)" })).toHaveAttribute("href", "/tasks");
+  });
+
+  it("merges the repeated letters of a task and keeps the subject first", () => {
+    const repeated = [1, 2, 3, 4].map((i) =>
+      letter({
+        id: `r${i}`,
+        subject: "Answer on TASK-nzex: pick an image",
+        data: { task_key: "TASK-nzex" },
+        created_at: `2026-10-30T10:0${i}:00Z`,
+      }),
+    );
+    renderHome([needs({ letters: repeated, open: 4 })]);
+    expect(screen.getByRole("heading", { name: "Needs you (1)" })).toBeInTheDocument();
+    const row = screen.getByRole("button", { name: /pick an image/ });
+    expect(row).toHaveTextContent(/4 letters · Answer on TASK-nzex/);
+    expect(screen.queryByRole("link", { name: /Show all/ })).toBeNull();
   });
 
   it("opens a task in the drawer and reads again when it closes", async () => {
