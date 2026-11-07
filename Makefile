@@ -45,7 +45,7 @@ endif
 export TARIBOY_VITEST_MAX_WORKERS ?= $(CHECK_JOBS)
 endif
 
-.PHONY: build install uninstall setup check backend-check frontend-check designer-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet staticcheck gocyclo gocyclo-report gocognit gocognit-report e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e tariboy-tasks-e2e smoke full-smoke ui ui-dev ui-fmt-check ui-complexity-report store-ui docs clean up start down attach a desktop desktop-mac desktop-android desktop-binaries server-archives desktop-version-check desktop-lock-check desktop-rust-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
+.PHONY: build install uninstall setup check backend-check frontend-check designer-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet staticcheck gocyclo gocyclo-report gocognit gocognit-report e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e compose-e2e tariboy-tasks-e2e smoke full-smoke ui ui-dev ui-fmt-check ui-complexity-report store-ui docs clean up start down attach a desktop desktop-mac desktop-android desktop-binaries server-archives desktop-version-check desktop-lock-check desktop-rust-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
 
 build:
 	$(GO) build -trimpath -o $(BINDIR)/tariboyd ./cmd/tariboyd
@@ -230,6 +230,14 @@ iteration-timeout-e2e: build
 # second). Never touches the live daemon.
 group-request-deadline-e2e: build
 	./scripts/group-request-deadline-e2e.sh
+
+# Isolated e2e for tariboy compose: validate, up --dry-run, up by phase, a
+# second up, an update, an unavailable Store, the tariboy range, pack and
+# unpack on a second daemon, and secret values. Two git Stores are local bare
+# repositories, so it needs no network. Uses its own base/runtime directories
+# and no HTTP listener.
+compose-e2e: build
+	./scripts/compose-e2e.sh
 
 tariboy-tasks-e2e:
 	./scripts/tariboy-tasks-e2e.sh
@@ -820,6 +828,7 @@ full-check:
 	run_step "workflow-e2e"              './scripts/workflow-e2e.sh'; \
 	run_step "iteration-timeout-e2e"     './scripts/iteration-timeout-e2e.sh'; \
 	run_step "group-request-deadline-e2e" './scripts/group-request-deadline-e2e.sh'; \
+	run_step "compose-e2e"               './scripts/compose-e2e.sh'; \
 	run_step "full-smoke"                '$(SUBMAKE) full-smoke'; \
 	run_step "ui-tasks-browser"          'need_node_modules ui && cd ui && npm run test:tasks-browser'; \
 	run_step "ui-images-browser"         'need_node_modules ui && cd ui && npm run test:images-browser'; \

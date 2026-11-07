@@ -103,6 +103,9 @@ type AgentRow struct {
 	Budget                   AgentBudget       `json:"budget"`
 	// CurrentIterationStartedAt is set only while an iteration runs.
 	CurrentIterationStartedAt string `json:"current_iteration_started_at,omitempty" jsonschema:"description=Start time of the running iteration (RFC 3339); absent while no iteration runs"`
+	// ImageRemoved is set for a stopped agent whose image tree is gone, as agent rm
+	// --keep (compose down) leaves it; agent reprovision brings it back.
+	ImageRemoved bool `json:"image_removed,omitempty" jsonschema:"description=True when the agent is stopped and has no image tree: agent rm --keep removed it and agent reprovision restores it"`
 	// LastIterationAt is absent for an agent that has never run an iteration.
 	LastIterationAt string `json:"last_iteration_at,omitempty" jsonschema:"description=Start time of the agent's most recent iteration in any status (RFC 3339)"`
 	AgentHalt

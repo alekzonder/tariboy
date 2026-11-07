@@ -822,6 +822,10 @@
           "image": {
             "type": "string"
           },
+          "image_removed": {
+            "description": "True when the agent is stopped and has no image tree: agent rm --keep removed it and agent reprovision restores it",
+            "type": "boolean"
+          },
           "interactive": {
             "type": "boolean"
           },

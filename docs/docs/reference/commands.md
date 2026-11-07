@@ -316,7 +316,8 @@ An older daemon left a removed agent as a stopped row. Run
 `tariboy agent rm NAME` again to delete that row.
 
 `tariboy compose down` uses mode `keep`, and `compose down --volumes` uses
-mode `purge`. A daemon older than mode `keep` ignores `keep` and keeps the row
+mode `purge`. After mode `keep`, `agent ps` shows the stopped agent with
+`image_removed: true`, and `compose up` re-provisions only such an agent. A daemon older than mode `keep` ignores `keep` and keeps the row
 as before. An older compose client sends no `keep`. Then a new daemon deletes
 the agent in mode `remove`, and the next `compose up` creates the agent again
 with its kept history. Secrets, budgets and schedules that you set outside the

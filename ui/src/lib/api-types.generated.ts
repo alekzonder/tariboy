@@ -3415,6 +3415,8 @@ export interface components {
       halt_reason?: string;
       harness: string;
       image: string;
+      /** @description True when the agent is stopped and has no image tree: agent rm --keep removed it and agent reprovision restores it */
+      image_removed?: boolean;
       interactive: boolean;
       interval_s: number;
       /** @description Start time of the agent's most recent iteration in any status (RFC 3339) */

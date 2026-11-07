@@ -1,6 +1,7 @@
 package compose
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -427,6 +428,7 @@ func (f *fakeCaller) Call(method, route string, body any) (json.RawMessage, erro
 			}
 			a["state"] = "running"
 			a["enabled"] = true
+			delete(a, "image_removed")
 		}
 		return mustJSON(map[string]any{"name": name, "state": "running"}), nil
 	case method == "POST" && len(route) > 6 && route[len(route)-5:] == "/exec":
@@ -1010,7 +1012,7 @@ func TestUpReprovisionLoopStateMatchesCreate(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			fc := newFake()
-			fc.agents["a"] = map[string]any{"name": "a", "state": "stopped",
+			fc.agents["a"] = map[string]any{"name": "a", "state": "stopped", "image_removed": true,
 				"image": "i:latest", "group": "", "cwd": "", "enabled": false}
 			f := File{Version: 1, Agents: map[string]AgentSpec{
 				"a": {Image: "i:latest", Loop: tc.loop},
@@ -1029,6 +1031,49 @@ func TestUpReprovisionLoopStateMatchesCreate(t *testing.T) {
 				t.Fatalf("final enabled = %v, want %v (calls: %v)", got, tc.want, fc.calls)
 			}
 		})
+	}
+}
+
+// TestUpKeepsStoppedAgentThatHasItsImage is the defect: up re-provisioned
+// every stopped agent, also one that the file keeps stopped with
+// loop.enabled:false. The re-provision turned its loop on, so a second up was
+// not idempotent and the agent could start an iteration. Only an agent whose
+// image tree compose down removed (image_removed) is re-provisioned.
+func TestUpKeepsStoppedAgentThatHasItsImage(t *testing.T) {
+	off := false
+	fc := newFake()
+	fc.agents["a"] = map[string]any{"name": "a", "state": "stopped",
+		"image": "i:latest", "group": "", "cwd": "", "enabled": false}
+	f := File{Version: 1, Agents: map[string]AgentSpec{
+		"a": {Image: "i:latest", Loop: &LoopSpec{Enabled: &off}},
+	}}
+	var out bytes.Buffer
+	r := &Runner{call: fc, out: &out, skipBuild: true}
+	if err := r.Up(f); err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range []string{"POST /api/agents/a/reprovision", "POST /api/agents/a/start", "POST /api/agents/a/stop"} {
+		if countCalls(fc, call) != 0 {
+			t.Fatalf("up called %s on a stopped agent with its image: %v", call, fc.calls)
+		}
+	}
+	if !strings.Contains(out.String(), "ok       agent:a") {
+		t.Fatalf("agent a is not ok:\n%s", out.String())
+	}
+}
+
+// A stopped agent that has its image and a file that enables its loop is
+// started in the start phase, not re-provisioned.
+func TestUpStartsStoppedAgentThatHasItsImage(t *testing.T) {
+	fc := newFake()
+	fc.agents["a"] = map[string]any{"name": "a", "state": "stopped",
+		"image": "i:latest", "group": "", "cwd": "", "enabled": false}
+	upNoBuild(t, NewRunner(fc, "", io.Discard), File{Version: 1, Agents: map[string]AgentSpec{"a": {Image: "i:latest"}}})
+	if countCalls(fc, "POST /api/agents/a/reprovision") != 0 || countCalls(fc, "POST /api/agents/a/start") != 1 {
+		t.Fatalf("want one start and no reprovision: %v", fc.calls)
+	}
+	if fc.agents["a"]["state"] != "running" {
+		t.Fatalf("agent not running: %#v", fc.agents["a"])
 	}
 }
 
