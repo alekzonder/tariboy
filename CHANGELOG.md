@@ -1,3 +1,31 @@
+## [0.111.0] - 2026-11-07
+
+### Added
+
+- Compose file version 2 adds a `tariboy` version range, the `stores` and `workflows` sections, and images built from a path, a Store, a source or a version. `compose up` and `compose build` apply these sections. When the file has a `tariboy` range, every daemon verb reads the daemon version first and stops before any change when the version is outside the range.
+- `tariboy compose validate` checks the file without changes: the schema, the references between entries, local paths and the `tariboy` range. It prints every problem and exits with 1 when there is one. `--daemon` also checks the daemon version, and `--archive FILE` checks a compose archive offline.
+- `compose up` applies the file in fixed phases: stores, workflows, images, queues, agents, groups, queue bindings, start. A failed action skips only the actions that depend on it. `compose up --dry-run` prints the plan by phase and sends only read requests. `compose status` and the dry run list the agents, groups and task queues tied to the file that it does not declare. `up` never removes them.
+- A queue in `task_queues` takes `description`, `owners`, `responsible_agent`, `triggers`, `env` and `secrets`. A secret names the environment variable that holds its value (`from_env`). Compose never prints a secret value.
+- A compose agent declares and converges every agent setting: model, effort, plugins, the hard and AI-stall timeouts, the loop schedule, the user prompt, the mail settings, alias, notes, color, retention, `create_cwd`, agent secrets from the environment and `env_mode`. `compose status` reports drift of every field.
+- `tariboy compose pack -o FILE` writes one archive with the compose file, the images of its agents and the workflow images it uses. Stores and secret values never enter the archive. `tariboy compose unpack FILE` checks the whole archive and the daemon version before any change, then imports from the archive without network and applies the file.
+- A Git Store can follow a branch, a tag or a commit: `store add` takes a ref, `tariboy store ref NAME REF` changes it, and refresh follows it. An unknown ref fails with `store_ref_not_found` and changes nothing. Store list and detail responses carry `ref` and the checked-out `commit`. Migration `0080` adds `image_stores.ref`.
+- `tariboy agent plugins NAME` (`/api/agents/{name}/plugins`) reads or replaces the plugin list of an agent. For a schema-v2 image the list must be a subset of the image plugins. A change applies from the next iteration.
+
+### Changed
+
+- Without `-f`, a compose verb reads `Tariboycompose.yaml` in the working directory, then `tariboy-compose.yaml`. A directory with both names, or with neither, is an error that names both.
+
+### Deprecated
+
+- `tariboy compose archive` and `tariboy compose import` are aliases of `compose pack` and `compose unpack` for this release only. They print a warning on stderr.
+
+### Fixed
+
+- A second `compose up` changes nothing. Before, it provisioned every stopped agent again, also one with `loop.enabled: false`, and turned its loop on. Now it provisions again only an agent whose image tree was removed; `agent ps` marks such an agent `image_removed`.
+- Compose reads the result of a waited workflow build from `workflow_result`. Before, the created flag and the digest of a pinned binding were empty against a real daemon.
+
+[0.111.0]: https://github.com/alekzonder/tariboy/compare/v0.110.0...v0.111.0
+
 ## [0.110.0] - 2026-11-06
 
 ### Added
