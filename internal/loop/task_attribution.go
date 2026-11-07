@@ -2,6 +2,7 @@ package loop
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -64,7 +65,33 @@ func resolveNativeTaskAttribution(ctx context.Context, reader nativeTaskReader, 
 		return taskAttribution{}, &tasks.Error{Status: http.StatusNotFound, Code: "not_found",
 			Msg: fmt.Sprintf("task %q not found", key)}
 	}
-	goal := detail.Task
+	return walkTaskRoot(ctx, reader, agentName, detail.Task)
+}
+
+// resolveLetterTaskAttribution is the attribution of a task the agent's
+// letters are about but that is no Goal of the agent: the task is read as the
+// customer, so a task in a customer status or one the agent holds read-only
+// still gets its spend.
+func resolveLetterTaskAttribution(ctx context.Context, reader nativeTaskReader, agentName, key string) (taskAttribution, error) {
+	if reader == nil {
+		return taskAttribution{}, api.UserError{Status: http.StatusServiceUnavailable, Code: "unavailable",
+			Msg: "native tasks unavailable"}
+	}
+	detail, err := reader.GetTask(ctx, tasks.CustomerActor(reader.CustomerLogin()), strings.TrimSpace(key))
+	if err != nil {
+		return taskAttribution{}, fmt.Errorf("%w: %w", errLetterTaskUnreadable, err)
+	}
+	return walkTaskRoot(ctx, reader, agentName, detail.Task)
+}
+
+// errLetterTaskUnreadable marks a letter task the daemon could not read: the
+// iteration then runs unattributed instead of failing.
+var errLetterTaskUnreadable = errors.New("read letter task")
+
+// walkTaskRoot walks from goal to the root of its tree as the customer and
+// reports whether the agent may see that root.
+func walkTaskRoot(ctx context.Context, reader nativeTaskReader, agentName string, goal tasks.Task) (taskAttribution, error) {
+	agentActor := tasks.AgentActor(agentName)
 	out := taskAttribution{TaskID: goal.Key, EpicID: goal.Key, EpicVisible: true}
 	customer := tasks.CustomerActor(reader.CustomerLogin())
 	seen := map[string]struct{}{goal.Key: {}}

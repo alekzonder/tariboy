@@ -140,6 +140,17 @@ func (m *Mail) arrivalState(principal string) (string, string) {
 // them delivered in iteration. A letter whose take would be its sixth attempt
 // is marked dead with reason attempts instead.
 func (m *Mail) TakeInstant(agent, iteration string) ([]Letter, error) {
+	return m.takeInstant(agent, iteration, "")
+}
+
+// TakeInstantForTask is TakeInstant for an iteration that works taskKey ("" for
+// no task): a letter about another task is not taken and waits for a later
+// iteration. A letter about no task is taken.
+func (m *Mail) TakeInstantForTask(agent, iteration, taskKey string) ([]Letter, error) {
+	return m.takeInstant(agent, iteration, ` AND `+letterTaskSQL+` IN ('', ?)`, taskKey)
+}
+
+func (m *Mail) takeInstant(agent, iteration, where string, whereArgs ...any) ([]Letter, error) {
 	principal := agentPrincipal(agent)
 	now := formatNow(m.now())
 	tx, err := m.db.Begin()
@@ -147,9 +158,10 @@ func (m *Mail) TakeInstant(agent, iteration string) ([]Letter, error) {
 		return nil, err
 	}
 	defer tx.Rollback()
+	args := append([]any{principal, InstantWaiting, InstantQueued, InstantStopped}, whereArgs...)
 	rows, err := tx.Query(`SELECT `+letterColumns+` FROM mail WHERE recipient = ? AND instant = 1
-		AND instant_state IN (?, ?, ?) AND `+openSQL+` ORDER BY needs_reply DESC, created_at, seq`,
-		principal, InstantWaiting, InstantQueued, InstantStopped)
+		AND instant_state IN (?, ?, ?) AND `+openSQL+where+` ORDER BY needs_reply DESC, created_at, seq`,
+		args...)
 	if err != nil {
 		return nil, err
 	}

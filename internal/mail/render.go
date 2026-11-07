@@ -26,13 +26,46 @@ func (m *Mail) RenderIteration(agent, iteration string, n int) ([]Letter, error)
 	return m.drain(agentPrincipal(agent), iteration, n)
 }
 
+// letterTaskSQL is the task a letter is about: its data.task_key, "" when it
+// names none.
+const letterTaskSQL = `COALESCE(CASE WHEN json_valid(data) THEN json_extract(data, '$.task_key') END, '')`
+
+// RenderIterationTask is RenderIteration for the letters about taskKey only;
+// "" selects the letters about no task. Letters about other tasks are not
+// touched: they stay open for a later iteration.
+func (m *Mail) RenderIterationTask(agent, iteration, taskKey string, n int) ([]Letter, error) {
+	return m.drain(agentPrincipal(agent), iteration, n, letterTaskSQL+` = ?`, taskKey)
+}
+
+// OpenTaskKeys is the task of each open letter to agent, in render order
+// ("" for a letter about no task). It changes nothing.
+func (m *Mail) OpenTaskKeys(agent string) ([]string, error) {
+	rows, err := m.db.Query(`SELECT `+letterTaskSQL+` FROM mail WHERE recipient = ? AND `+openSQL+`
+		ORDER BY needs_reply DESC, created_at, seq`, agentPrincipal(agent))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	keys := []string{}
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			return nil, err
+		}
+		keys = append(keys, key)
+	}
+	return keys, rows.Err()
+}
+
 // DrainBatch is RenderBatch for any principal: the plugin host drains the
 // inbox of plugin:<name> with the same attempt and dead-letter rules.
 func (m *Mail) DrainBatch(principal string, n int) ([]Letter, error) {
 	return m.drain(principal, "", n)
 }
 
-func (m *Mail) drain(principal, iteration string, n int) ([]Letter, error) {
+// drain renders the open letters of principal; filter, when given, is an SQL
+// condition with its arguments that a letter must also meet.
+func (m *Mail) drain(principal, iteration string, n int, filter ...any) ([]Letter, error) {
 	if n <= 0 {
 		n = defaultBatch
 	}
@@ -42,8 +75,12 @@ func (m *Mail) drain(principal, iteration string, n int) ([]Letter, error) {
 		return nil, err
 	}
 	defer tx.Rollback()
-	rows, err := tx.Query(`SELECT `+letterColumns+` FROM mail WHERE recipient = ? AND `+openSQL+`
-		ORDER BY needs_reply DESC, created_at, seq`, principal)
+	where, args := "", []any{principal}
+	if len(filter) > 0 {
+		where, args = ` AND `+filter[0].(string), append(args, filter[1:]...)
+	}
+	rows, err := tx.Query(`SELECT `+letterColumns+` FROM mail WHERE recipient = ? AND `+openSQL+where+`
+		ORDER BY needs_reply DESC, created_at, seq`, args...)
 	if err != nil {
 		return nil, err
 	}

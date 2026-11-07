@@ -32,6 +32,26 @@ func TestSetSelectsOnlyActiveAssignedGoal(t *testing.T) {
 	}
 }
 
+// TestCandidateReportsALetterTaskTheAgentMayWork: Candidate answers whether a
+// task could be the Goal now, and never changes the sticky Goal.
+func TestCandidateReportsALetterTaskTheAgentMayWork(t *testing.T) {
+	s := goalStore(t, goalNow)
+	seedTask(t, s, "T-1", "agent:worker", "P2", "open", "2026-09-01T00:00:00Z")
+	seedTask(t, s, "T-2", "agent:other", "P2", "open", "2026-09-01T00:00:00Z")
+	seedTask(t, s, "T-3", "agent:worker", "P2", "done", "2026-09-01T00:00:00Z")
+
+	task, ok, err := s.Candidate("worker", "T-1", goalNow)
+	if err != nil || !ok || task.Key != "T-1" {
+		t.Fatalf("Candidate(T-1) = %#v, %v, %v; want the task", task, ok, err)
+	}
+	for _, key := range []string{"T-2", "T-3", "T-404"} {
+		if _, ok, err := s.Candidate("worker", key, goalNow); err != nil || ok {
+			t.Errorf("Candidate(%s) = %v, %v; want not a goal", key, ok, err)
+		}
+	}
+	assertStoredGoal(t, s, "")
+}
+
 func TestSetDoesNotReplaceExistingGoal(t *testing.T) {
 	s := goalStore(t, goalNow)
 	seedTask(t, s, "T-1", "agent:worker", "P2", "open", "2026-09-01T00:00:00Z")

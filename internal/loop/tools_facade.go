@@ -32,6 +32,9 @@ type agentStatusSource interface {
 // goalRecorder hears a Goal the agent selected during its iteration.
 type goalRecorder interface {
 	noteSelectedGoal(agent, iterationID, key string)
+	// iterationTask is the task iteration works ("" for none); ok is false
+	// when the iteration is not known.
+	iterationTask(agent, iterationID string) (key string, ok bool)
 }
 
 // loopController is the agent-facing Start/Stop.

@@ -143,6 +143,9 @@ type ManagerConfig struct {
 	// them. An error is logged and the letters stay open.
 	CloseStaleTaskLetters func(ctx context.Context, agent string) (int, error)
 	CurrentGoal           func(string, time.Time) (tasks.Task, bool, error)
+	// GoalCandidate reads a task an agent's letters are about and reports
+	// whether the agent may work it as a Goal now.
+	GoalCandidate func(agent, key string, now time.Time) (tasks.Task, bool, error)
 	// WorkflowGoals supplies the workflow data for the Goal block of a workflow
 	// task; nil renders the flexible text with a notice.
 	WorkflowGoals   WorkflowGoalSource
@@ -300,6 +303,18 @@ func (m *Manager) noteIterationGoal(agentName, iterationID, key string, readAt t
 	m.goals[agentName] = iterationGoal{iterationID: iterationID, key: key, readAt: readAt}
 }
 
+// iterationTask is the task iteration of agentName works, as its prompt
+// recorded it.
+func (m *Manager) iterationTask(agentName, iterationID string) (string, bool) {
+	m.goalsMu.Lock()
+	defer m.goalsMu.Unlock()
+	goal, ok := m.goals[agentName]
+	if !ok || goal.iterationID != iterationID {
+		return "", false
+	}
+	return goal.key, true
+}
+
 // noteSelectedGoal records a Goal the agent selected during an iteration that
 // started without one.
 func (m *Manager) noteSelectedGoal(agentName, iterationID, key string) {
@@ -399,8 +414,9 @@ func (m *Manager) runnerFor(ag agent.Agent) IterationRunner {
 		ImgStore: m.cfg.ImgStore, Store: m.cfg.Store, Spawner: m.cfg.Spawner, Clock: m.cfg.Clock,
 		DoneGrace: m.cfg.DoneGrace, Logger: m.cfg.Log, Mail: m.cfg.Mail, Proxy: m.cfg.Proxy, AuditFor: m.cfg.AuditFor,
 		RecordCursorUsage: m.cfg.RecordCursorUsage, CodexApproval: m.cfg.CodexApproval,
-		CurrentGoal: m.cfg.CurrentGoal, WorkflowGoals: m.cfg.WorkflowGoals, Tasks: m.cfg.Tasks,
+		CurrentGoal: m.cfg.CurrentGoal, GoalCandidate: m.cfg.GoalCandidate, WorkflowGoals: m.cfg.WorkflowGoals, Tasks: m.cfg.Tasks,
 		GoalRead: m.noteIterationGoal, CloseStaleTaskLetters: m.cfg.CloseStaleTaskLetters,
+		WakeMessages: func(agent string) { m.WakeAgents([]string{agent}, WakeMessage) },
 		HookCommands: m.noteHookCommands,
 	})
 }

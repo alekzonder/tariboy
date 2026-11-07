@@ -581,6 +581,7 @@ func buildManager(ctx context.Context, o Options, proc *process, c *coreParts, t
 		RecordIterationEnd:    tk.service.RecordIterationEnd,
 		CloseStaleTaskLetters: tk.service.CloseStaleTaskLetters,
 		CurrentGoal:           tk.goalStore.Current,
+		GoalCandidate:         tk.goalStore.Candidate,
 		WorkflowGoals:         loop.TaskWorkflowGoals{Tasks: tk.service, Images: tk.workflowImages.Store, Log: log},
 		SetGoal: func(agent, key string, activate func() (func(), error)) error {
 			_, err := tk.goalStore.Set(agent, key, time.Now().UTC(), activate)

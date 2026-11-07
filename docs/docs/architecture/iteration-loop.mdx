@@ -120,6 +120,57 @@ task notices start no iteration; see
 After a `harness_error` iteration, the end closes only the Goal letters. The
 `task.assigned` and `task.answered` notices stay open for the next iteration.
 
+#### The iteration task
+
+One iteration works one task: the iteration task. The prompt letters, the Goal
+block and the AI proxy attribution all use this task. The task of a letter is
+the `task_key` value in its `data`. A letter without `task_key` is about no
+task.
+
+Before the prompt is assembled, the runner selects the iteration task in this
+order:
+
+1. If the agent has a Goal and the Goal has open letters, the iteration task is
+   the Goal.
+2. If no letter is open, the iteration task is the Goal, or no task when the
+   agent has no Goal.
+3. Otherwise, the iteration task is the task of the first open letter in render
+   order: requests first, then notices, oldest first.
+
+The prompt shows only the letters of the iteration task. The letters of other
+tasks stay open. Their attempts do not change, and the end of the iteration
+does not close them. If a done iteration leaves open letters only about other
+tasks, the runner asks for the next message iteration at once. While a letter
+of the iteration task stays open, for example a request without a reply, the
+runner does not ask: that task would come first again.
+
+The Goal block depends on the iteration task:
+
+- If the agent may take the task as a Goal now (`taskgoal.Store.Candidate`,
+  the rules of `goal.sh set`), the Goal block shows that task. The mode is
+  `workflow` or `flexible` by that task. The sticky Goal of the agent does not
+  change.
+- If the agent may not take it, for example the task is in a customer status
+  or `done`, the mode is `request`. The Goal block says
+  ``Letters of this iteration are about task `KEY`.``
+- If the letters are about no task, the mode is `request`.
+
+The proxy token gets `task_id`, the iteration task, and `epic_id`, the root of
+its tree. For a task that is not a Goal, the daemon reads the task as the
+customer. If the daemon cannot read it, the iteration runs without attribution
+and the daemon logs a warning with the agent, the key and the error. If the
+daemon cannot read the open letters, the iteration task is the Goal and the
+prompt shows every open letter, as before.
+
+The end of the iteration reports the iteration task as its Goal task key. So
+the closing of task notices and the idle count use the iteration task. An
+instant letter about another task is not delivered into the running
+iteration. It waits for an iteration of its task.
+
+The daemon does not read a task key from the letter subject. A sender that
+writes about a task sets `task_key`, for example
+`tmail send --data '{"task_key":"DEV-12"}'`.
+
 #### Redelivery after a failed iteration
 
 A failed iteration is an iteration that ended without `loop.sh done`, with the
@@ -230,7 +281,7 @@ line is the same for all images and does not depend on the image template:
 | --- | --- | --- |
 | `workflow` | A Goal task is selected and its row has a workflow digest | ``Iteration mode: `workflow`. The goal task follows a workflow: the status instructions in the Goal section set the process.`` |
 | `flexible` | A Goal task is selected and its row has no workflow digest | ``Iteration mode: `flexible`. The goal task has no workflow: your image instructions set the process.`` |
-| `request` | No Goal task is selected | ``Iteration mode: `request`. No goal task is selected: work from the one-shot instruction or the messages.`` |
+| `request` | No Goal task is selected for the iteration task (see [The iteration task](#the-iteration-task)) | ``Iteration mode: `request`. No goal task is selected: work from the one-shot instruction or the messages.`` |
 
 One function, `loop.IterationModeFor`, computes the mode from the selected
 task row alone. The runner and the prompt preview both call it, for schema v1

@@ -87,12 +87,18 @@ request. This drives the non-blocking stalled-agent signal described in the
 otherwise changes the request or iteration lifecycle, and a recording failure
 is diagnostic-only.
 
-Before starting a harness, the daemon reads its selected Goal once, resolves
-the task's top-level root through Native Tasks (see
+Before starting a harness, the daemon selects the iteration task once: the
+Goal, or the task of the open letters when the Goal has none (see
+[The iteration task](/docs/architecture/iteration-loop#the-iteration-task)).
+It resolves the task's top-level root through Native Tasks (see
 [Root of a Goal in another queue](#root-of-a-goal-in-another-queue)), and stamps the
 AI-proxy lease with `task_id` and `epic_id`. All requests in the iteration are
-therefore attributed without an agent command. An iteration without a selected
-Goal remains unattributed.
+therefore attributed without an agent command. An iteration task that the
+agent may not take as a Goal, for example a task in a customer status, is read
+with the rights of the customer. If the daemon cannot read it, the iteration
+runs unattributed and the daemon logs a warning. An iteration without an
+iteration task, with no Goal and only letters without `task_key`, remains
+unattributed.
 
 An agent that creates or claims work after its iteration starts may use
 `scripts/goal.sh set <TASK-KEY>`. The daemon validates and persists that Goal,

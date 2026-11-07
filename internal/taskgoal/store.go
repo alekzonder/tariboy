@@ -141,6 +141,37 @@ func (s *Store) Current(agent string, now time.Time) (tasks.Task, bool, error) {
 	return task, goal.TaskKey != "", nil
 }
 
+// Candidate reads the task key for agent and reports whether the agent may
+// work it as a Goal now, by the rules of Set. It changes nothing: the sticky
+// Goal stays as it is.
+func (s *Store) Candidate(agent, key string, now time.Time) (tasks.Task, bool, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return tasks.Task{}, false, err
+	}
+	defer tx.Rollback()
+	var enabled bool
+	var timeoutS int
+	if err := tx.QueryRow(`SELECT goal_enabled, goal_wait_customer_timeout_s FROM agents WHERE name=?`, agent).Scan(&enabled, &timeoutS); err != nil {
+		return tasks.Task{}, false, err
+	}
+	if !enabled {
+		return tasks.Task{}, false, nil
+	}
+	task, waitAt, err := readGoalTask(tx, strings.TrimSpace(key), agent)
+	if errors.Is(err, sql.ErrNoRows) {
+		return tasks.Task{}, false, nil
+	}
+	if err != nil {
+		return tasks.Task{}, false, err
+	}
+	valid, _, err := validGoal(task, waitAt, timeoutS, now)
+	if err != nil || !valid {
+		return tasks.Task{}, false, err
+	}
+	return task, true, nil
+}
+
 // GoalDeliveryAllowed suppresses another goal wake while a Goal letter to the
 // agent is open (a dead one does not count) and until the agent's configured
 // cooldown has elapsed since the last one.
