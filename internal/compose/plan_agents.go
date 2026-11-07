@@ -95,12 +95,15 @@ func createFields(a AgentSpec, body map[string]any) []Field {
 
 // planExistingAgent converges an agent the daemon already has.
 //
-// A stopped agent that still has its row (after a data-preserving `down`) is
-// re-provisioned in place first: the daemon re-unpacks the file's image over
-// the retained history and restarts the loop with Enabled=true at once. The
-// settings after it are diffed against that predicted row, so a file with
-// loop.enabled:false drives the loop back off and ends where a first create
-// would, and every later setting depends on the re-provision.
+// A stopped agent that a data-preserving `down` left without its image tree
+// (image_removed) is re-provisioned in place first: the daemon re-unpacks the
+// file's image over the retained history and restarts the loop with
+// Enabled=true at once. The settings after it are diffed against that
+// predicted row, so a file with loop.enabled:false drives the loop back off
+// and ends where a first create would, and every later setting depends on the
+// re-provision. A stopped agent that still has its image tree, such as one
+// the file keeps stopped with loop.enabled:false, is converged like a running
+// one: re-provisioning it would turn its loop on at every up.
 //
 // A harness change is stored here and applied by a restart (stop, start) of
 // an enabled agent in the start phase, after the agent's other changes. A
@@ -110,7 +113,7 @@ func createFields(a AgentSpec, body map[string]any) []Field {
 // a restart.
 func (p *planner) planExistingAgent(f File, name string, a AgentSpec, cur liveAgent, pending string) error {
 	id := "agent:" + name
-	stopped := cur.State == "stopped"
+	kept := cur.State == "stopped" && cur.ImageRemoved
 	if err := p.statusAgent(id, name, a, cur, pending); err != nil {
 		return err
 	}
@@ -120,7 +123,7 @@ func (p *planner) planExistingAgent(f File, name string, a AgentSpec, cur liveAg
 	}
 	image := p.needs(p.imageKey(f, a.Image))
 	base := []int(nil)
-	if stopped {
+	if kept {
 		reprovision := p.add(Action{Resource: id, Kind: "reprovision", Note: fmt.Sprintf("reprovisioning stopped agent %s (image %s)", name, a.Image),
 			Fail: "reprovision agent " + name, Fields: []Field{{Name: "reprovision", To: "image " + a.Image + ", starts the loop"}},
 			Call: Call{"POST", "/api/agents/" + name + "/reprovision", map[string]any{"image": a.Image}}}, image...)

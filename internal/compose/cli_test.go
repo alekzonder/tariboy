@@ -237,9 +237,9 @@ func TestComposeUpNoStartSkipsAutostart(t *testing.T) {
 func TestUpReprovisionsStoppedAgent(t *testing.T) {
 	fc := newFake()
 	fc.groups["research-team"] = map[string]any{"name": "research-team", "lead": "scout"}
-	fc.agents["scout"] = map[string]any{"name": "scout", "state": "stopped",
+	fc.agents["scout"] = map[string]any{"name": "scout", "state": "stopped", "image_removed": true,
 		"group": "research-team", "image": "analyst:latest", "enabled": false}
-	fc.agents["writer"] = map[string]any{"name": "writer", "state": "stopped",
+	fc.agents["writer"] = map[string]any{"name": "writer", "state": "stopped", "image_removed": true,
 		"group": "research-team", "image": "analyst:latest", "enabled": false}
 	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(goodYAML))

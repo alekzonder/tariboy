@@ -1,13 +1,16 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
+	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/aiproxy"
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/image"
@@ -540,12 +543,20 @@ func agentPs() registry.Command {
 					Budget:                    budgetView(budgets[a.Name]),
 					CurrentIterationStartedAt: times[a.Name].Running,
 					LastIterationAt:           times[a.Name].Last,
+					ImageRemoved:              status.State == "stopped" && imageTreeRemoved(c, a.Name),
 					AgentHalt:                 agentHalt(a, status),
 				})
 			}
 			return AgentListResult{Agents: rows, Count: len(rows)}, nil
 		},
 	})
+}
+
+// imageTreeRemoved reports whether the agent's image directory is missing,
+// as agent rm --keep leaves it.
+func imageTreeRemoved(c *registry.Ctx, name string) bool {
+	_, err := os.Stat(agentdir.New(agentsDir(c), name).ImageDir())
+	return errors.Is(err, os.ErrNotExist)
 }
 
 func agentGoalSettingsView(a agent.Agent) AgentGoalSettings {

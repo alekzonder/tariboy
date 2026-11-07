@@ -1,0 +1,63 @@
+# Fixture of scripts/compose-e2e.sh, steps 6 and 8: Tariboycompose.changed.yaml
+# plus a second git Store "extra", an image from it and an agent on that
+# image, and one more change of the queue description. Step 6 applies it
+# before the Store repository exists.
+version: 2
+tariboy: {min: 0.1.0, max: 99.0.0}
+
+stores:
+  team: {git: https://store.e2e.invalid/team.git, ref: v2}
+  local: {path: ./local-store}
+  extra: {git: https://store.e2e.invalid/extra.git}
+
+workflows:
+  development: {store: team, version: 1.1.0}
+  review: {path: ./wf-review}
+
+images:
+  developer: {store: team, source: developer, version: 1.1.0}
+  reviewer: {store: local}
+  extra: {store: extra}
+
+task_queues:
+  DEV:
+    name: Development
+    description: Compose E2E queue, extra
+    owners: [dev]
+    responsible_agent: dev
+    pools:
+      devs: [dev]
+      reviewers: [rev]
+    workflow: development
+    triggers:
+      - pattern: plugin:telegram
+        correlation_key: chat_id
+        action: create_task
+    env:
+      AUTO_MERGE: "true"
+      CUSTOMER_AGENT_POOL: reviewers
+    secrets:
+      QUEUE_TOKEN: {from_env: COMPOSE_E2E_QUEUE_TOKEN}
+
+agents:
+  dev:
+    image: developer:latest
+    group: team
+    env: {LOG_LEVEL: info}
+    secrets:
+      API_TOKEN: {from_env: COMPOSE_E2E_AGENT_TOKEN}
+    notes: second notes
+    loop: {enabled: false, interval: 45s, max_idle_iterations: 5}
+  rev:
+    image: reviewer:latest
+    group: team
+    notes: reviewer
+    loop: {enabled: false}
+  ext:
+    image: extra:latest
+    loop: {enabled: false}
+
+groups:
+  team:
+    lead: rev
+    budget: {limit_usd: 7, period: 24h, mode: warn}

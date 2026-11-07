@@ -1,0 +1,58 @@
+# Fixture of scripts/compose-e2e.sh, steps 1-4: a version 2 file with every
+# section. The git Store URL resolves to a local bare repository through the
+# script's git config, so no step uses the network. The agents keep their loop
+# off: a compose harness needs a real CLI, which the check host may not have.
+version: 2
+tariboy: {min: 0.1.0, max: 99.0.0}
+
+stores:
+  team: {git: https://store.e2e.invalid/team.git, ref: v1}
+  local: {path: ./local-store}
+
+workflows:
+  development: {store: team, version: 1.0.0}
+  review: {path: ./wf-review}
+
+images:
+  developer: {store: team, source: developer, version: 1.0.0}
+  reviewer: {store: local}
+
+task_queues:
+  DEV:
+    name: Development
+    description: Compose E2E queue
+    owners: [dev]
+    responsible_agent: dev
+    pools:
+      devs: [dev]
+      reviewers: [rev]
+    workflow: development
+    triggers:
+      - pattern: plugin:telegram
+        correlation_key: chat_id
+        action: create_task
+    env:
+      AUTO_MERGE: "false"
+      CUSTOMER_AGENT_POOL: reviewers
+    secrets:
+      QUEUE_TOKEN: {from_env: COMPOSE_E2E_QUEUE_TOKEN}
+
+agents:
+  dev:
+    image: developer:latest
+    group: team
+    env: {LOG_LEVEL: info}
+    secrets:
+      API_TOKEN: {from_env: COMPOSE_E2E_AGENT_TOKEN}
+    notes: first notes
+    loop: {enabled: false, interval: 30s, max_idle_iterations: 5}
+  rev:
+    image: reviewer:latest
+    group: team
+    notes: reviewer
+    loop: {enabled: false}
+
+groups:
+  team:
+    lead: dev
+    budget: {limit_usd: 5, period: 24h, mode: warn}

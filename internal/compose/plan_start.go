@@ -27,7 +27,16 @@ func (startPhase) plan(p *planner, f File, live *liveState) error {
 			if !loopDisabled(a) {
 				start("start", nil, p.needs(id, "member:"+name)...)
 			}
+		case cur.State == "stopped" && cur.ImageRemoved:
+			// The re-provision in the agents phase started it already.
 		case cur.State == "stopped":
+			// A stopped agent with its image starts when the file enables
+			// its loop; its stored harness applies at this start.
+			if !loopDisabled(a) {
+				p.add(Action{Resource: id, Kind: "start", Note: fmt.Sprintf("start stopped agent %s", name), Fail: "start agent " + name,
+					Fields: []Field{{Name: "state", From: "stopped", To: "running"}},
+					Call:   Call{"POST", "/api/agents/" + name + "/start", nil}}, p.needs("settings:"+name, "member:"+name)...)
+			}
 		case harnessChange(name, a, cur) != nil && cur.Enabled && !loopDisabled(a):
 			// The restart follows the agent's other changes and depends on
 			// them, so the restarted iteration starts with every new setting.

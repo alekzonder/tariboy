@@ -28,6 +28,10 @@ type liveAgent struct {
 	GoalDeliveryCooldownS    int               `json:"goal_delivery_cooldown_s"`
 	Interactive              bool              `json:"interactive"`
 	Env                      map[string]string `json:"env"`
+	// ImageRemoved marks an agent that compose down (agent rm --keep) left
+	// without its image tree; up re-provisions only such an agent.
+	// The daemon omits it when false.
+	ImageRemoved bool `json:"image_removed,omitempty"`
 
 	// View, Secrets and Retention are read per agent of the file, after the
 	// list; agent.ps does not return them.
@@ -123,12 +127,13 @@ func CheckAgentViewContract(raw []byte) error {
 }
 
 // checkFields reports the first JSON field of T that row lacks. Fields
-// without a JSON name are not read from the response.
+// without a JSON name are not read from the response, and an omitempty field
+// is optional.
 func checkFields[T any](row map[string]json.RawMessage) error {
 	fields := reflect.TypeFor[T]()
 	for i := range fields.NumField() {
-		tag, _, _ := strings.Cut(fields.Field(i).Tag.Get("json"), ",")
-		if tag == "" || tag == "-" {
+		tag, opts, _ := strings.Cut(fields.Field(i).Tag.Get("json"), ",")
+		if tag == "" || tag == "-" || opts == "omitempty" {
 			continue
 		}
 		if _, ok := row[tag]; !ok {

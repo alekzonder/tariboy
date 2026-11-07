@@ -1,0 +1,16 @@
+# Fixture of scripts/compose-e2e.sh: a workflow from a path, next to the
+# compose file.
+schema_version: 1
+name: review
+workflow_version: 0.3.0
+initial_status: review
+statuses:
+  - id: review
+    owner: { pool: reviewers }
+    transitions:
+      - on: approved
+        to: closed
+        checks:
+          - script: ./check.sh
+  - id: closed
+    terminal: true

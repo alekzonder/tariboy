@@ -1,14 +1,21 @@
 ---
 title: The compose workflow
-description: Bring up a whole set of images, groups, and agents declaratively from a Tariboycompose.yaml.
+description: Bring up a whole set of Stores, workflows, images, task queues, agents, and groups declaratively from a Tariboycompose.yaml.
 sidebar:
   label: Compose
   icon: boxes
 ---
 
-`tariboy compose` (`internal/compose`) brings up a whole set of images,
-groups, and agents declaratively from a `Tariboycompose.yaml`. The daemon
-auto-starts if it is down.
+`tariboy compose` (`internal/compose`) brings up a whole set of Stores,
+workflows, images, task queues, agents, and groups declaratively from a
+`Tariboycompose.yaml`. `compose up` starts the daemon if it is down.
+
+The [Compose reference](/docs/binaries/compose-reference) gives a complete
+file, every field, the phase order and every verb. The
+[Compose decisions](/docs/binaries/compose-cases) page gives the behavior in
+special cases: a partial failure, a Store that is not available, a version
+conflict, an entity in use, an entity removed from the file, a second `up`,
+secrets, `--dry-run`, versions and migration.
 
 ```bash
 tariboy compose validate    # check the file, change nothing
@@ -121,7 +128,7 @@ The version 2 sections are:
 | `stores` | `git` and `ref`, or `path` | Exactly one of `git` and `path`. `git` is an `https://HOST/PATH` URL without a user name, a password, a query or a fragment. `ref` is a branch, a tag or a commit, and is valid only with `git`. |
 | `workflows` | `path`, or `store` and `source`, and optional `tag` and `version` | Exactly one of `path` and `store`. `source` names the entry in the Store; it defaults to the entry name. `tag` is `latest` (the default) or a SemVer version. `version` is a SemVer version. |
 | `images` | `path`, or `store` and `source`, and optional `tag` and `version` | The same rules as `workflows`, but `tag` is any image tag except `.` and `..`. `context` is version 1 syntax: in version 2, use `path`. |
-| `task_queues`, `agents`, `groups` | As in version 1 | |
+| `task_queues`, `agents`, `groups` | The same fields as in version 1 | See [Task queues and pools](#task-queues-and-pools), [Agent settings](#agent-settings) and [Group settings](#group-settings). In version 2, the references must name entries of the file, as listed below. |
 
 A relative `path` is resolved from the directory of the compose file.
 
@@ -290,8 +297,12 @@ error names the daemon version, the range, and the file:
 compose up: daemon version 0.109.0 does not satisfy tariboy >= 0.110.0 in /work/Tariboycompose.yaml
 ```
 
-`compose up` reads the version after it starts the daemon. A file without the
-`tariboy` key makes no extra call.
+`compose up` reads the version after it starts the daemon. `compose pack` and
+`compose unpack` make the same check before any change (see
+[Moving a project with `pack` and `unpack`](#moving-a-project-with-pack-and-unpack)),
+and `compose validate` makes it as
+[Checking a file with `validate`](#checking-a-file-with-validate) describes.
+A file without the `tariboy` key makes no extra call.
 
 ## Checking a file with `validate`
 
@@ -518,15 +529,26 @@ An existing agent converges in place:
   then stopped and started in the start phase, after the agent's other changes
   and its group and pools, so the restarted iteration also uses the new image,
   CWD, loop, and Goal settings. The restart interrupts the current iteration,
-  as a manual restart does. A stopped agent is re-provisioned instead (see
-  below), which starts it with the new harness. An agent whose file sets
-  `loop.enabled: false` is not restarted; its next start uses the new harness.
-- **Stopped agent.** An agent left stopped by a data-preserving `down` is
-  re-provisioned in place with the file's image, keeping its context,
-  iterations, and audit log, and then converges as above. The daemon starts a
-  re-provisioned agent at once, in the agents phase, so its first iteration may
-  run before the groups and queue bindings phases have set its new group or
-  pool.
+  as a manual restart does. A stopped agent is not restarted: a re-provision
+  or the start phase starts it with the new harness (see below). An agent
+  whose file sets `loop.enabled: false` is not restarted; its next start uses
+  the new harness.
+- **Stopped agent.** A data-preserving `down` removes the image tree of each
+  agent and keeps the stopped agent. `agent ps` then shows the agent with
+  `image_removed: true`. `up` re-provisions only such an agent: in place, with
+  the file's image, keeping its context, iterations, and audit log. Then the
+  agent converges as above. The daemon starts a re-provisioned agent at once,
+  in the agents phase, so its first iteration may run before the groups and
+  queue bindings phases have set its new group or pool. A re-provision always
+  starts the loop. Thus the first `up` after `down` starts an agent whose file
+  sets `loop.enabled: false`, and then stops it in the same run. The agent can
+  start an iteration between these two calls.
+- **Agent that is stopped and has its image.** `up` does not re-provision an
+  agent that is stopped and still has its image tree, for example an agent
+  whose file sets `loop.enabled: false`. It converges the settings of the
+  agent in place. If the file enables the loop, the start phase starts the
+  agent, and a changed harness applies at this start. Thus a second `up` on a
+  file with a stopped agent reports the agent `ok`.
 - **Group.** An agent in another group, or a new agent, is assigned to the
   file's group in the groups phase (`POST /api/groups/{name}/assign`). An agent
   the file leaves without a group keeps the group it has.
@@ -691,6 +713,26 @@ change, its group, model, effort and plugins included, in the form
 never their values. `user_prompt drift` and `notes drift` do not print the
 text. Each agent secret has a line of its own.
 
+For a version 2 file, status also prints one line for each Store, workflow and
+image. A Store line shows the drift of its `ref`. A workflow or image line
+compares the version that `NAME:TAG` was built from with the version that its
+source gives now. Status does not refresh a Store: it reads the version from
+the current copy of the Store, and the version of a path source from the local
+file. Every line except `ok` counts as drift:
+
+```text
+store      team       ok (ref main, commit 3f2a9c1e0b7d)
+store      team       drift: ref have=main want=v2
+store      team       MISSING
+store      team       source differs: have=https://a/x.git want=https://b/x.git (up does not change it)
+store      local      UNREADABLE (bad_source_path)
+image      developer  ok (version 1.2.0)
+image      developer  drift: built=1.1.0 source=1.2.0
+image      developer  MISSING (not built; source 1.2.0)
+image      developer  version conflict: want=1.2.0 source=1.3.0
+workflow   development drift: built=0.9.0 source=1.0.0
+```
+
 ## Agent settings
 
 An agent can declare every setting that the CLI and the API have for an
@@ -760,6 +802,7 @@ existing agent. A new agent gets the field in the create request
 | `goal` | `enabled`, `wait_customer_timeout`, `delivery_cooldown`. | `POST /api/agents/{name}/goal-*` |
 | `loop.enabled` | Default `true`. `false` stops the agent. | `POST /api/agents/{name}/start` or `.../stop` |
 | `loop.interval`, `loop.timeout` | Durations such as `30s` or `60m`. | `POST /api/agents/{name}/loop/interval`, `.../timeout` |
+| `timeout` | The older form of `loop.timeout`. If both are set, `loop.timeout` is used. | As `loop.timeout` |
 | `loop.hard_timeout` | A duration of at least `0s`. | `POST /api/agents/{name}/loop/hard-timeout` |
 | `loop.ai_stall_timeout` | A whole number of seconds, at least `1s`, written as a duration. | `POST /api/agents/{name}/loop/ai-stall-timeout` |
 | `loop.on_timeout`, `loop.on_error` | `restart` or `stop`. | `POST /api/agents/{name}/loop/on-timeout`, `.../on-error` |
@@ -863,26 +906,6 @@ These agent commands have no compose field:
 | `agent shell-script set` | The shell script is a Bash file in the directory of the agent, which is code, not a parameter. |
 | `secret rm`, `env` keys that the file omits with `env_mode: merge` | `up` never removes them. Use `env_mode: replace` for env. |
 | `agent messages instant-senders --reset` | The file cannot express "not set". Run the command. |
-
-For a version 2 file, status also prints one line for each Store, workflow and
-image. A Store line shows the drift of its `ref`. A workflow or image line
-compares the version that `NAME:TAG` was built from with the version that its
-source gives now. Status does not refresh a Store: it reads the version from
-the current copy of the Store, and the version of a path source from the local
-file. Every line except `ok` counts as drift:
-
-```text
-store      team       ok (ref main, commit 3f2a9c1e0b7d)
-store      team       drift: ref have=main want=v2
-store      team       MISSING
-store      team       source differs: have=https://a/x.git want=https://b/x.git (up does not change it)
-store      local      UNREADABLE (bad_source_path)
-image      developer  ok (version 1.2.0)
-image      developer  drift: built=1.1.0 source=1.2.0
-image      developer  MISSING (not built; source 1.2.0)
-image      developer  version conflict: want=1.2.0 source=1.3.0
-workflow   development drift: built=0.9.0 source=1.0.0
-```
 
 ## Task queues and pools
 

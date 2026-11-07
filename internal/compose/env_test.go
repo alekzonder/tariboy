@@ -99,7 +99,7 @@ func TestUpWithoutHarnessBlockKeepsInteractive(t *testing.T) {
 func TestUpSetsEnvAfterReprovision(t *testing.T) {
 	fc := newFake()
 	fc.agents["player_1"] = runningPlayer(map[string]any{}, false)
-	fc.agents["player_1"]["state"], fc.agents["player_1"]["enabled"] = "stopped", false
+	fc.agents["player_1"]["state"], fc.agents["player_1"]["enabled"], fc.agents["player_1"]["image_removed"] = "stopped", false, true
 	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(playerYAML))
 	upNoBuild(t, r, f)

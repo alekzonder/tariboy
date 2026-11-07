@@ -490,7 +490,7 @@ func TestPluginsWaitForImageAdoption(t *testing.T) {
 // after it.
 func TestPluginsSetAfterReprovision(t *testing.T) {
 	fc := newFake()
-	fc.agents["dev"] = map[string]any{"name": "dev", "state": "stopped", "image": "basic:latest", "harness": "claude", "plugins": []string{"loop"}}
+	fc.agents["dev"] = map[string]any{"name": "dev", "state": "stopped", "image_removed": true, "image": "basic:latest", "harness": "claude", "plugins": []string{"loop"}}
 	f, _ := Parse([]byte("version: 1\nagents:\n  dev:\n    image: basic:latest\n    plugins: [loop]\n"))
 	upNoBuild(t, NewRunner(fc, "", io.Discard), f)
 	re, plugins := callIndex(fc.calls, "POST /api/agents/dev/reprovision"), callIndex(fc.calls, "POST /api/agents/dev/plugins")

@@ -1,0 +1,18 @@
+# Fixture of scripts/compose-e2e.sh: the workflow of the git Store "team".
+# The script commits this file at workflow_version 1.0.0 (tag v1), then at
+# 1.1.0 (tag v2). The queue that binds it must hold the secret QUEUE_TOKEN.
+schema_version: 1
+name: development
+workflow_version: 1.0.0
+initial_status: work
+requires_secrets: [QUEUE_TOKEN]
+statuses:
+  - id: work
+    owner: { pool: devs }
+    transitions:
+      - on: done
+        to: finished
+        checks:
+          - script: ./check.sh
+  - id: finished
+    terminal: true

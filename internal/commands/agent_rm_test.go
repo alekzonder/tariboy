@@ -90,6 +90,34 @@ func runAgent(t *testing.T, c *registry.Ctx, name, ref string) {
 	}
 }
 
+// TestAgentPsMarksImageRemovedAfterRmKeep proves agent.ps tells the agent
+// that agent rm --keep (compose down) left without its image tree from an
+// agent that is only stopped: compose re-provisions the first and not the
+// second.
+func TestAgentPsMarksImageRemovedAfterRmKeep(t *testing.T) {
+	t.Parallel()
+	c, _ := rmFixture(t)
+	runAgent(t, c, "kept", "solo:latest")
+	runAgent(t, c, "stopped", "solo:latest")
+	if _, err := cmdHandler(t, "agent.rm")(c, registry.Params{"name": "kept", "keep": true, "force": true}); err != nil {
+		t.Fatalf("agent rm --keep: %v", err)
+	}
+	out, err := cmdHandler(t, "agent.ps")(c, registry.Params{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]AgentRow{}
+	for _, row := range out.(AgentListResult).Agents {
+		got[row.Name] = row
+	}
+	if got["kept"].State != "stopped" || !got["kept"].ImageRemoved {
+		t.Fatalf("kept = %+v, want stopped with image_removed", got["kept"])
+	}
+	if got["stopped"].State != "stopped" || got["stopped"].ImageRemoved {
+		t.Fatalf("stopped = %+v, want stopped without image_removed", got["stopped"])
+	}
+}
+
 // TestAgentRmDefaultFreesTheImage reproduces the defect: a plain agent rm
 // answered "removed" but kept the agents row, so image rm of the agent's image
 // answered image_in_use.

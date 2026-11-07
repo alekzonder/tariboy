@@ -153,7 +153,7 @@ func TestUpHarnessDriftRestartsRunningAgent(t *testing.T) {
 // harness: no separate restart.
 func TestUpHarnessDriftOnStoppedAgentUsesReprovision(t *testing.T) {
 	fc := newFake()
-	fc.agents["a"] = map[string]any{"name": "a", "state": "stopped", "enabled": false, "image": "img:latest", "harness": "codex"}
+	fc.agents["a"] = map[string]any{"name": "a", "state": "stopped", "image_removed": true, "enabled": false, "image": "img:latest", "harness": "codex"}
 	upNoBuild(t, NewRunner(fc, "", io.Discard), File{Version: 1, Agents: map[string]AgentSpec{"a": {Image: "img:latest", Harness: &HarnessSpec{Type: "claude"}}}})
 	set, reprovision := callIndex(fc.calls, "POST /api/agents/a/harness"), callIndex(fc.calls, "POST /api/agents/a/reprovision")
 	if set < 0 || reprovision < 0 || set > reprovision {
