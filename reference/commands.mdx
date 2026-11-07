@@ -68,6 +68,7 @@ tariboy has four command surfaces:
 | `tariboy agent model NAME` | Get or set the agent model (omit value to read); applies next iteration |
 | `tariboy agent notes get NAME` | Read the agent notes |
 | `tariboy agent notes set NAME` | Get or set the agent notes (omit value to read, empty to clear) |
+| `tariboy agent plugins NAME` | Get or replace the agent plugin list (omit value to read); applies from the next iteration |
 | `tariboy agent ps` | List agents |
 | `tariboy agent pull NAME PATH` | Read a base64 file from an agent's cwd (used by 'cp') |
 | `tariboy agent reprovision NAME` | Re-unpack an agent's image tree in place and restart its loop, keeping its data |
@@ -87,20 +88,23 @@ tariboy has four command surfaces:
 | `tariboy budget ls` | List configured budgets |
 | `tariboy budget set` | Set a cost budget (scope agent:\<name\>\|group:\<g\>\|global) |
 | `tariboy budget status` | Show current spend vs limit for each budget |
-| `tariboy compose archive` | Create a compose-only portable team archive; transfer runnable images separately |
-| `tariboy compose build` | Build the file's images |
+| `tariboy compose archive` | Deprecated alias of pack; removed in the next release |
+| `tariboy compose build` | Build the file's Stores, workflows and images |
 | `tariboy compose down` | Remove the file's agents and groups; --volumes also deletes their data |
 | `tariboy compose exec MEMBER [PROMPT...]` | Run an iteration of one of the file's agents now, with an optional prompt |
-| `tariboy compose import` | Preview and import compose-only team/runtime configuration |
+| `tariboy compose import` | Deprecated alias of unpack --archive FILE; removed in the next release |
 | `tariboy compose kill [MEMBERS...]` | Kill the current iteration of the file's agents, or the named agents and groups |
 | `tariboy compose logs [MEMBERS...]` | Print recent events of the file's agents, or the named agents and groups |
+| `tariboy compose pack` | Build the file's workflows and images, then write the file and their archives to one compose archive (-o FILE) |
 | `tariboy compose ps` | List the file's agents and their live state |
 | `tariboy compose restart [MEMBERS...]` | Restart the file's agents, or the named agents and groups |
 | `tariboy compose rm [MEMBERS...]` | Remove the file's stopped agents, or the named agents and groups |
 | `tariboy compose start [MEMBERS...]` | Start the file's agents, or the named agents and groups |
 | `tariboy compose status` | Compare the file with the daemon and report drift |
 | `tariboy compose stop [MEMBERS...]` | Stop the file's agents, or the named agents and groups |
-| `tariboy compose up` | Build, create and start the file's images, groups and agents; start the daemon first |
+| `tariboy compose unpack` | Check a compose archive, then import its images and workflows without network and apply the file; --dry-run prints the plan |
+| `tariboy compose up` | Build, create and start the file's images, task queues, agents and groups phase by phase; start the daemon first; --dry-run prints the plan |
+| `tariboy compose validate` | Check the file's schema, references, local paths and tariboy version range; --archive checks a compose archive offline; --daemon also checks the daemon |
 | `tariboy context get NAME` | Read the agent's CONTEXT.md |
 | `tariboy context set NAME` | Overwrite the agent's CONTEXT.md |
 | `tariboy cp SRC` | Upload a file to the server: cp LOCAL_FILE; download: cp AGENT:SRC LOCAL_DST |
@@ -206,6 +210,7 @@ tariboy has four command surfaces:
 | `tariboy store add NAME SOURCE` | Register a local or Git Store |
 | `tariboy store auto NAME` | Set a Store's automatic refresh and build policy |
 | `tariboy store list` | List registered Stores |
+| `tariboy store ref NAME REF` | Check a Git Store out at a branch, tag or commit |
 | `tariboy store refresh NAME` | Refresh a Store |
 | `tariboy store remove NAME` | Remove a Store registration |
 | `tariboy store show NAME` | Show a Store and its images |
@@ -252,11 +257,27 @@ down:
   published release over this installer-managed installation, restarts a
   running daemon, and with `--cleanup` deletes all but the newest N releases
   (default 5).
-- `tariboy compose VERB` reads a compose file (`-f FILE`, default
-  `tariboy-compose.yaml`) and drives the daemon API; `compose up` starts the
-  daemon first unless `--no-start` or `TARIBOY_NO_AUTOSTART` is set. The
-  compose flags may also come before the verb, as in
-  `tariboy compose -f FILE up`.
+- `tariboy compose VERB` reads a compose file and drives the daemon API.
+  Without `-f FILE`, it reads `Tariboycompose.yaml`, else
+  `tariboy-compose.yaml`, from the current directory; if both files exist, it
+  stops with an error. `compose up` starts the
+  daemon first unless `--no-start` or `TARIBOY_NO_AUTOSTART` is set, and
+  applies the file phase by phase. `compose up --dry-run` prints that plan
+  from reads only: it does not start the daemon, build or change anything.
+  `compose status` and `compose up --dry-run` also list the agents, groups
+  and task queues tied to the file that it does not declare. If the
+  file has a `tariboy` version range, a verb that calls the daemon stops before
+  any change when the daemon version is outside the range.
+  `tariboy compose validate [-f FILE] [--daemon]` checks the file and changes
+  nothing; only `--daemon` makes it read the daemon version.
+  `tariboy compose pack -o FILE` writes the file and its images and workflow
+  images to one compose archive. `tariboy compose unpack FILE` checks the
+  whole archive, then imports and applies it without network access or a
+  build. `tariboy compose validate --archive FILE` checks an archive offline.
+  `pack` and `unpack` need a running daemon. `compose archive` and
+  `compose import` are deprecated aliases of `pack` and `unpack`. See
+  [Compose](/docs/binaries/compose). The compose flags may also come before
+  the verb, as in `tariboy compose -f FILE up`.
 
 `tariboy update` updates only an installer-managed `linux-x86_64` or
 `linux-aarch64` installation
@@ -295,7 +316,8 @@ An older daemon left a removed agent as a stopped row. Run
 `tariboy agent rm NAME` again to delete that row.
 
 `tariboy compose down` uses mode `keep`, and `compose down --volumes` uses
-mode `purge`. A daemon older than mode `keep` ignores `keep` and keeps the row
+mode `purge`. After mode `keep`, `agent ps` shows the stopped agent with
+`image_removed: true`, and `compose up` re-provisions only such an agent. A daemon older than mode `keep` ignores `keep` and keeps the row
 as before. An older compose client sends no `keep`. Then a new daemon deletes
 the agent in mode `remove`, and the next `compose up` creates the agent again
 with its kept history. Secrets, budgets and schedules that you set outside the

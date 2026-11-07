@@ -39,6 +39,28 @@ instructions into the prompt. List every static instruction and runtime marker
 under the image's ordered `prompts` template. See [Images](/docs/images) for the
 complete manifest contract.
 
+### Plugins of an existing agent
+
+`tariboy agent plugins NAME` shows the plugin list of an agent.
+`tariboy agent plugins NAME --value loop,mail` replaces it (HTTP
+`POST /api/agents/{name}/plugins` with `value` as a comma list or a string
+array). The new list applies from the next iteration. A running iteration
+keeps its plugins and is not interrupted.
+
+A schema-v2 image carries the skills of its plugins, so the list can only hold
+plugins of the agent's active image. You can remove plugins of the image and
+add them back, but you cannot add a plugin that the image does not have. An
+unknown or repeated name returns `bad_plugins` (HTTP 400). A known plugin that
+is not in the image returns `plugin_not_in_image` (HTTP 400). To add a plugin,
+build an image with it and select that image with `tariboy agent image set`.
+For a schema-v1 image, the list joins the core plugins, as `agent run` does.
+
+A new image replaces the list with the plugins of that image. This occurs
+after `agent image set` and also after a rebuild of the agent's image ref.
+Run `agent plugins` again after the new image is active if you need a smaller
+list. An empty list is allowed, but an agent without `loop` has no
+`i-am-done` and cannot finish an iteration itself.
+
 Prompt assets and Agent Skills are separate declarations. A plugin directory
 such as `$PLUGINS/jira/2.5.0/skills/triage` becomes a packaged Agent Skill only
 when an image lists it under `skills: [{dir: ...}]`; placing content under a

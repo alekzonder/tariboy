@@ -37,7 +37,9 @@
 - [Binaries & commands](https://alekzonder.github.io/tariboy/binaries): Core binaries and the Telegram plugin built by make build.
 - [tariboy (operator CLI)](https://alekzonder.github.io/tariboy/binaries/operator-cli): The human/CI client that talks to the daemon over its socket, grouped by noun.
 - [Agent capability scripts](https://alekzonder.github.io/tariboy/binaries/agent-tools): Run packaged skill-local scripts inside an agent for identity, status, loop control, context, messaging, schedules, and durable work.
-- [The compose workflow](https://alekzonder.github.io/tariboy/binaries/compose): Bring up a whole set of images, groups, and agents declaratively from a tariboy-compose.yaml.
+- [The compose workflow](https://alekzonder.github.io/tariboy/binaries/compose): Bring up a whole set of Stores, workflows, images, task queues, agents, and groups declaratively from a Tariboycompose.yaml.
+- [Compose reference](https://alekzonder.github.io/tariboy/binaries/compose-reference): A complete Tariboycompose.yaml, every field by section, the phase order of compose up, and every compose verb.
+- [Compose decisions](https://alekzonder.github.io/tariboy/binaries/compose-cases): What tariboy compose does in special cases - a partial failure, an unavailable Store, a version conflict, an entity in use, a removed entity, a second up, secrets, dry-run, versions and migration.
 - [tariboy-store](https://alekzonder.github.io/tariboy/binaries/store): A standalone image registry server that stores agent-image blobs and serves a token-authenticated push/pull API.
 
 ## Plugins

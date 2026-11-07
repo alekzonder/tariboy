@@ -1,16 +1,25 @@
 ---
 title: The compose workflow
-description: Bring up a whole set of images, groups, and agents declaratively from a tariboy-compose.yaml.
+description: Bring up a whole set of Stores, workflows, images, task queues, agents, and groups declaratively from a Tariboycompose.yaml.
 sidebar:
   label: Compose
   icon: boxes
 ---
 
-`tariboy compose` (`internal/compose`) brings up a whole set of images,
-groups, and agents declaratively from a `tariboy-compose.yaml`. The daemon
-auto-starts if it is down.
+`tariboy compose` (`internal/compose`) brings up a whole set of Stores,
+workflows, images, task queues, agents, and groups declaratively from a
+`Tariboycompose.yaml`. `compose up` starts the daemon if it is down.
+
+The [Compose reference](/docs/binaries/compose-reference) gives a complete
+file, every field, the phase order and every verb. The
+[Compose decisions](/docs/binaries/compose-cases) page gives the behavior in
+special cases: a partial failure, a Store that is not available, a version
+conflict, an entity in use, an entity removed from the file, a second `up`,
+secrets, `--dry-run`, versions and migration.
 
 ```bash
+tariboy compose validate    # check the file, change nothing
+tariboy compose up --dry-run  # print the plan by phase, change nothing
 tariboy compose up          # build images, create groups/agents, start loops
 tariboy compose ps          # what compose manages
 tariboy compose logs        # tail agent logs
@@ -19,8 +28,11 @@ tariboy compose down --volumes  # also drop the shared/agent data
 ```
 
 Verbs: `up`, `down`, `build`, `ps`, `status`, `start`/`stop`/`restart`/`kill`,
-`rm`, `exec`, `logs`. Flags include `-f/--file`, `-v/--volumes`, `--no-start`,
-`--tail`. `compose down` then `up` preserves data by default; `--volumes` is the
+`rm`, `exec`, `logs`, `validate`, `pack`, `unpack`, and the deprecated aliases
+`archive` and `import`. Flags include `-f/--file`, `-v/--volumes`,
+`--no-start`, `--dry-run`, `--tail`, `--daemon`, `-o/--output`, `--no-build`,
+`--archive`, `--yes`. See
+[Moving a project with `pack` and `unpack`](#moving-a-project-with-pack-and-unpack). `compose down` then `up` preserves data by default; `--volumes` is the
 purge path. A plain `down` removes each agent in mode `keep`: the stopped
 agent row stays, so `up` re-provisions it. `compose rm` removes a stopped agent
 in mode `remove`: the agent is gone, and its history stays. See
@@ -51,15 +63,460 @@ agents:
 
 `wait_customer_timeout` must be a positive whole-second duration.
 
+## The compose file
+
+### File name
+
+If you do not give `-f FILE`, a verb looks for the file in the current
+directory, in this order:
+
+1. `Tariboycompose.yaml`.
+2. `tariboy-compose.yaml`, the earlier default name.
+
+If the directory has both files, the verb stops with an error that names both.
+Remove one file, or give `-f`. If the directory has neither file, the error
+also names both. With `-f`, the verb reads that file and does not look for
+another one. The rule applies to every verb that reads the file, including
+`validate` and `pack`. A compose archive stores the file as `compose.yaml`
+and keeps its original name in the archive metadata.
+
+### Version 1 and version 2
+
+The `version` key selects the schema. The values `1` and `2` are valid.
+
+- Version 1 has the sections `images` (with `context`), `groups`, `agents`,
+  and `task_queues`. A version 1 file works as before.
+- Version 2 also has the `tariboy` key and the `stores` and `workflows`
+  sections, and new source fields for `images`.
+
+If a version 1 file uses a version 2 key (`tariboy`, `stores`, a non-empty
+`workflows`, or an image `path`, `store`, `source`, `tag` or `version`), the error
+tells you to declare `version: 2`. An empty `workflows: {}`, as written by older
+team exports, is accepted in version 1 and ignored.
+
+The parser is strict in both versions: an unknown field in any section is an
+error.
+
+```yaml
+version: 2
+tariboy: {min: 0.110.0, max: 0.120.0}
+stores:
+  team: {git: https://example.com/store.git, ref: main}
+  local: {path: ./store}
+workflows:
+  development: {store: team, source: development, version: 1.2.0}
+  review: {path: ./workflows/review}
+images:
+  developer: {store: team, source: developer}
+  reviewer: {path: ./images/reviewer}
+groups:
+  dev: {lead: dev-developer}
+agents:
+  dev-developer: {image: developer:latest, group: dev}
+  dev-reviewer: {image: reviewer:latest, group: dev}
+task_queues:
+  DEV:
+    name: Development
+    workflow: team/development
+    pools: {developers: [dev-developer], reviewers: [dev-reviewer]}
+```
+
+The version 2 sections are:
+
+| Section | Fields | Rules |
+| --- | --- | --- |
+| `stores` | `git` and `ref`, or `path` | Exactly one of `git` and `path`. `git` is an `https://HOST/PATH` URL without a user name, a password, a query or a fragment. `ref` is a branch, a tag or a commit, and is valid only with `git`. |
+| `workflows` | `path`, or `store` and `source`, and optional `tag` and `version` | Exactly one of `path` and `store`. `source` names the entry in the Store; it defaults to the entry name. `tag` is `latest` (the default) or a SemVer version. `version` is a SemVer version. |
+| `images` | `path`, or `store` and `source`, and optional `tag` and `version` | The same rules as `workflows`, but `tag` is any image tag except `.` and `..`. `context` is version 1 syntax: in version 2, use `path`. |
+| `task_queues`, `agents`, `groups` | The same fields as in version 1 | See [Task queues and pools](#task-queues-and-pools), [Agent settings](#agent-settings) and [Group settings](#group-settings). In version 2, the references must name entries of the file, as listed below. |
+
+A relative `path` is resolved from the directory of the compose file.
+
+In version 2, these references must name an entry of the same file:
+
+- The image of an agent (the name without the tag) must be in `images`.
+- The group of an agent must be in `groups`. This rule also applies in version 1.
+- Each agent of a pool must be in `agents`. This rule also applies in version 1.
+- The `responsible_agent` of a queue must be in `agents`. This rule also
+  applies in version 1.
+- The workflow of a queue must be in `workflows`. If the value has a `STORE/`
+  prefix, that Store must be in `stores`, and it must be the `store` of the
+  workflow entry.
+- The `store` of a workflow or an image must be in `stores`.
+
+In version 1, an agent image and a queue workflow can name objects outside the
+file, as before.
+
+### Stores, workflows and images
+
+`compose up` applies the `stores`, `workflows` and `images` sections in its
+first three phases. `compose build` applies only these three phases. A team
+import (`team.import.yaml` and the archive import) does not apply them: it
+refuses a file with `stores`, `workflows` or an image with `store`, and the
+error tells you to apply the file with `compose up`.
+
+```yaml
+version: 2
+stores:
+  team: {git: https://example.com/team-store.git, ref: v2}
+  local: {path: ./store}
+workflows:
+  development: {store: team, version: 1.2.0}
+  review: {path: ./workflows/review, tag: 0.3.0}
+images:
+  developer: {store: team, source: developer, version: 2.1.0}
+  tester: {store: local}
+  reviewer: {path: ./images/reviewer, tag: stable}
+agents:
+  dev-developer: {image: developer:latest}
+task_queues:
+  DEV:
+    name: Development
+    workflow: development
+    pools: {developers: [dev-developer]}
+```
+
+#### Stores
+
+For each Store of the file, the stores phase does one of these steps:
+
+| Daemon state | `up` |
+| --- | --- |
+| No Store with this name | Registers it with `POST /api/stores`. A `path` is sent as an absolute path. A relative `path` is resolved from the directory of the compose file. |
+| The Store has another source | Fails the Store and changes nothing. To change the source, run `tariboy store rm NAME`, then `up`. |
+| A git Store at another `ref` | Checks the Store out at the file's `ref` (`POST /api/stores/{name}/ref`), then refreshes it. An empty `ref` means the default branch. |
+| A git Store | Refreshes it (`POST /api/stores/{name}/refresh`) on every `up`. The Store is `changed` when the commit moved, else `ok`. |
+| A path Store | Reads it with `GET /api/stores/{name}`. The daemon reads the directory again. The Store is `ok` when the read succeeds. |
+
+`up` never refreshes a path Store. A refresh of a local Store that is a git
+checkout runs `git pull --ff-only` in your directory. Update that directory
+yourself. The source is compared as text: the git URL without surrounding
+spaces, or the clean absolute path. Thus `https://example.com/a.git` and
+`https://example.com/a` are different sources. `up` registers only an `https`
+git URL, so a Store that you registered with `ssh` gives a source conflict.
+
+#### Builds and versions
+
+A workflow entry builds with `POST /api/workflow-images/build`, from
+`STORE/SOURCE` or from the absolute `path`. The workflow builds on every `up`.
+A build of a version that the daemon already has, with the same content,
+publishes nothing and is `ok`. The `name` in `Workflowfile.yaml` must equal
+the entry key, else the entry fails before the build. For a Store source,
+`up` reads the name through `POST /api/workflow-images/validate`, which
+changes nothing. After the build, `up` makes sure that the entry's tag
+`NAME:TAG` exists. A workflow build publishes only the tags `latest` and its
+version, so `tag` is one of these. A version `tag` without `version` works as
+`version`: the source must give that version.
+
+An image entry from a path builds as a version 1 image with `context` does,
+but with the entry's `tag`. It builds on every `up`, and it is `ok` when
+`NAME:TAG` keeps its digest. An image entry from a Store builds with
+`POST /api/images/build` with `name`, `tag` and `source: STORE/SOURCE`. It
+builds only when `NAME:TAG` was built from another `image_version` than the
+Store gives now. This is the rule of the automatic Store builds. A change in
+the Store without a new `image_version` does not reach the image.
+
+`version` selects the version that the source must give. `up` reads the
+version before the build:
+
+- For a Store source, `up` reads the version that the daemon reads from the
+  Store after the refresh.
+- For a path source, `up` reads `image_version` from `Tariboyfile.yaml` or
+  `workflow_version` from `Workflowfile.yaml`.
+
+If the version differs from the file, the entry fails before the build, and
+its tag stays on the build it had:
+
+```text
+failed   image:developer: image developer: expected version 2.1.0, the source gives 2.2.0; the tag is not moved
+```
+
+`up` compares the version again after the build. If the source changes
+between the first read and the build, the tag already moved to the new build,
+and the entry still fails with the same error. A source without a version
+gives `the source gives no version`.
+
+#### Updates
+
+To update an image or a workflow, change the source: commit a new version to
+the Store, or change the `ref`. The next `up` refreshes the Store, builds the
+new version and moves the tag to it. An agent on that tag gets the new image as
+its pending image and adopts it on its next iteration. A queue that follows
+the tag moves to the new build. A queue pinned with `STORE/NAME` is bound to
+the new digest in the queue bindings phase.
+
+#### A Store that is not available
+
+A Store fails when the daemon cannot reach it: no network, a wrong URL, a
+`ref` that does not exist, a path that does not exist, or another source under
+the same name. Every workflow and image from this Store is then `skipped`, and
+so are the agents on those images and the queue bindings of those workflows.
+Entries from a path and from other Stores still apply. `up` exits non-zero:
+
+```text
+failed   store:team: refresh store team: ...
+skipped  workflow:development: an action it depends on failed
+skipped  image:developer: an action it depends on failed
+changed  image:reviewer
+skipped  agent:dev-developer: an action it depends on failed
+```
+
+#### A second `up`
+
+A second `up` on unchanged sources refreshes each git Store, builds each path
+image and each workflow again, and builds no Store image. The path builds and
+the workflow builds give the digests that the daemon already has, so no tag
+moves. `up` makes no change to agents and queues, and it reports every
+resource `ok`.
+
+### The tariboy version range
+
+The top-level `tariboy` key of a version 2 file gives the tariboy versions that
+the file works with:
+
+```yaml
+tariboy: {min: 0.110.0, max: 0.120.0}
+```
+
+Both bounds are optional and inclusive. A bound has the form
+`MAJOR.MINOR.PATCH` with an optional prerelease label, such as `0.111.0-rc.1`.
+If `min` is greater than `max`, the file is invalid.
+
+Versions compare by the SemVer 2.0.0 rules. A prerelease is lower than its
+release, so `0.111.0-rc.1` is lower than `0.111.0`. Thus `min: 0.111.0` refuses
+a daemon at `0.111.0-rc.1`. A bound can have a label itself: `min: 0.111.0-rc.1`
+accepts `0.111.0-rc.1`, `0.111.0-rc.2`, and `0.111.0`.
+
+If the file has a `tariboy` key, every verb that calls the daemon (`up`,
+`down`, `build`, `ps`, `status`, `start`, `stop`, `restart`, `kill`, `rm`,
+`exec`, `logs`) first reads the daemon version from `GET /api/daemon/status`.
+If the version is outside the range, the verb stops before any change. The
+error names the daemon version, the range, and the file:
+
+```text
+compose up: daemon version 0.109.0 does not satisfy tariboy >= 0.110.0 in /work/Tariboycompose.yaml
+```
+
+`compose up` reads the version after it starts the daemon. `compose pack` and
+`compose unpack` make the same check before any change (see
+[Moving a project with `pack` and `unpack`](#moving-a-project-with-pack-and-unpack)),
+and `compose validate` makes it as
+[Checking a file with `validate`](#checking-a-file-with-validate) describes.
+A file without the `tariboy` key makes no extra call.
+
+## Checking a file with `validate`
+
+```bash
+tariboy compose validate [-f FILE] [--daemon]
+```
+
+To check a compose archive instead of a file, see
+[Checking an archive with `validate --archive`](#checking-an-archive-with-validate---archive).
+
+`compose validate` checks the file and changes nothing:
+
+1. The schema. If the YAML has unknown fields, it lists each one. A YAML syntax
+   error stops the check.
+2. The references between entries, as listed above: each `store` of a
+   workflow or an image is in `stores`, and the `STORE/` prefix of a queue
+   workflow is the `store` of its entry.
+3. The fields of the version 2 sections: a git URL is `https` only, a `tag`
+   and a `version` have a valid form.
+4. The existence of each local `path` in `stores`, `workflows`, and `images`,
+   and of each version 1 image `context`.
+5. The `tariboy` range against the version of the CLI.
+6. With `--daemon`, the `tariboy` range against the version of the running
+   daemon. This is one read of `GET /api/daemon/status`. If the file has no
+   `tariboy` key, there is nothing to compare and it makes no call.
+
+Without `--daemon`, `validate` does not call the daemon and does not start it.
+
+If the file has no problems, `validate` prints `PATH: valid` and exits with 0.
+Otherwise it prints each problem on its own line to standard error, then
+`compose validate: N problem(s) in PATH`, and exits with 1:
+
+```text
+- agent "dev-developer" references undeclared image "developer"
+- store "local" path "./store" does not exist
+compose validate: 2 problem(s) in /work/Tariboycompose.yaml
+```
+
+## Moving a project with `pack` and `unpack`
+
+```bash
+tariboy compose pack -o FILE [-f COMPOSE] [--no-build]
+tariboy compose unpack FILE [--dry-run] [--yes]
+tariboy compose validate --archive FILE [--daemon]
+```
+
+`pack` writes one compose archive with the file and every image and workflow
+image it needs. `unpack` applies that archive on another daemon without
+network access and without a build. Both verbs need a running daemon. They
+do not start it.
+
+### `pack`
+
+`compose pack` does these steps:
+
+1. It reads and checks the file, as `up` does. If the file has a `tariboy`
+   range, the daemon version must be inside it.
+2. It applies the stores, workflows and images phases, as `compose build`
+   does. With `--no-build`, it builds nothing and takes the images and
+   workflow images that the daemon has. A missing image or workflow image
+   stops `pack` with an error that names it.
+3. It exports the image of each agent and each workflow image of the file
+   from the daemon. The workflow images are each `workflows` entry and the
+   `workflow` of each task queue. It makes sure that each export has the
+   digest that the daemon reports.
+4. It writes the archive to `FILE`. If `FILE` exists, `pack` stops. If a step
+   fails, `pack` removes the incomplete file.
+
+The archive is a `tariboy-portable` archive of kind `compose`. It holds these
+files:
+
+| File | Content |
+| --- | --- |
+| `compose.yaml` | The compose file, without changes |
+| `images/NAME/TAG.tar.gz` | The exported image of each agent (kind `image-artifact`), with its installed skills |
+| `workflows/NAME/VERSION.tar.gz` | The exported workflow image (kind `workflow-image`) |
+
+The manifest metadata gives the schema version (`schema: 1`), the version of
+the daemon that packed the archive (`producer_version`), the name of the
+compose file, and the digest of each image and workflow image. The archive
+holds one workflow image for each workflow name.
+
+An archive does not hold Stores or secret values. The compose file holds only
+the name of each secret and its `from_env` variable. `pack` does not read
+these variables.
+
+| Limit | Value | Reason |
+| --- | --- | --- |
+| Whole archive, compressed | 1 GiB | 16 images of 64 MiB |
+| Whole archive, expanded | 1 GiB | The members are gzip files already, so they do not get larger |
+| Files | 512 | The compose file, the images and the workflow images |
+| One image or workflow image | 64 MiB | The limit of the image and workflow import routes of the daemon |
+
+If one export is larger than 64 MiB, `pack` stops before it writes the
+archive.
+
+### `unpack`
+
+`compose unpack FILE` does these steps:
+
+1. It unpacks the archive into a temporary directory. It makes sure that the
+   sha256 and size of each file match the manifest.
+2. It checks the whole archive before any change. It recomputes the content
+   digest of each image and each workflow image. It checks the compose file
+   and makes sure that the archive has an image for each agent and a
+   workflow image for each workflow of the file.
+3. It reads the daemon version. The daemon must be inside the `tariboy` range
+   of the file, and it must not be older than `producer_version`. If either
+   check fails, `unpack` stops before any change.
+4. It prints the plan by phase, as `up --dry-run` does. With `--dry-run`, it
+   stops here. Without `--yes`, it asks `Apply this archive? [y/N]`.
+5. It applies the file by phase, as `up` does, with these differences:
+   - The stores phase does not call the daemon. Each Store gets the outcome
+     `skipped (archive)`.
+   - The workflows phase imports each workflow image of the archive. Import
+     tags it with its version and `latest`.
+   - The images phase imports each image of the archive.
+   - If a ref already has the digest of the archive, `unpack` does not import
+     it again. The outcome is `ok`.
+
+`unpack` does not build, does not run `npx` or `git`, and does not use the
+network. The temporary directory is removed when `unpack` ends, also after an
+error.
+
+The project directory of an unpacked file is the directory of the archive.
+An agent without `cwd` gets this directory. To use another directory, set
+`cwd` in the file before `pack`.
+
+Secret values do not move. After `unpack`, an agent or a queue gets its
+secret only if the `from_env` variable is set in the environment of
+`unpack`. Otherwise the rule of `up` applies: a secret that is missing fails
+the agent or the queue.
+
+If an import or an action fails after the checks, for example on an
+`image_version` conflict, `unpack` does not undo the actions that it already
+applied. As in `up`, the resource fails, the resources that depend on it get
+`skipped`, and the other resources are applied. Run `unpack` again after you
+correct the cause. It does not import again the images that already have the
+digest of the archive.
+
+After `unpack`, the target daemon has no Store for the images and the
+workflows. It cannot build them again until you register the Store, for
+example with `compose up` and the same file.
+
+### Checking an archive with `validate --archive`
+
+`compose validate --archive FILE` checks an archive and does not call the
+daemon. It checks the sha256 of each file in the manifest, the content digest
+of each image and workflow image, the schema version, the compose file and
+its references, and that the archive has every image and workflow image that
+the file needs. It does not check local paths, because they are paths on the
+machine that packed the archive. It compares the `tariboy` range of the file
+with the version of the CLI, and the `producer_version` with the version of
+the CLI.
+
+With `--daemon`, it also reads the daemon: the daemon version against the
+range and against `producer_version`, and the plugins of the daemon. Each
+external plugin that an image needs must be installed. It never writes to
+the daemon. The full contract check of each image runs at import time.
+
+It prints problems in the same form as `validate` of a file.
+
+### Older archives and the `archive` and `import` verbs
+
+`compose archive` and `compose import` stay for one release as deprecated
+aliases. Each one prints a warning to standard error:
+
+- `compose archive` runs `compose pack`. Its behavior changed: it wrote a
+  team archive without a daemon, and now it writes a compose archive and
+  needs a running daemon.
+- `compose import --archive FILE` runs `compose unpack FILE`.
+
+`compose unpack` also accepts a team archive version 1 that an older
+`compose archive` wrote. It sends that archive to the team import of the
+daemon (`POST /api/team-imports`), prints the preview and applies it after
+`--yes` or a `y` answer, as `compose import` did. The CLI does not write team
+archives any more. To move such a team with its images, apply the old archive,
+then run `compose pack` with the compose file of the team.
+
 ## How `up` converges
 
-`compose up` builds the declared images and reads the live state once: the
-groups, agents, budgets, task queues and their pools, the queue workflow
-bindings, and the pending image of each running agent whose image differs from
-the file. It then plans the actions that move the daemon toward the file and
-applies them in this order: groups, agents, budgets, task queues, and queue
-workflows. A setting that already matches makes no call, so running `up` again
-on a converged file changes nothing and reports every resource `ok`.
+`compose up` reads the live state once: the groups, agents, budgets, task
+queues with their pools, env, secret names and triggers, and the pending image of each running agent whose
+image differs from the file. It then plans the actions that move the daemon
+toward the file and applies them phase by phase:
+
+| Phase | What it applies |
+| --- | --- |
+| `stores` | Registers each Store of the file, sets the `ref` of a git Store and refreshes it, and reads a path Store. See [Stores](#stores). |
+| `workflows` | Version 2: builds each entry of `workflows` after its Store. Version 1: builds each Store workflow a task queue names, once per source. |
+| `images` | Builds each declared image as `NAME:TAG` (`latest` by default), one action per image, after its Store. |
+| `queues` | Creates each task queue, restores a changed name, description and owners, and sets the plain env and the secrets of each queue. |
+| `agents` | Creates each new agent **without a group**, converges the settings of an existing one, stops one whose file sets `loop.enabled: false`, and sets the agent budget. |
+| `groups` | Creates each group without a lead, assigns the file's agents to it, sets the lead, and sets the group budget. |
+| `queue bindings` | Binds the agent pools of each queue, then sets its `CUSTOMER_AGENT_POOL` and its responsible agent, binds its workflow, and creates its triggers. |
+| `start` | Starts each new agent and each stopped loop the file enables, and restarts an agent whose harness changed. |
+
+The order follows what each step needs. A pool can only name agents that
+exist, and a workflow binding needs the pools it names, so the queue bindings
+come after the agents. A group's lead must already be a member, so the groups
+phase assigns the members first and then sets the lead with
+`PATCH /api/groups/{name}/lead`. A group without `lead` in the file keeps the
+lead it has. A new agent starts only after it joined its group. Agents start last, so their first iteration
+already has its group, its pools and its queue's workflow.
+
+A setting that already matches makes no call. Running `up` again on a
+converged file reports every resource `ok`. The only exception is the
+builds and the refresh of each git Store: compose cannot tell whether the
+local sources changed, so every `up` builds each path image and each workflow
+again. A build of unchanged sources publishes the digest the daemon already
+has and is reported `ok`; an image whose `NAME:TAG` digest changed, or a
+workflow version that was not published before, is reported `changed`. An
+image from a Store builds only when the Store gives a new `image_version` (see
+[A second `up`](#a-second-up)).
 
 An existing agent converges in place:
 
@@ -68,44 +525,131 @@ An existing agent converges in place:
   image on its next iteration; there is no restart. A bare name means
   `NAME:latest`.
 - **Harness.** A different `harness.type` is stored
-  (`POST /api/agents/{name}/harness`), and a running agent is then stopped and
-  started so the new harness takes effect. The restart runs after the agent's
-  other changes, so the restarted iteration also uses the new image, CWD, loop,
-  and Goal settings. The restart interrupts the current iteration, as a manual
-  restart does. A stopped agent is re-provisioned
-  instead (see below), which starts it with the new harness. An agent whose
-  file sets `loop.enabled: false` is not restarted; its next start uses the new
-  harness.
-- **Stopped agent.** An agent left stopped by a data-preserving `down` is
-  re-provisioned in place with the file's image, keeping its context,
-  iterations, and audit log, and then converges as above.
-- Group membership, CWD, timeout, loop settings, and the Goal settings the file
-  sets converge to the file's values.
+  (`POST /api/agents/{name}/harness`) in the agents phase. A running agent is
+  then stopped and started in the start phase, after the agent's other changes
+  and its group and pools, so the restarted iteration also uses the new image,
+  CWD, loop, and Goal settings. The restart interrupts the current iteration,
+  as a manual restart does. A stopped agent is not restarted: a re-provision
+  or the start phase starts it with the new harness (see below). An agent
+  whose file sets `loop.enabled: false` is not restarted; its next start uses
+  the new harness.
+- **Stopped agent.** A data-preserving `down` removes the image tree of each
+  agent and keeps the stopped agent. `agent ps` then shows the agent with
+  `image_removed: true`. `up` re-provisions only such an agent: in place, with
+  the file's image, keeping its context, iterations, and audit log. Then the
+  agent converges as above. The daemon starts a re-provisioned agent at once,
+  in the agents phase, so its first iteration may run before the groups and
+  queue bindings phases have set its new group or pool. A re-provision always
+  starts the loop. Thus the first `up` after `down` starts an agent whose file
+  sets `loop.enabled: false`, and then stops it in the same run. The agent can
+  start an iteration between these two calls.
+- **Agent that is stopped and has its image.** `up` does not re-provision an
+  agent that is stopped and still has its image tree, for example an agent
+  whose file sets `loop.enabled: false`. It converges the settings of the
+  agent in place. If the file enables the loop, the start phase starts the
+  agent, and a changed harness applies at this start. Thus a second `up` on a
+  file with a stopped agent reports the agent `ok`.
+- **Group.** An agent in another group, or a new agent, is assigned to the
+  file's group in the groups phase (`POST /api/groups/{name}/assign`). An agent
+  the file leaves without a group keeps the group it has.
+- CWD, timeout, loop settings, and the Goal settings the file sets converge to
+  the file's values.
 - **Environment and interactive mode.** When a key in the file's `env` is
-  missing from the agent or has another value, `up` sets the agent env to its
-  current env merged with the file's keys. Keys the file does not declare, such
-  as env from the image manifest, are kept; removing a key from the file does
-  not remove it from the agent (use `tariboy agent env NAME` to replace the
-  whole env). When the file has a `harness` block, `up` sets the interactive
-  mode to `harness.interactive`; without a `harness` block it keeps the
-  agent's mode. Neither change restarts the agent: an iteration that is already
-  running keeps its old values, and the next iteration uses the new ones.
+  missing from the agent or has another value, `up` sets the agent env. With
+  `env_mode: merge`, the default, `up` sends the current env merged with the
+  file's keys. Keys the file does not declare, such as env from the image
+  manifest, stay. With `env_mode: replace`, `up` sends only the file's `env`,
+  and the daemon removes every other key, the image manifest env included.
+  When the file has a `harness` block, `up` sets the interactive mode to
+  `harness.interactive`. Without a `harness` block, `up` keeps the agent's
+  mode.
+- **Other agent settings.** Model, effort, plugins, the timeouts, the
+  schedule, the user prompt, the mail settings, alias, notes, color, retention
+  and secrets converge as [Agent settings](#agent-settings) describes.
 
-Model, effort, and plugins are applied only when compose creates an agent; `up`
-does not change them on an existing agent.
+The stores phase changes the ref of a Git Store as `tariboy store ref` does
+(see [Images](/docs/images#the-ref-of-a-git-store)).
 
-A failed action does not stop the run. The actions that depend on it are
-skipped: for example, a failed agent create skips that agent's start and its
-budget, and a failed harness change skips the restart. Independent actions,
-including the other agents, still run. When the run ends, `up` prints one line
-per resource with its outcome:
+### Entities that are in use
+
+`up` changes a running project without waiting for it to be idle:
+
+- A new image is only pending: the agent finishes its current iteration on the
+  old image and adopts the new one on the next.
+- A harness change restarts a running agent in the start phase and ends its
+  current iteration.
+- Every other agent setting applies from the next iteration of the agent, as
+  [Agent settings](#agent-settings) describes. The current iteration keeps
+  the old values.
+- Rebinding a queue to a new workflow version leaves the tasks that already
+  started on the version they pinned; new tasks follow the new binding.
+
+### Preview with `--dry-run`
+
+`compose up --dry-run` prints the plan by phase and applies nothing. It reads
+the live state with `GET` requests only: it does not start the daemon, build
+an image or a workflow, or make any other change. A phase with nothing to do
+is not printed. Each line shows the verb and the fields an action sets, with
+the live value before `->` when there is one:
 
 ```text
-changed  group:research-team
+phase images
+  build    image:dev (path=./dev)
+phase queues
+  create   queue:DEV (name=Development)
+phase agents
+  create   agent:lead (image=dev:latest; cwd=/work; env keys=TOKEN)
+  set      budget:agent:lead (limit_usd=5; mode=warn)
+  update   agent:ops (harness codex -> claude; env keys=REGION)
+phase groups
+  update   agent:lead (group=team)
+  update   group:team (lead ops -> lead)
+phase queue bindings
+  update   queue:DEV (pool developers [] -> [lead, ops])
+phase start
+  start    agent:lead
+  restart  agent:ops (harness codex -> claude)
+not declared
+  agent      old-bot        not declared (group=team state=running)
+dry-run: 6 resources to change, 0 ok; nothing applied
+```
+
+Env and secret values are never printed, only the names of the env keys.
+Without a build, the digest of a Store workflow is not known, so the dry run
+lists each build and each workflow binding as planned even when `up` would
+find it unchanged. It also lists the refresh of each git Store. It does not
+refresh a Store, so it does not know the version that a Store source will
+give. A `version` from a Store shows as `(checked at apply time)`:
+
+```text
+phase stores
+  create   store:local (source=/work/store; ref=(default branch))
+  update   store:team (ref main -> v2; refresh)
+phase images
+  build    image:developer (source=team/developer; tag=latest; version=2.1.0 (checked at apply time))
+```
+
+When the daemon is not running, `--dry-run` fails with
+`tariboyd is not running` instead of starting it.
+
+### When an action fails
+
+A failed action does not stop the run. The actions that depend on it are
+skipped in every later phase, and independent actions, including the other
+agents, still run. For example, a failed create of agent `writer` skips its
+budget, its group membership, the group's lead when `writer` is the lead, the
+pools that name it, the workflow binding that needs those pools, and its
+start. A failed image build skips only the agents on that image, and a failed
+harness change skips the restart. When the run ends, `up` prints one line per
+resource, in phase order:
+
+```text
+changed  image:analyst
+changed  agent:scout
 failed   agent:writer: create agent writer: ...
 skipped  budget:agent:writer: an action it depends on failed
-ok       agent:scout
-up: 1 ok, 1 changed, 1 failed, 1 skipped
+changed  group:research-team
+up: 0 ok, 3 changed, 1 failed, 1 skipped
 ```
 
 | Outcome | Meaning |
@@ -115,22 +659,257 @@ up: 1 ok, 1 changed, 1 failed, 1 skipped
 | `failed` | An action failed; the line shows the first error. |
 | `skipped` | An action it depends on failed, so it was not attempted. |
 
-If any resource failed, `up` exits non-zero and prints a one-line summary such
-as `compose up: 1 resource failed` to standard error; the report above already
-shows each error. The resources that succeeded stay
-applied, so the daemon can be partly converged; fix the cause and run `up`
-again to converge the rest.
+An agent's line covers its create or settings, its group membership and its
+start; a group's line covers the group and its lead; a queue's line covers the
+queue, its env, secrets, pools, workflow binding and triggers. If any resource failed, `up` exits
+non-zero and prints a one-line summary such as `compose up: 1 resource failed`
+to standard error; the report above already shows each error. The resources
+that succeeded stay applied, so the daemon can be partly converged; fix the
+cause and run `up` again to converge the rest. An error while reading the live
+state or planning stops `up` and `--dry-run` before any change.
+
+### Removing an entity from the file
+
+`up` never deletes. An agent, group or task queue removed from the file stays
+on the daemon, unchanged. To remove it, run `compose down` before you edit the
+file, or remove it directly with `tariboy agent rm NAME` or
+`tariboy group rm NAME`.
+
+The daemon does not record which file created an entity, so `compose status`
+and `compose up --dry-run` find the leftovers by their ties to the file and
+list them as `not declared`:
+
+- an agent the file does not declare that is in one of the file's groups or
+  in a pool of one of its task queues;
+- a group the file does not declare that has one of the file's agents as a
+  member;
+- a task queue the file does not declare with a pool that names one of the
+  file's agents;
+- a pool, env key, secret or trigger of a declared task queue that the file
+  does not declare.
+
+```text
+agent      old-bot        not declared (group=research state=running)
+group      legacy         not declared (member dev)
+task queue DEV            pool old-pool not declared
+task queue DEV            env LOG_LEVEL not declared
+task queue DEV            secret OLD_TOKEN not declared
+task queue DEV            trigger plugin:slack create_task not declared
+task queue OLD            not declared (pool dev has dev)
+```
+
+An entity with no tie to the file, such as an agent outside the file's groups
+and pools, is not listed. `not declared` lines do not count as drift.
+
+### `compose status`
 
 `compose status` reads the same plan without applying it. It prints one line
-per group, agent, budget, task queue, and pool, then `drift: N`. An agent's line
-lists each setting `up` would change; an image that is already pending shows as
-`image pending` until the agent adopts it. Environment drift lists the key
-names only, never their values. Model and plugins are not checked, and status
-says so on its last line.
+per task queue and pool, agent, budget, and group, then the `not declared`
+entities, then `drift: N`. An agent's line lists each setting `up` would
+change, its group, model, effort and plugins included, in the form
+`FIELD drift: have=X want=Y`. An image that is already pending shows as
+`image pending` until the agent adopts it, and the file's plugins show as
+`plugins pending` until then. Environment drift lists the key names only,
+never their values. `user_prompt drift` and `notes drift` do not print the
+text. Each agent secret has a line of its own.
+
+For a version 2 file, status also prints one line for each Store, workflow and
+image. A Store line shows the drift of its `ref`. A workflow or image line
+compares the version that `NAME:TAG` was built from with the version that its
+source gives now. Status does not refresh a Store: it reads the version from
+the current copy of the Store, and the version of a path source from the local
+file. Every line except `ok` counts as drift:
+
+```text
+store      team       ok (ref main, commit 3f2a9c1e0b7d)
+store      team       drift: ref have=main want=v2
+store      team       MISSING
+store      team       source differs: have=https://a/x.git want=https://b/x.git (up does not change it)
+store      local      UNREADABLE (bad_source_path)
+image      developer  ok (version 1.2.0)
+image      developer  drift: built=1.1.0 source=1.2.0
+image      developer  MISSING (not built; source 1.2.0)
+image      developer  version conflict: want=1.2.0 source=1.3.0
+workflow   development drift: built=0.9.0 source=1.0.0
+```
+
+## Agent settings
+
+An agent can declare every setting that the CLI and the API have for an
+agent:
+
+```yaml
+agents:
+  dev:
+    image: developer:latest
+    group: dev
+    harness: {type: claude, model: opus, effort: high, interactive: true}
+    plugins: [loop, mail, tasks]
+    env_mode: merge
+    env: {LOG_LEVEL: info}
+    secrets:
+      GH_TOKEN: {from_env: DEV_GH_TOKEN}
+    cwd: /work/project
+    create_cwd: true
+    user_prompt: |
+      Work only in your branch.
+    alias: Dev
+    notes: Project developer
+    color: "#3366ff"
+    messages_batch: 10
+    messages_max_queue: 100
+    mail_instant_senders: [dev-lead]
+    retention: {keep_iterations: 200, keep_days: 30, max_bytes: 1073741824}
+    budget: {limit_usd: 10, period: 24h, mode: warn}
+    goal: {enabled: true, wait_customer_timeout: 300s, delivery_cooldown: 60s}
+    loop:
+      enabled: true
+      interval: 30s
+      timeout: 60m
+      hard_timeout: 90m
+      ai_stall_timeout: 30m
+      on_timeout: restart
+      on_error: restart
+      max_idle_iterations: 5
+      schedule: "RRULE:FREQ=DAILY;BYHOUR=9;BYMINUTE=0"
+```
+
+If the file omits a field, `up` does not change the live value. The table
+gives the rules of each field and the daemon call that converges it on an
+existing agent. A new agent gets the field in the create request
+(`POST /api/agents`) or in an action right after the create.
+
+| Field | Rules | Call on an existing agent |
+| --- | --- | --- |
+| `image` | Required. A bare name means `NAME:latest`. | `POST /api/agents/{name}/image`, pending until the next iteration |
+| `group` | Must be in `groups`. | `POST /api/groups/{group}/assign`, groups phase |
+| `harness.type` | `claude`, `codex`, `opencode` or `cursor`. | `POST /api/agents/{name}/harness`, then a restart |
+| `harness.model`, `harness.effort` | An empty value keeps the live value. Compose cannot clear them, because the daemon reads an empty value as a read. | `POST /api/agents/{name}/model`, `.../effort` |
+| `harness.interactive` | Default `false`. Set only when the file has a `harness` block. | `POST /api/agents/{name}/interactive` |
+| `plugins` | The exact list of the agent. `[]` sets an empty list. Compared as a set. A new agent on a schema-v2 image starts with the plugins of the image, so `up` sets the list in an action after the create. | `POST /api/agents/{name}/plugins`; see [Plugins and a new image](#plugins-and-a-new-image) |
+| `env` | Keys and values. | `POST /api/agents/{name}/env` |
+| `env_mode` | `merge` (default) or `replace`. | Changes what `env` sends |
+| `secrets` | `KEY: {from_env: VAR}`. The key rules of queue secrets apply. A key cannot be in `env` too. | `POST /api/agents/{name}/secrets`; see [Agent secrets](#agent-secrets) |
+| `cwd` | Default: the directory of the compose file. `$CWD` and `$HOME` expand. | `POST /api/agents/{name}/cwd` |
+| `create_cwd` | `true` lets the daemon create `cwd`. The daemon does not store it, so it shows no drift. | Adds `create: true` to the `cwd` call |
+| `user_prompt` | The standing user prompt. Compared exactly. | `POST /api/agents/{name}/user-prompt` |
+| `alias`, `notes` | An empty string clears the value. | `POST /api/agents/{name}/alias`, `.../notes` |
+| `color` | `#rrggbb`. Compared without case. An empty string clears it. | `POST /api/agents/{name}/color` |
+| `messages_batch`, `messages_max_queue` | Whole numbers, at least 1. | `POST /api/agents/{name}/messages/batch`, `.../max-queue` |
+| `mail_instant_senders` | Agent names. `[]` refuses every agent. A sender can be outside the file. | `POST /api/agents/{name}/messages/instant-senders`, groups phase |
+| `retention` | `keep_iterations`, `keep_days`, `max_bytes`, each at least 0. 0 means the daemon default. | `POST /api/agents/{name}/retention` with the fields of the file |
+| `budget` | `limit_usd`, `period`, `mode`. | `POST /api/budgets` |
+| `goal` | `enabled`, `wait_customer_timeout`, `delivery_cooldown`. | `POST /api/agents/{name}/goal-*` |
+| `loop.enabled` | Default `true`. `false` stops the agent. | `POST /api/agents/{name}/start` or `.../stop` |
+| `loop.interval`, `loop.timeout` | Durations such as `30s` or `60m`. | `POST /api/agents/{name}/loop/interval`, `.../timeout` |
+| `timeout` | The older form of `loop.timeout`. If both are set, `loop.timeout` is used. | As `loop.timeout` |
+| `loop.hard_timeout` | A duration of at least `0s`. | `POST /api/agents/{name}/loop/hard-timeout` |
+| `loop.ai_stall_timeout` | A whole number of seconds, at least `1s`, written as a duration. | `POST /api/agents/{name}/loop/ai-stall-timeout` |
+| `loop.on_timeout`, `loop.on_error` | `restart` or `stop`. | `POST /api/agents/{name}/loop/on-timeout`, `.../on-error` |
+| `loop.max_idle_iterations` | At least 0. 0 turns the idle stop off. | `POST /api/agents/{name}/loop/max-idle` |
+| `loop.schedule` | An RFC 5545 `RRULE`, with an optional `DTSTART` before it. An empty string clears the schedule. | `POST /api/agents/{name}/loop/schedule` |
+
+`compose validate` checks these rules. It does not check that a `from_env`
+variable is set or that a sender of `mail_instant_senders` exists.
+
+The daemon accepts a sender of `mail_instant_senders` only when that agent
+exists. For this reason, `up` sets the senders in the groups phase, after the
+create of each sender that the file declares. A failed create of a sender
+skips the action. Compose cannot return the list to "not set", where the lead
+of the agent's group can send instant letters. For that, run
+`tariboy agent messages instant-senders NAME --reset`.
+
+The daemon stores a schedule as a `DTSTART` line and an `RRULE` line. If the
+file has no `DTSTART`, the daemon uses the time of the write, and compose
+compares the `RRULE` only. If the file has a `DTSTART`, compose compares both
+lines.
+
+### When the settings apply
+
+`up` does not wait for an iteration to end. Every setting in the table applies
+from the next iteration of the agent, without a restart. The current iteration
+keeps the old values. These are the exceptions:
+
+- A change of `harness.type` restarts the agent in the start phase and ends
+  its current iteration.
+- A new `image` is pending until the next iteration, and the plugins of the
+  file follow one `up` later. See [Plugins and a new image](#plugins-and-a-new-image).
+- The daemon calculates `loop.schedule` again at once. The time of the next
+  scheduled start changes.
+- `loop.enabled: false` stops the agent at once.
+
+### Plugins and a new image
+
+The daemon checks a plugin list against the active image of the agent. When
+the agent adopts a new image, the daemon replaces the list with the plugins
+of that image. Thus `up` cannot set the plugins in the same run that sets a new
+image:
+
+1. The first `up` sets the pending image and does not set the plugins.
+   `compose status` reports `plugins pending: applied after the agent adopts
+   image NAME:TAG; run up again`, and counts it as drift.
+2. The agent adopts the image at the start of its next iteration. Until the
+   next `up`, the agent runs with the plugins of the image.
+3. The next `up` sets the plugins of the file. Then `status` reports no drift.
+
+After a re-provision of a stopped agent, `up` always sets the plugins of the
+file, because compose cannot predict the list after it. A rebuild of the image
+in `up` with a new digest also replaces the list when the agent adopts the
+image. `status` then reports plugin drift, and the next `up` sets the list
+again.
+
+For a schema-v1 image, the daemon adds the core plugins to the list. To make
+`up` idempotent (a second run changes nothing), list the complete result,
+core plugins included. Otherwise every `up` writes the list again.
+
+### Agent secrets
+
+Agent secrets follow the rules of [queue secrets](#secrets). The file holds
+only the name of the variable. `compose` reads the value from its own
+environment when it writes the secret, and an empty variable counts as not
+set. The value never appears in the output of `up`, `up --dry-run` or
+`status`, in an error, or in the archive of `compose pack`.
+
+| Variable | Secret on the agent | `status` | `up` |
+| --- | --- | --- | --- |
+| Set | Yes | `secret GH_TOKEN ok (value not compared)` | Writes the value again and reports `ok`. |
+| Set | No | `secret GH_TOKEN MISSING` | Writes the value and reports `changed`. |
+| Not set | Yes | `secret GH_TOKEN ok (DEV_GH_TOKEN not set, kept)` | Keeps the secret. |
+| Not set | No | `secret GH_TOKEN MISSING (DEV_GH_TOKEN not set)` | Fails the agent. The error names the variable and the `tariboy secret set` command. |
+
+`up --dry-run` prints `secret GH_TOKEN=from DEV_GH_TOKEN` for a write and does
+not list a rewrite. `up` never removes a secret. `status` and `up --dry-run`
+list a secret of the agent that the file does not declare as
+`agent dev secret OLD not declared`.
+
+### Group settings
+
+A group has two fields. The groups phase applies them:
+
+| Field | Rules | Call |
+| --- | --- | --- |
+| `lead` | Must be a member of the group in the file. A group without `lead` keeps its lead. | `PATCH /api/groups/{name}/lead`, after the members are assigned |
+| `budget` | `limit_usd`, `period`, `mode`. | `POST /api/budgets` |
+
+The members of a group are the agents whose `group` names it.
+
+### Agent settings outside compose
+
+These agent commands have no compose field:
+
+| Command | Reason |
+| --- | --- |
+| `context set`, `script` and its schedules, the iterations, `agent mail clear`, `agent file` | They hold the working state of the agent, not its configuration. |
+| `agent start`, `stop`, `restart`, `kill`, `rm`, `reprovision`, `exec`, `send-keys`, `iteration extend-timeout`, `agent image cancel`, `group rename`, `group member rm` | They are actions, not settings. Compose verbs cover the lifecycle actions. |
+| `retention set default`, `daemon agent-shell-script set` | They are daemon settings, not agent settings. |
+| `agent budget set` (the calendar budget with hour, day, week and month limits) | `budget` already limits the spend of the agent. A second budget mechanism in the file would give two sources for one purpose. |
+| `agent shell-script set` | The shell script is a Bash file in the directory of the agent, which is code, not a parameter. |
+| `secret rm`, `env` keys that the file omits with `env_mode: merge` | `up` never removes them. Use `env_mode: replace` for env. |
+| `agent messages instant-senders --reset` | The file cannot express "not set". Run the command. |
 
 ## Task queues and pools
 
-Compose can declare task queues and the explicit agent pools of each queue.
+Compose can declare task queues with every setting of a queue:
 
 ```yaml
 version: 1
@@ -138,10 +917,108 @@ version: 1
 task_queues:
   DEV:
     name: Development
+    description: Product development
+    owners: [dev-lead]
+    responsible_agent: dev-lead
     pools:
-      developers: [dev-ng-developer]
-      reviewers: [dev-ng-reviewer]
+      developers: [dev-developer]
+      customers: [dev-lead]
+    workflow: development:0.1.0
+    triggers:
+      - pattern: plugin:telegram
+        correlation_key: chat_id
+        action: create_task
+    env:
+      CUSTOMER_AGENT_POOL: customers
+      AUTO_MERGE: "false"
+    secrets:
+      GH_TOKEN: {from_env: DEV_GH_TOKEN}
 ```
+
+| Field | Meaning |
+| --- | --- |
+| `name` | The queue name. Required. |
+| `description` | The queue description. |
+| `owners` | The agents that own the queue. The daemon does not check that they exist, so an owner can be outside the file. |
+| `responsible_agent` | The agent responsible for the queue. It must be declared in `agents`. |
+| `pools` | The agent pools of the queue. Each agent must be declared in `agents`. |
+| `workflow` | The workflow image the queue follows. See [Queue workflows](#queue-workflows). |
+| `triggers` | Letters that create tasks: `pattern` is a sender such as `plugin:telegram` or `plugin:*`, `correlation_key` is optional, and `action` is `create_task`, the default. |
+| `env` | Plain variables for workflow scripts, for example `CUSTOMER_AGENT_POOL` and `AUTO_MERGE`. |
+| `secrets` | Secrets for workflow scripts. `from_env` names the variable of the `compose` process that holds the value. |
+
+An env or secret key holds letters, digits and underscores, does not start
+with a digit, and does not start with `TARIBOY_`. A key is either env or a
+secret, not both. `CUSTOMER_AGENT_POOL` is always env. `compose validate`
+checks these key rules, that each secret has a valid `from_env`, and that each
+trigger has a valid pattern and action and is declared once. It does not check
+that the `from_env` variable is set, because a file is checked without its
+secrets.
+
+`compose up` applies a queue in two phases:
+
+1. The `queues` phase runs before the agents. It creates the queue with its
+   name, description and owners, or changes the fields that differ in one
+   update. Then it sets the env keys, except `CUSTOMER_AGENT_POOL`, and the
+   secrets.
+2. The `queue bindings` phase runs after the agents and groups. It binds the
+   pools. Then it sets `CUSTOMER_AGENT_POOL`, because the daemon accepts it on
+   a bound queue only when the pool exists. Then it sets the responsible
+   agent, binds the workflow and creates the triggers.
+
+The workflow binding comes after the env and the secrets, so a secret that the
+workflow requires (`requires_secrets`) exists before the bind. The triggers
+come after the binding, so a task from a new letter follows the workflow.
+
+### Secrets
+
+The file never holds a secret value. `compose` reads the value of
+`secrets.KEY.from_env` from its own environment when it applies the secret,
+and an empty variable counts as not set. The value never appears in the output
+of `up`, `up --dry-run` or `status`, or in an error. The daemon never returns
+a secret value, so `compose` cannot compare it:
+
+| Variable | Secret on the queue | `status` | `up` |
+| --- | --- | --- | --- |
+| Set | Yes | `secret GH_TOKEN ok (value not compared)` | Writes the value again and reports `ok`. |
+| Set | No | `secret GH_TOKEN MISSING` | Writes the value and reports `changed`. |
+| Not set | Yes | `secret GH_TOKEN ok (DEV_GH_TOKEN not set, kept)` | Keeps the secret. |
+| Not set | No, but the daemon environment holds the key | `secret GH_TOKEN ok (daemon environment)` | Does nothing. |
+| Not set | No | `secret GH_TOKEN MISSING (DEV_GH_TOKEN not set)` | Fails the queue. The error names the variable and the `ttasks queue secret set` command. |
+
+Because `up` writes each set secret again, a second `up` reports `ok` and a
+new value of the variable reaches the daemon on the next `up`. Each write adds
+a `secret set` event to the queue history. `up --dry-run` does not list such a
+rewrite. When a secret fails, `up` skips the workflow binding and the triggers
+of that queue. The other queues and the agents still apply.
+
+### What `up` does not change
+
+`up` never removes a pool, an env key, a secret or a trigger that the file
+does not declare. `compose status` and `up --dry-run` list them as
+`not declared` (see [Removing an entity from the file](#removing-an-entity-from-the-file)).
+An empty `description`, `owners` or `responsible_agent` in the file keeps the
+value of the daemon. To clear one, use `ttasks queue update`.
+
+The API cannot change a trigger. If you change a trigger in the file, `up`
+creates a new trigger, and the old trigger stays and shows as `not declared`.
+To remove it, use `ttasks queue trigger delete`.
+
+If a key is in `env` in the file but is a secret on the queue, `up` makes it
+env, as the daemon does for `ttasks queue env set`.
+
+### Queue settings outside compose
+
+These queue operations of `ttasks queue` have no compose field:
+
+| Operation | Reason |
+| --- | --- |
+| `pool delete`, `env rm`, `secret rm`, `trigger delete`, `workflow clear` | `up` never removes anything. Use `ttasks queue` to remove. |
+| Turn a trigger on or off (`enabled`) | The API cannot change this flag. A trigger is always on. |
+| `source ls`, `source log` | These read state and set nothing. The workflow image declares its sources. |
+| `revision` | The daemon uses it to refuse concurrent writes. `compose` reads the current revision itself. |
+
+### Pools and parsing
 
 The file is parsed strictly: a misspelled or unknown field fails instead of
 being ignored. Queue prefixes and pool names use URL-safe ASCII identifiers
@@ -154,16 +1031,17 @@ An agent no longer takes a `subscribe:` key: the mailbox replaced channel
 subscriptions, so the key fails as an unknown field. Remove it from older
 files; group mail and task notifications need no declaration.
 
-The top-level `workflows:` map belonged to the removed task workflow engine. A
-non-empty value is rejected with an error that names the key. An empty
-`workflows: {}`, as written by older team exports, is accepted and ignored.
+In version 1, the top-level `workflows:` map belonged to the removed task
+workflow engine. A non-empty value is rejected with an error that names the key
+and tells you to declare `version: 2`. In version 2, `workflows` declares
+workflow sources; see [The compose file](#the-compose-file).
 
-`compose up` first converges images, agents, and groups. It then reconciles the
-queue and its pools through the daemon's Native Tasks API, and last binds queue
-workflows. Repeating `compose up` is idempotent; it also restores changed queue
-names and pool membership. `compose status` remains read-only and reports queue,
-pool membership, and workflow drift alongside agent, group, and budget drift.
-Existing compose files without `task_queues` keep their previous behavior.
+`compose up` uses the Native Tasks API of the daemon. A second `compose up`
+on a converged file changes nothing. `compose status` changes nothing and
+reports drift of each queue field, pool, env key, secret, trigger and
+workflow, next to agent, group and budget drift. It prints env keys, never
+env values. Existing compose files without `task_queues` keep their previous
+behavior.
 
 ## Queue workflows
 
@@ -189,8 +1067,21 @@ task_queues:
 
 A tag of `.` or `..` is a validation error.
 
-Each Store workflow is built once per run, before any queue is bound, and a
-bind runs after the queue's pools exist, since a bind needs the pools the
+In version 2, `NAME` is the key of a `workflows` entry. `up` builds the entry
+in the workflows phase and binds the queue after that build. A failed build or
+a version conflict skips the binding, and the queue keeps its workflow:
+
+| Value | `compose up` in version 2 |
+| --- | --- |
+| `NAME` | Binds the entry's `tag` (`latest` by default). The queue follows the tag. |
+| `NAME:TAG` | Binds `NAME:TAG`. The queue follows the tag. |
+| `STORE/NAME` | Binds the digest of the entry's build. The binding is pinned. `STORE` must be the `store` of the entry. |
+| `STORE/NAME:TAG` | Binds `NAME:TAG`. The queue follows the tag. |
+
+The paragraphs below describe the version 1 forms.
+
+Each Store workflow is built once per run in the workflows phase, before any
+queue is bound, and a bind runs after the queue's pools exist, since a bind needs the pools the
 workflow names. A queue already bound to the resolved digest and tag is left
 alone. A queue that follows a tag moves to each new build of that tag; see
 [Binding a queue](/docs/task-workflows#binding-a-queue). A
@@ -198,10 +1089,11 @@ form without a Store prefix fails when the image is not built. Rebinding a
 queue to a newer version leaves its existing tasks on the version they pinned.
 
 Compose never clears a binding: removing `workflow` from the file leaves the
-queue bound; unbind with `ttasks queue workflow clear`. Compose never handles a
-secret value. When the workflow lists `requires_secrets` that the queue does
-not have, the bind fails with `workflow_secret_missing`, and the error names the
-secrets and the command to set one:
+queue bound; unbind with `ttasks queue workflow clear`. Declare the secrets
+that the workflow requires in `secrets` with `from_env` (see
+[Secrets](#secrets)). When the workflow lists `requires_secrets` that the queue
+does not have, the bind fails with `workflow_secret_missing`, and the error
+names the secrets and the command to set one:
 
 ```bash
 printf '%s' "$GH_TOKEN" | ttasks queue secret set DEV GH_TOKEN

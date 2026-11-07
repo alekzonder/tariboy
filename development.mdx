@@ -192,7 +192,7 @@ and complete diagnostics, and every run ends with a compact summary.
 
 `make full-check` is the full set of checks that run unattended on a developer
 machine, not every check in the repository. It runs `check`, then `build`, the
-four core E2E scripts, `full-smoke`, the two Playwright browser suites, and one
+five core E2E scripts, `full-smoke`, the two Playwright browser suites, and one
 desktop step for the host: `desktop-e2e` on Linux x86_64, `desktop` plus
 `desktop-smoke` on macOS arm64, and the version and lock gates alone elsewhere.
 
@@ -431,6 +431,19 @@ command contracts in the separate `tariboy-store` repository's `make check`.
 Changes to queue-trigger delivery also exercise mail ingress and daemon recovery; Compose
 changes exercise `internal/compose`. The isolated Tasks mode path is
 `scripts/tariboy-tasks-e2e.sh`, which runs inside `backend-check`.
+
+The isolated Compose path is `scripts/compose-e2e.sh` with its fixture under
+`scripts/testdata/compose-e2e/`. It is included by `make full-check` and runs
+alone with `make compose-e2e`. It applies a version 2 file with every section
+to a daemon of its own: `validate`, `up --dry-run`, `up`, a second `up`, an
+update, a Store that is not available, a `tariboy` range that the daemon does
+not satisfy, and `pack` with `unpack` on a second daemon. At the end, it
+searches every CLI output and the archive for the test secret values. The two
+git Stores are local bare repositories. The script maps their `https` URLs to
+the repositories with `url.insteadOf` in its own `GIT_CONFIG_GLOBAL`, so the
+script needs no network. The agents of the file keep `loop.enabled: false`,
+so the script needs no harness. Keep the current behavior documented in
+[Compose](/docs/binaries/compose).
 
 The HTTP API contract is checked inside `backend-check`; see
 [Command registry](/docs/architecture#command-registry) for the rules. The
@@ -1350,7 +1363,7 @@ already-published release remains intact.
 
 ### End-to-end suites
 
-`make full-check` runs all four core E2E scripts and `full-smoke`. The individual
+`make full-check` runs all five core E2E scripts and `full-smoke`. The individual
 targets remain available for iterating on one suite:
 
 ```bash
@@ -1358,6 +1371,7 @@ make e2e
 make workflow-e2e
 make iteration-timeout-e2e
 make group-request-deadline-e2e
+make compose-e2e
 make smoke
 make full-smoke
 ```

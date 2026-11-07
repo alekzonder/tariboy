@@ -621,7 +621,10 @@ build policy (`auto_interval_minutes`, `auto_images`, `auto_last_run_at`) and,
 since migration `0078`, `auto_results`: a JSON array with the last automatic
 build attempt of each selected image (`image`, `selector`, `at`,
 `image_version`, `error`). A cycle replaces the entry of the image it built,
-and `store auto` drops the entries of deselected images. Git clones live under
+and `store auto` drops the entries of deselected images. Since migration
+`0080`, the row also holds `ref`: the branch, tag or commit of a Git Store
+(`''` is the default branch of the remote). The checked-out commit is read
+from the clone, not stored. Git clones live under
 `<base-dir>/stores/<name>/`; local absolute sources stay in place. Image names,
 versions, and diagnostics are read from `images/` on disk for every view, never
 stored as a second inventory. Store refresh and build preparation are
