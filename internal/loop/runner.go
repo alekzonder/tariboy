@@ -437,6 +437,12 @@ type RunnerConfig struct {
 	Mail         *mail.Mail
 	Proxy        ProxyBinder
 	CurrentGoal  func(string, time.Time) (tasks.Task, bool, error)
+	// GoalCandidate reads a task the agent's letters are about and reports
+	// whether the agent may work it as a Goal now; nil treats none as one.
+	GoalCandidate func(agent, key string, now time.Time) (tasks.Task, bool, error)
+	// WakeMessages, if set, asks for another message iteration of agent: a
+	// done iteration left letters of other tasks for the next one.
+	WakeMessages func(agent string)
 	// WorkflowGoals supplies the workflow data for the Goal block of a workflow
 	// task; nil renders the flexible text with a notice.
 	WorkflowGoals WorkflowGoalSource
@@ -645,6 +651,9 @@ func (r *ShimRunner) Run(ctx context.Context, ag agent.Agent, trigger, iteration
 	// design §1). Requests close only by a reply.
 	if err == nil && outcome.Status == agent.IterationDone {
 		r.closeReadNotices(ag.Name, iterationID, prep.letterIDs)
+		if prep.lettersByTask {
+			r.wakeForOtherTasks(ag.Name, prep.taskKey)
+		}
 	}
 	return outcome, err
 }
@@ -842,6 +851,10 @@ type preparedRun struct {
 	// letterIDs are the letters rendered into the prompt; the notices among
 	// them close when the iteration finishes successfully.
 	letterIDs []string
+	// taskKey is the iteration task; lettersByTask reports that only its
+	// letters were rendered.
+	taskKey       string
+	lettersByTask bool
 }
 
 type activatedImageContextKey struct{}
@@ -870,10 +883,19 @@ type prepareInputs struct {
 	// bare marks an image that gets an instructions-free session: no assembled
 	// prompt, no message drain, no bin shims on PATH (spec
 	// 2026-07-22-terminals-simple-ui §1.3).
-	bare           bool
-	schemaVersion  int
+	bare          bool
+	schemaVersion int
+	// currentGoal is the Goal block of the iteration: the agent's Goal, or the
+	// task of its letters when the agent may work that task as a Goal.
 	currentGoal    tasks.Task
 	hasCurrentGoal bool
+	// taskKey is the one task the iteration works ("" for none); its letters
+	// are the only ones rendered when lettersByTask is set.
+	taskKey       string
+	lettersByTask bool
+	// letterTaskOnly marks a taskKey from the letters that is no Goal of the
+	// agent: a request iteration about that task.
+	letterTaskOnly bool
 	activated      activatedImage
 }
 
@@ -914,6 +936,7 @@ func (r *ShimRunner) prepareSteps(ctx context.Context, ag agent.Agent, l agentdi
 	// for the rest of the iteration instead.
 	revoke = false
 	prep.letterIDs = letterIDs
+	prep.taskKey, prep.lettersByTask = in.taskKey, in.lettersByTask
 	return prep, nil
 }
 
@@ -935,19 +958,22 @@ func (r *ShimRunner) readPrepareInputs(ag agent.Agent, iterationID string) (prep
 	if iteration.PromptTemplateSHA256 != "" {
 		in.schemaVersion = 2
 	}
-	if r.cfg.CurrentGoal != nil && !in.bare {
-		goalAt := r.cfg.Clock().UTC()
+	if in.bare {
+		return in, nil
+	}
+	var goalAt time.Time
+	if r.cfg.CurrentGoal != nil || r.cfg.GoalCandidate != nil {
+		goalAt = r.cfg.Clock().UTC()
+	}
+	if r.cfg.CurrentGoal != nil {
 		in.currentGoal, in.hasCurrentGoal, err = r.cfg.CurrentGoal(ag.Name, goalAt)
 		if err != nil {
 			return in, fmt.Errorf("read current agent goal: %w", err)
 		}
-		if r.cfg.GoalRead != nil {
-			key := ""
-			if in.hasCurrentGoal {
-				key = in.currentGoal.Key
-			}
-			r.cfg.GoalRead(ag.Name, iterationID, key, goalAt)
-		}
+	}
+	r.chooseTask(ag, &in, goalAt)
+	if r.cfg.CurrentGoal != nil && r.cfg.GoalRead != nil {
+		r.cfg.GoalRead(ag.Name, iterationID, in.taskKey, goalAt)
 	}
 	return in, nil
 }
@@ -996,22 +1022,24 @@ func (r *ShimRunner) writePrompt(ctx context.Context, ag agent.Agent, l agentdir
 	return letterIDs, nil
 }
 
-// pendingMessages renders the agent's open letters (mailbox design §3), which
-// counts one attempt on each, and reads its requests awaiting a reply.
-func (r *ShimRunner) pendingMessages(ag agent.Agent, iterationID string) (batch, awaiting []mail.Letter) {
+// pendingMessages renders the agent's open letters about the iteration task
+// (mailbox design §3), which counts one attempt on each, and reads its
+// requests awaiting a reply.
+func (r *ShimRunner) pendingMessages(ag agent.Agent, iterationID string, in prepareInputs) (batch, awaiting []mail.Letter) {
 	if r.cfg.Mail == nil {
 		return nil, nil
-	}
-	if r.cfg.CloseStaleTaskLetters != nil {
-		if _, err := r.cfg.CloseStaleTaskLetters(context.Background(), ag.Name); err != nil {
-			r.cfg.Logger.Warn("close stale task letters", "agent", ag.Name, "err", err)
-		}
 	}
 	n := ag.MessagesBatch
 	if n <= 0 {
 		n = 10
 	}
-	if letters, err := r.cfg.Mail.RenderIteration(ag.Name, iterationID, n); err != nil {
+	render := func() ([]mail.Letter, error) { return r.cfg.Mail.RenderIteration(ag.Name, iterationID, n) }
+	if in.lettersByTask {
+		render = func() ([]mail.Letter, error) {
+			return r.cfg.Mail.RenderIterationTask(ag.Name, iterationID, in.taskKey, n)
+		}
+	}
+	if letters, err := render(); err != nil {
 		r.cfg.Logger.Warn("render mail batch", "agent", ag.Name, "err", err)
 	} else {
 		batch = letters
@@ -1031,11 +1059,14 @@ func (r *ShimRunner) assemblePrompt(ctx context.Context, ag agent.Agent, l agent
 	if data, err := os.ReadFile(l.ContextPath()); err == nil {
 		contextText = string(data)
 	}
-	batch, awaiting := r.pendingMessages(ag, iterationID)
+	batch, awaiting := r.pendingMessages(ag, iterationID, in)
 
 	goal := ""
-	if in.hasCurrentGoal {
+	switch {
+	case in.hasCurrentGoal:
 		goal = RuntimeGoal(ctx, r.cfg.WorkflowGoals, in.currentGoal, ag.Name, r.cfg.Logger)
+	case in.letterTaskOnly:
+		goal = letterTaskGoal(in.taskKey)
 	}
 	mode := IterationModeFor(in.currentGoal, in.hasCurrentGoal)
 	if in.schemaVersion == 2 {
@@ -1132,6 +1163,20 @@ func (r *ShimRunner) mintProxyToken(ctx context.Context, ag agent.Agent, iterati
 			if aErr != nil {
 				return "", "", fmt.Errorf("resolve current agent goal attribution: %w", aErr)
 			}
+			attribution.warnPartial(r.cfg.Logger, ag.Name)
+			taskID, epicID = attribution.TaskID, attribution.EpicID
+		}
+	} else if in.letterTaskOnly {
+		// The agent knows the key from its letter; the root key is shown to it
+		// only by the usual EpicVisible rule, never here.
+		attribution, aErr := resolveLetterTaskAttribution(ctx, r.cfg.Tasks, ag.Name, in.taskKey)
+		switch {
+		case errors.Is(aErr, errLetterTaskUnreadable):
+			r.cfg.Logger.Warn("letter task attribution unavailable, iteration runs unattributed",
+				"agent", ag.Name, "task", in.taskKey, "err", aErr)
+		case aErr != nil:
+			return "", "", fmt.Errorf("resolve letter task attribution: %w", aErr)
+		default:
 			attribution.warnPartial(r.cfg.Logger, ag.Name)
 			taskID, epicID = attribution.TaskID, attribution.EpicID
 		}

@@ -137,12 +137,18 @@ Send ─▶ one row per recipient (one transaction)
 The loop starts a message-triggered iteration only for a started agent whose
 open inbox count is above zero; a positive `interval_s` is not needed. A
 stopped agent keeps its letters open until it is started. At prepare time the
-runner reads the oldest open letters, requests first and notices after them,
-up to `messages_batch` (default 10), and renders them into the `## Messages`
+runner selects the iteration task, the one task that the iteration works (see
+[The iteration task](/docs/architecture/iteration-loop#the-iteration-task)).
+The task of a letter is the `task_key` value in its `data`. The runner reads
+the oldest open letters about the iteration task, requests first and notices
+after them, up to `messages_batch` (default 10), and renders them into the `## Messages`
 section of the prompt with the standing instruction that names
 `tmail reply`. Requests the agent sent with a deadline and no answer are listed
 under `### Awaiting replies`. See the [mail reference](/docs/reference/mail#the-prompt-block)
-for the exact text.
+for the exact text. Letters about other tasks stay open and keep their
+attempts. When a done iteration leaves open letters only about other tasks,
+the loop starts the next message iteration for them. An instant letter about
+another task than the iteration task waits for an iteration of its task.
 
 ## Instant delivery
 
@@ -264,7 +270,7 @@ as Markdown. A `task.question` from a workflow customer status carries the
 workflow's comment. The `task.assigned` and `task.triage` bodies are one line
 with the key and the title.
 
-Stale task notices never wake an agent. When an iteration that ran with Goal
+Stale task notices never wake an agent. When an iteration with the iteration
 task `T` ends, the tasks service closes the agent's open `task.goal`,
 `task.assigned` and `task.answered` letters about `T` created up to the end of
 the iteration, with `close_note = iteration-end:<iteration>`, and marks such

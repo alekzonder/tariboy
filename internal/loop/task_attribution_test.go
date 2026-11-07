@@ -312,7 +312,8 @@ func (*facadeGoalProxy) RevokeIteration(string)                         {}
 
 type noGoalRecorder struct{}
 
-func (noGoalRecorder) noteSelectedGoal(string, string, string) {}
+func (noGoalRecorder) noteSelectedGoal(string, string, string)     {}
+func (noGoalRecorder) iterationTask(string, string) (string, bool) { return "", false }
 
 // partialTaskControl satisfies registry.TaskControl for the facade; only
 // GetTask and CustomerLogin are used by goal set.

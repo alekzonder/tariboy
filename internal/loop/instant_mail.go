@@ -59,7 +59,16 @@ func (f toolsFacade) takeInstant() (mail.MailInstantResult, error) {
 	if err := os.Remove(flag); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return empty, err
 	}
-	letters, err := f.cfg.Mail.TakeInstant(f.agent, iteration)
+	take := f.cfg.Mail.TakeInstant
+	if f.goals != nil {
+		if key, ok := f.goals.iterationTask(f.agent, iteration); ok {
+			// A letter about another task waits for an iteration of its own.
+			take = func(agent, iteration string) ([]mail.Letter, error) {
+				return f.cfg.Mail.TakeInstantForTask(agent, iteration, key)
+			}
+		}
+	}
+	letters, err := take(f.agent, iteration)
 	if err != nil {
 		_ = writeInstantFlag(flag)
 		return empty, err
