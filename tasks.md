@@ -427,10 +427,19 @@ exists, the sheet says `You cannot open {KEY}. It is hidden from you or no
 longer exists.` A task sheet opened from an agent, usage, or a letter moves
 the same way.
 
-A collapsed Details section holds the author, customer, queue, group, blocked
-state, parent, flexible status, priority, assignee, pull request URL, block
-reason, and dependencies. The parent is a button that opens it, or text when
-the reader cannot see the parent. History is collapsed by default. The flexible status
+The header of the sheet stays in view while the sheet scrolls. Under the title
+it has a **Details** block. Closed, the block is one row of chips: the flexible
+status, the priority, the assignee, the budget with what is spent, the pull
+request as a link, and the update time. Change a chip in place, then **Save
+task**. The chevron at the left opens the block: it adds the author, customer,
+queue, group, blocked state, parent, the pull request URL and block reason
+fields, and the dependencies. The Desktop remembers whether the block is open
+for every task, not for one. The parent is a button that opens it, or text when
+the reader cannot see the parent.
+
+The description reads as formatted text. **Edit description** opens the
+editor, and **Cancel editing** returns to the saved text. A task with no
+description opens in the editor. History is collapsed by default. The flexible status
 `wait_customer` reads Waiting for you. The flexible assignee list contains
 Unassigned, me, and each agent. You cannot type a principal. In the comment
 form, Ask an agent mentions an agent, and Reply Ok to the question posts `Ok`.

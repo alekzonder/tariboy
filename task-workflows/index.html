@@ -2980,13 +2980,21 @@ initial status has one button per outcome of that status, from
 first. An outcome named <code>start</code> reads <strong>Start</strong>. See
 <a href="/tariboy/docs/tasks#the-agents-work-tab">The agent’s Work tab</a>.</p>
 <h3 id="the-workflow-panel"><a class="blume-heading-anchor" href="#the-workflow-panel">The workflow panel</a></h3>
-<p>The lower Workflow disclosure holds the status graph, artifact editing and
-history, runs, logs, visits, and operator actions. The compact panel above it
-owns the current decision and pause controls. The workflow assigns pool
+<p>The header of the task sheet stays in view while the sheet scrolls and holds
+the <strong>Workflow</strong> block under the Details block. Open, the Workflow block shows
+the status graph, the workflow version with the status, its owner and holder,
+and the operator actions. The chevron at its left closes it to one row: the
+current status with its number among the steps (<code>review 3/5</code>) and whose turn
+it is (<code>your decision</code>, <code>paused</code>, <code>check rejected</code>, or the holder that works).
+The Desktop remembers whether the block is open for every task, not for one.
+The current decision and the pause controls follow the block and show whether
+it is open or not. The body of the sheet starts with the problem and the
+artifacts with their editing and history. The runs, logs, and visits are in a
+collapsed <strong>Workflow log</strong> near the bottom. The workflow assigns pool
 work, so Save never changes the assignee. In an open, unpaused pool status the
-<strong>Assignee</strong> field is a list of the members of that status’s pool: choosing one
+<strong>Assignee</strong> chip is a list of the members of that status’s pool: choosing one
 runs <code>workflow reassign</code> at once (see <a href="#changing-the-holder">Changing the holder</a>),
-and a refusal shows its message under the field. In any other status the
+and a refusal shows its message beside the chip. In any other status the
 assignee is read-only text. The sheet has no
 <strong>Move to another server…</strong>, because the daemon refuses to export a workflow
 task. Its actions menu offers <strong>Move to queue…</strong> instead (see

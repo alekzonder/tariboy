@@ -1995,13 +1995,21 @@ first. An outcome named `start` reads **Start**. See
 
 ### The workflow panel
 
-The lower Workflow disclosure holds the status graph, artifact editing and
-history, runs, logs, visits, and operator actions. The compact panel above it
-owns the current decision and pause controls. The workflow assigns pool
+The header of the task sheet stays in view while the sheet scrolls and holds
+the **Workflow** block under the Details block. Open, the Workflow block shows
+the status graph, the workflow version with the status, its owner and holder,
+and the operator actions. The chevron at its left closes it to one row: the
+current status with its number among the steps (`review 3/5`) and whose turn
+it is (`your decision`, `paused`, `check rejected`, or the holder that works).
+The Desktop remembers whether the block is open for every task, not for one.
+The current decision and the pause controls follow the block and show whether
+it is open or not. The body of the sheet starts with the problem and the
+artifacts with their editing and history. The runs, logs, and visits are in a
+collapsed **Workflow log** near the bottom. The workflow assigns pool
 work, so Save never changes the assignee. In an open, unpaused pool status the
-**Assignee** field is a list of the members of that status's pool: choosing one
+**Assignee** chip is a list of the members of that status's pool: choosing one
 runs `workflow reassign` at once (see [Changing the holder](#changing-the-holder)),
-and a refusal shows its message under the field. In any other status the
+and a refusal shows its message beside the chip. In any other status the
 assignee is read-only text. The sheet has no
 **Move to another server…**, because the daemon refuses to export a workflow
 task. Its actions menu offers **Move to queue…** instead (see

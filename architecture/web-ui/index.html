@@ -814,7 +814,7 @@ period shows <code>No completed tasks of this agent in this period.</code> For T
 and Week, it also shows <strong>Show month</strong>. An invalid custom range sends no
 request, because the period bar of the tab already shows the error.</p>
 <h3 id="task-metrics"><a class="blume-heading-anchor" href="#task-metrics">Task metrics</a></h3>
-<p><code>TaskDetailBody</code> has a <strong>Metrics</strong> section before <strong>Details</strong>, in Tasks, in
+<p><code>TaskDetailBody</code> has a <strong>Metrics</strong> section after the comments, in Tasks, in
 the Work tab of an agent, and in a task that opens from a letter. The section
 is closed by default. Its open state is the WebView localStorage record
 <code>tasks:metrics-open:v1</code>. The section sends <code>GET /api/metrics/tasks/{key}</code>
@@ -1933,6 +1933,20 @@ All tasks view).</p>
 <td><code>closed</code></td>
 </tr>
 <tr>
+<td><code>tasks:details-open:v1</code></td>
+<td>local</td>
+<td>Details block of the task header, for every task</td>
+<td><code>open</code> or <code>closed</code></td>
+<td><code>closed</code></td>
+</tr>
+<tr>
+<td><code>tasks:workflow-open:v1</code></td>
+<td>local</td>
+<td>Workflow block of the task header, for every task</td>
+<td><code>open</code> or <code>closed</code></td>
+<td><code>open</code></td>
+</tr>
+<tr>
 <td><code>tariboy_store_token</code></td>
 <td>session</td>
 <td>Store UI</td>
@@ -2023,25 +2037,60 @@ protects unsaved task, comment, and relation drafts with the confirmation
 Task Detail also offers the <code>wait_customer</code> status, labeled “Waiting for you”
 (<code>flexibleStatusLabel</code> gives this label everywhere), and an editable <code>Pull request</code> field. Both use the existing optimistic revision and explicit-host
 request path.
-The sheet is one <code>--card</code> island with its own scroll. One sticky block holds
-the identity header and, for a workflow task, <code>TaskDecisionPanel</code> immediately
-below it. The header shows the key, one title, status, and assignee. The pencil
-edits the title in that same place. Save task appears only while task fields
-are dirty and saves them explicitly. The sticky block has a height limit and
-its own vertical scroll on short screens. It needs no fixed header offset.</p>
-<p><code>TaskDecisionPanel</code> shows the current stage, owner, wait reason, and actual
-outcomes from the shared workflow view. An initial customer status offers its
-start outcome. A completed task offers no transitions, and a flexible task has
-no workflow panel. Outcome message is separate from the existing comment form,
-which still answers questions and posts comments. The panel reuses the existing
-advance, request polling, pause, retry, and confirmation operations.</p>
+The sheet is one <code>--card</code> island with its own scroll. One sticky block
+(<code>TaskDetailSticky</code>) holds what the customer reads and changes most, in this
+order:</p>
+<ol>
+<li>The identity header (<code>TaskDetailHeader</code>): the <code>Subtask of</code> line, the key,
+and one title of at most two lines. The pencil edits the title in that same
+place. Save task appears only while task fields are dirty and saves them
+explicitly.</li>
+<li>The <strong>Details</strong> block. Closed, it is one row of chips (<code>TaskDetailChips</code>):
+the status, the priority, the assignee, the budget with what is spent, the
+saved pull request as a link, and the update time. A chip is a native
+select or an input sized to its value (<code>ChipSelect</code>), so a parameter
+changes in place and joins the draft, as a field does. The status of a
+workflow task is a pill, not a select. Open, the block adds author,
+customer, queue, group, blocked, parent (a button from
+<code>TaskDetailParent.tsx</code> when <code>detail.parent</code> is set), the <code>Pull request</code> and
+<code>Manual block reason</code> fields (<code>TaskDetailProperties</code>), and the
+dependencies. The content stays mounted while the block is closed, so an
+unsaved field is not lost.</li>
+<li>For a workflow task, the <strong>Workflow</strong> block (<code>WorkflowControls</code>). Open, it
+shows the status graph (<code>WorkflowStepper</code>), the workflow version with the
+status, owner and holder, and the labeled operator actions with the form an
+action opens. Closed, it is one row (<code>WorkflowSummary</code>): the current status
+with its number among the steps and whose turn it is; the status opens the
+block.</li>
+<li>For a workflow task, <code>TaskDecisionPanel</code>: the pause with its ways out, or
+the outcomes of a customer status with a message and links to the artifacts
+to read. The first outcome of the manifest is the primary button. The
+section is empty while the task waits for nobody. It shows whether the two
+blocks are open or not.</li>
+</ol>
+<p>The chevron at the left of a block (<code>SectionToggle</code>) opens and closes it. Each
+choice is one for every task, not for one: <code>useStoredOpen</code> keeps it in the
+WebView localStorage records <code>tasks:details-open:v1</code> (closed by default) and
+<code>tasks:workflow-open:v1</code> (open by default). The sticky block has a height
+limit and its own vertical scroll on short screens. It needs no fixed header
+offset.</p>
+<p>An initial customer status offers its start outcome. A completed task offers
+no transitions, and a flexible task has no Workflow block. Outcome message is
+separate from the existing comment form, which still answers questions and
+posts comments. The decision reuses the existing advance, request polling,
+pause, retry, and confirmation operations.</p>
 <p><code>TaskDetailBody</code> renders these parts below the sticky block:</p>
 <ol>
-<li>Decision materials for a workflow task, outside the sticky block. View plan
-and named material links expand, scroll to, and focus the matching artifact.
-Dependencies come from the <code>requires</code> of transitions into and out of the
-current status. Missing values stay visible.</li>
-<li>The description (<code>TaskDetailFields</code>).</li>
+<li>For a workflow task, the workflow problem in full (<code>WorkflowProblem</code>, with
+retry and the run log), then the artifacts (<code>WorkflowArtifacts</code>) with
+editing and history, filtered by the step selected in the Workflow block.
+A View link of the decision scrolls to and focuses the matching artifact,
+and clears the step filter when the filter hides it. Missing values stay
+visible.</li>
+<li>The description (<code>TaskDescription</code>). It reads as rendered Markdown.
+<strong>Edit description</strong> opens the editor, <strong>Cancel editing</strong> returns to the
+saved text, and a save closes the editor. A task with no description starts
+in the editor, and an unsaved change keeps the editor open.</li>
 <li>Subtasks (<code>TaskSubtasksSection</code>): the <code>children</code> and <code>hidden_children</code> of
 the <code>tasks.get</code> response, with the row status from <code>TaskStatusView</code>, the
 component the tree’s Status column also uses. The panel passes the state
@@ -2049,11 +2098,8 @@ of <code>taskQueries.detail</code>, so a failed reread shows
 <code>Could not load subtasks.</code> with <strong>Retry</strong> (<code>refetch</code>) in place of the list.</li>
 <li>The comments and their existing answer controls.</li>
 <li>Metrics, collapsed by default (see <a href="#task-metrics">Task metrics</a>).</li>
-<li>Details, collapsed: author, customer, queue, group, blocked, parent (a
-button from <code>TaskDetailParent.tsx</code> when <code>detail.parent</code> is set), then
-<code>TaskDetailProperties</code> and dependencies.</li>
-<li>Workflow, collapsed: the status graph, artifact editing and history, runs,
-logs, visits, and operator actions. Destructive confirmations still apply.</li>
+<li>For a workflow task, <strong>Workflow log</strong>, collapsed: the script runs with
+their logs and the status visits.</li>
 <li>History, collapsed by default.</li>
 </ol>
 <p>The header’s <code>Subtask of</code> line (<code>TaskParentLine</code>), the Parent field, and the
@@ -2099,19 +2145,22 @@ both objects come with the task JSON. <code>TaskDetail</code>
 compares <code>status</code> only with <code>category</code> for its dirty check and tone, and sends
 no <code>status</code> or <code>assignee</code> on Save for a workflow task. Its assignee is
 <code>WorkflowAssignee</code>: in an open, unpaused pool status of the shared workflow
-query it is a select of that pool’s members (<code>listAgentPools</code> through
+query it is a select chip of that pool’s members (<code>listAgentPools</code> through
 <code>taskQueries.pools</code>) that calls <code>reassignTaskWorkflow</code> on change and then
-<code>onTaskChanged</code>; otherwise it is text. <code>TaskDetail</code> hides <strong>Move to
+<code>onTaskChanged</code>; otherwise it is a text chip. <code>TaskDetail</code> hides <strong>Move to
 another server…</strong> for one, and neither its banner nor a comment chip asks for
 a comment on the workflow’s own (<code>system:workflow</code>) wait. In place of the status
-select it renders <code>WorkflowPanel</code> in its <strong>Workflow</strong> section. The decision panel, materials, and lower workflow disclosure read the shared
-workflow query. A task revision, an event sequence, or a completed write marks
+select it renders the Workflow block of the header. <code>TaskDetail</code> calls
+<code>useWorkflowPanel</code> once and gives its state to the Workflow block, the
+decision, the problem, the artifacts and the log, so they agree on the
+selected step and the open form. They all read the shared workflow query. A task revision, an event sequence, or a completed write marks
 that query stale. A workflow event therefore refreshes the view even when the
 task revision stays the same. <code>useWorkflowAdvance</code> and <code>useFollowRequest</code>
 continue to submit and follow outcomes. <code>WorkflowProblem</code> supplies retry and
 run logs, and the existing pause controls supply resume and cancel.</p>
-<p>The lower disclosure retains <code>WorkflowStepper</code>, <code>WorkflowArtifacts</code>,
-<code>WorkflowRuns</code>, visits, and the operator actions. The stepper uses <code>stepMarks</code>
+<p><code>WorkflowPanel</code> composes the same parts in one column for an owner that has
+no sticky header.
+The stepper uses <code>stepMarks</code>
 in <code>workflowGraph.ts</code> and the statuses from the workflow view. Artifact reads,
 writes, history, and logs keep their existing API methods. Run watch now,
 Return to agent, Upgrade, Move to status, and Cancel task keep their existing
