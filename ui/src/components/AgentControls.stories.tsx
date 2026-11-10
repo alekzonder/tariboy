@@ -22,13 +22,13 @@ const paths = (name: string) => ({
 
 const Heading = ({ name, detail }: { name: string; detail: string }) => (
   <div className="flex items-baseline gap-2">
-    <span className="text-[15px] font-semibold">{name}</span>
-    <span className="font-mono text-xs text-muted-foreground">{detail}</span>
+    <span className="text-title font-semibold">{name}</span>
+    <span className="font-mono text-ui text-muted-foreground">{detail}</span>
   </div>
 );
 
 const Column = ({ children }: { children: ReactNode }) => (
-  <div className="flex w-[720px] flex-col gap-2">{children}</div>
+  <div className="flex w-180 flex-col gap-2">{children}</div>
 );
 
 export const AgentWorkspace: Story = {
@@ -66,7 +66,7 @@ export const StoppedAgent: Story = {
 // An agent that waits for the user: Answer is the primary action.
 export const NeedsYou: Story = {
   render: () => (
-    <div className="w-[380px]">
+    <div className="w-95">
       <AgentControls
         name="packager"
         alive

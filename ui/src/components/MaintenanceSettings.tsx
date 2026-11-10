@@ -52,7 +52,7 @@ function NumberField({
         onChange={(e) => onChange(num(e.target.value))}
       />
       {help && (
-        <p id={`${id}-help`} className="text-xs text-muted-foreground">
+        <p id={`${id}-help`} className="text-ui text-muted-foreground">
           {help}
         </p>
       )}
@@ -151,7 +151,7 @@ function RetentionDefaults({
         describedBy="ret-help"
         onChange={(n) => patchRet({ max_bytes: n })}
       />
-      <p id="ret-help" className="text-xs text-muted-foreground sm:col-span-3">
+      <p id="ret-help" className="text-ui text-muted-foreground sm:col-span-3">
         0 is unlimited. A non-zero value in an agent&apos;s retention settings overrides these.
       </p>
     </div>
@@ -240,7 +240,7 @@ export function MaintenanceSettingsCard() {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Backup & data retention</CardTitle>
+        <CardTitle className="text-title">Backup & data retention</CardTitle>
         <CardDescription>
           Every night the whole database is backed up; after a successful backup, agent iterations
           beyond the iteration limits are archived with their database rows and deleted, finished
@@ -276,17 +276,17 @@ export function MaintenanceSettingsCard() {
               </Button>
             </div>
             {dirty && (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-ui text-muted-foreground">
                 Save before running: Run now uses the saved settings.
               </p>
             )}
           </>
         )}
         {lastRun && (
-          <p className="text-xs text-muted-foreground">Last run: {describeRun(lastRun)}</p>
+          <p className="text-ui text-muted-foreground">Last run: {describeRun(lastRun)}</p>
         )}
         {error && (
-          <p role="alert" className="text-xs text-destructive">
+          <p role="alert" className="text-ui text-destructive">
             {error}
           </p>
         )}

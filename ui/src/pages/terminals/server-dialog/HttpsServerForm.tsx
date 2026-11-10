@@ -42,14 +42,14 @@ export function HttpsServerForm({
         />
         {editing && (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">
+            <span className="text-ui text-muted-foreground">
               {tokenStored ? "token set for this session" : "no token set"}
             </span>
             {tokenStored && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 px-2 text-xs"
+                className="h-6 px-2 text-ui"
                 onClick={() => void clearToken()}
               >
                 Clear token

@@ -20,7 +20,7 @@ const Frame = ({
 }) => (
   <div
     ref={frameRef}
-    className="h-[620px] overflow-hidden rounded-md border border-border bg-background"
+    className="h-155 overflow-hidden rounded-control border border-border bg-background"
   >
     {children}
   </div>

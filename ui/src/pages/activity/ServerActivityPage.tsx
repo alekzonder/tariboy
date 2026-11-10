@@ -47,13 +47,13 @@ export default function ServerActivityPage({
       <div className="flex flex-wrap items-center gap-2">
         {hostControl}
         <ActivityPeriodBar window={window} onPeriod={setPeriod} onCustom={setCustom} />
-        <Link to={metricsPathFrom(searchParams)} className="ml-auto text-sm underline">
+        <Link to={metricsPathFrom(searchParams)} className="ml-auto text-body underline">
           Metrics
         </Link>
       </div>
       <ActivityTotals totals={report?.totals ?? null} />
       {error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-body text-destructive">
           {error}
         </p>
       )}

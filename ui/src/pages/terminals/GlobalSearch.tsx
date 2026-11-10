@@ -87,7 +87,7 @@ export function GlobalSearch({
         ref={input}
         className="h-6.5"
         iconClassName="size-3.25"
-        inputClassName="text-body-sm"
+        inputClassName="text-body"
         value={query}
         role="combobox"
         aria-expanded={open && searching}
@@ -119,10 +119,10 @@ export function GlobalSearch({
           id="global-search-results"
           role="listbox"
           aria-label="Search results"
-          className="absolute top-full right-0 z-50 mt-1 max-h-96 w-96 max-w-[80vw] overflow-y-auto rounded-card bg-popover p-1 text-popover-foreground shadow-[var(--lift)]"
+          className="absolute top-full right-0 z-overlay mt-1 max-h-96 w-96 max-w-[80vw] overflow-y-auto rounded-card bg-popover p-1 text-popover-foreground shadow-lift"
         >
           {results.length === 0 && (
-            <li className="px-2 py-1.5 text-body-sm text-muted-foreground">No matches.</li>
+            <li className="px-2 py-1.5 text-body text-muted-foreground">No matches.</li>
           )}
           {results.map((hit, index) => (
             <li key={`${hit.kind}\u0000${hit.id}`} role="option" aria-selected={index === 0}>
@@ -132,7 +132,7 @@ export function GlobalSearch({
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => go(hit)}
                 className={cn(
-                  "flex w-full items-baseline gap-2 rounded-control px-2 py-1 text-left text-body-sm hover:bg-accent",
+                  "flex w-full items-baseline gap-2 rounded-control px-2 py-1 text-left text-body hover:bg-accent",
                   index === 0 && "bg-accent/60",
                 )}
               >

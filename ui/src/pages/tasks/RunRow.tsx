@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status";
 import { cn } from "@/lib/utils";
-import { EMPTY, MONO, QUIET_ACTION } from "./panelStyles";
+import { EMPTY, MONO, QUIET_ACTION } from "@/components/ui/recipes";
 import { formatTaskTime } from "./taskTime";
 import { errorText } from "@/lib/errors";
 import { runTone } from "./workflowShared";
@@ -11,7 +11,7 @@ import { runTone } from "./workflowShared";
 const TONE_BAR: Record<ReturnType<typeof runTone>, string> = {
   live: "border-status-running",
   attention: "border-primary",
-  danger: "border-status-failed",
+  danger: "border-destructive",
   quiet: "border-border",
   faint: "border-border opacity-80",
 };
@@ -132,7 +132,7 @@ export default function RunRow({
         </span>
       )}
       {error && (
-        <p role="alert" className="text-ui text-status-failed">
+        <p role="alert" className="text-ui text-destructive">
           {error}
         </p>
       )}
@@ -143,7 +143,7 @@ export default function RunRow({
           )}
           <pre
             tabIndex={0}
-            className="max-h-80 min-w-0 overflow-auto rounded-md bg-muted px-2.5 py-2 font-mono text-caption whitespace-pre-wrap break-words"
+            className="max-h-80 min-w-0 overflow-auto rounded-control bg-muted px-2.5 py-2 font-mono text-caption whitespace-pre-wrap break-words"
           >
             {log.text}
           </pre>

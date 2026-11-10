@@ -18,7 +18,7 @@ function Field({
   children: ReactNode;
 }) {
   return (
-    <label className={`grid gap-1 text-sm ${className}`}>
+    <label className={`grid gap-1 text-body ${className}`}>
       <Label>{label}</Label>
       {children}
     </label>
@@ -74,8 +74,8 @@ export function ScriptForm({
   const selectMode = (mode: ScriptMode) => setForm({ ...form, mode });
 
   return (
-    <section className="rounded-lg border p-4">
-      <h2 className="text-lg font-semibold">Local scripts</h2>
+    <section className="rounded-card border p-4">
+      <h2 className="text-heading font-semibold">Local scripts</h2>
       <div className="mt-3 flex gap-2" aria-label="Script kind">
         <ModeButton mode="once" current={form.mode} onSelect={selectMode}>
           Run once
@@ -117,7 +117,7 @@ export function ScriptForm({
                 onChange={(event) => setForm({ ...form, interval_seconds: event.target.value })}
               />
             </Field>
-            <p className="self-end text-xs text-muted-foreground">
+            <p className="self-end text-ui text-muted-foreground">
               A scheduled run that exits 111 publishes nothing and keeps the schedule running.
             </p>
           </>

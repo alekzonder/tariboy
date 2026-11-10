@@ -315,7 +315,7 @@ it("shows the selected image's role fragment under Image and opens the full role
   roleImages();
   renderDialog();
   const fragment = await screen.findByText("You review pull requests.");
-  expect(fragment).toHaveClass("line-clamp-2", "text-sm", "text-muted-foreground");
+  expect(fragment).toHaveClass("line-clamp-2", "text-body", "text-muted-foreground");
   expect(screen.getByLabelText("image").getAttribute("aria-describedby")).toContain(fragment.id);
   expect(screen.queryByRole("heading", { name: "Reviewer" })).not.toBeInTheDocument();
 
@@ -325,7 +325,7 @@ it("shows the selected image's role fragment under Image and opens the full role
   expect(show).toHaveAccessibleName("Hide role");
   expect(show).toHaveAttribute("aria-expanded", "true");
   const full = document.getElementById(show.getAttribute("aria-controls")!)!;
-  expect(full).toHaveClass("max-h-60", "overflow-auto", "rounded", "border", "p-3");
+  expect(full).toHaveClass("max-h-60", "overflow-auto", "rounded-chip", "border", "p-3");
   expect(await within(full).findByRole("heading", { name: "Reviewer" })).toBeInTheDocument();
 
   fireEvent.click(show);

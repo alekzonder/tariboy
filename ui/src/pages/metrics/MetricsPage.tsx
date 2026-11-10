@@ -50,7 +50,7 @@ function EmptyPeriod({
   onClear: () => void;
 }) {
   return (
-    <div className="space-y-2 rounded border p-4 text-sm">
+    <div className="space-y-2 rounded-chip border p-4 text-body">
       <p>
         {filtered
           ? "No data for these filters in this period."

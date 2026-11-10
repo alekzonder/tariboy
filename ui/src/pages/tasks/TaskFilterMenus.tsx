@@ -44,9 +44,9 @@ export interface TaskFiltersMenuProps {
   onWaiting: (value: boolean) => void;
 }
 
-const ITEM = "h-7 gap-2 rounded-control px-2.25 text-body-sm";
+const ITEM = "h-7 gap-2 rounded-control px-2.25 text-body";
 const SUB_CONTENT =
-  "z-[70] max-h-(--radix-dropdown-menu-content-available-height) min-w-53.5 overflow-y-auto rounded-card bg-popover p-1.25 text-popover-foreground shadow-md ring-1 ring-foreground/10";
+  "z-alert max-h-(--radix-dropdown-menu-content-available-height) min-w-53.5 overflow-y-auto rounded-card bg-popover p-1.25 text-popover-foreground shadow-lift ring-1 ring-foreground/10";
 
 /** How many of the menu's filters are on; the trigger shows it as a badge. */
 function activeFilterCount({
@@ -86,7 +86,7 @@ function FilterSub({
         {icon}
         <span className="flex-1">{label}</span>
         {value && (
-          <span className="max-w-28 truncate font-mono text-meta text-muted-foreground">
+          <span className="max-w-28 truncate font-mono text-caption text-muted-foreground">
             {value}
           </span>
         )}
@@ -121,7 +121,7 @@ function FilterRadio({
         ITEM,
       )}
     >
-      <span className={cn("min-w-0 flex-1 truncate", mono && "font-mono text-meta font-medium")}>
+      <span className={cn("min-w-0 flex-1 truncate", mono && "font-mono text-caption font-medium")}>
         {label}
       </span>
       {count !== undefined && <span className="text-muted-foreground tabular-nums">{count}</span>}
@@ -212,16 +212,16 @@ export function TaskFiltersMenu(props: TaskFiltersMenuProps) {
           aria-label={count ? `Filters, ${count} on` : "Filters"}
           data-tour={TOUR_ANCHORS.queueMenu}
           className={cn(
-            "flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.25 text-ui",
+            "flex h-7 shrink-0 items-center gap-1.5 rounded-control px-2.25 text-ui",
             count
-              ? "bg-primary/12 font-medium text-primary"
+              ? "bg-primary-soft font-medium text-primary"
               : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground",
           )}
         >
           <ListFilter aria-hidden="true" className="size-3" />
           Filters
           {count > 0 && (
-            <span className="grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-tiny leading-none text-primary-foreground tabular-nums">
+            <span className="grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-caption leading-none text-primary-foreground tabular-nums">
               {count}
             </span>
           )}
@@ -268,7 +268,7 @@ export function TaskScopeAgentChip({
   onClearScopeAgent?: () => void;
 }) {
   return (
-    <span className="inline-flex h-7 max-w-40 shrink-0 items-center rounded-md bg-primary/12 pr-1.5 pl-2.5 text-ui font-medium text-primary">
+    <span className="inline-flex h-7 max-w-40 shrink-0 items-center rounded-control bg-primary-soft pr-1.5 pl-2.5 text-ui font-medium text-primary">
       <span className="truncate">{scopeAgent}</span>
       {onClearScopeAgent && (
         <button

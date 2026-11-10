@@ -12,16 +12,16 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">{title}</CardTitle>
+        <CardTitle className="text-title">{title}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2 text-sm">{children}</CardContent>
+      <CardContent className="space-y-2 text-body">{children}</CardContent>
     </Card>
   );
 }
 
 export default function ImageOverview() {
   const { manifest } = useImageContext();
-  if (!manifest) return <p className="text-sm text-muted-foreground">Loading…</p>;
+  if (!manifest) return <p className="text-body text-muted-foreground">Loading…</p>;
 
   return (
     <div className="grid gap-4">

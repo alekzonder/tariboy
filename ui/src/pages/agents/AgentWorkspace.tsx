@@ -99,14 +99,14 @@ function ConnectionNotice({
 }) {
   if (connection === "unavailable") {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-body text-muted-foreground">
         <p>Host unavailable.</p>
         <p>The route was not reassigned to the local daemon.</p>
       </div>
     );
   }
   return (
-    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+    <div className="flex h-full items-center justify-center text-body text-muted-foreground">
       {connection === "selecting" ? "Connecting to host…" : "Restoring route host…"}
     </div>
   );
@@ -192,7 +192,7 @@ function AgentWorkspaceContent({
             onClone={onClone}
           />
           {unavailable && (
-            <p role="status" className="mb-2 text-sm text-muted-foreground">
+            <p role="status" className="mb-2 text-body text-muted-foreground">
               This host is temporarily unavailable; actions are disabled until it reconnects.
             </p>
           )}

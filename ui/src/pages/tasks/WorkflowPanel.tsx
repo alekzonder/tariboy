@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { Task, WorkflowView, StatusVisit } from "@/types";
 import { cn } from "@/lib/utils";
-import { EMPTY, LABEL, MONO, QUIET_ACTION, ROW } from "./panelStyles";
+import { EMPTY, LABEL, MONO, QUIET_ACTION, ROW } from "@/components/ui/recipes";
 import ReturnToAgent from "./ReturnToAgent";
 import { formatTaskTime } from "./taskTime";
 import WorkflowActions, { ActionError, type OpenForm } from "./WorkflowActions";
@@ -311,7 +311,7 @@ function OpenFormPane({
 
 function LoadFailure({ error, onRetry }: { error: string; onRetry: () => void }) {
   return (
-    <div role="alert" className="flex items-center gap-2 text-ui text-status-failed">
+    <div role="alert" className="flex items-center gap-2 text-ui text-destructive">
       <span className="min-w-0 flex-1">{error}</span>
       <Button type="button" variant="ghost" className={QUIET_ACTION} onClick={onRetry}>
         Retry

@@ -51,7 +51,7 @@ export const TerminalToolbar: Story = {
   decorators: [withSurface("panel", 620)],
   render: (args) => (
     <Grid>
-      <div className="h-[170px]">
+      <div className="h-42.5">
         <TuiScreen controller={controller} fill surface="workspace" persistDraft={false} />
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -59,7 +59,7 @@ export const TerminalToolbar: Story = {
         <Button size="sm" variant="outline">
           Paste
         </Button>
-        <span className="ml-auto text-xs text-muted-foreground">
+        <span className="ml-auto text-ui text-muted-foreground">
           uploads land in /work/files on build-01
         </span>
       </div>
@@ -70,9 +70,9 @@ export const TerminalToolbar: Story = {
 export const NoLiveSession: Story = {
   decorators: [withSurface("panel", 520)],
   render: (args) => (
-    <div className="grid gap-1.5 rounded-[10px] border border-border bg-card px-3.5 py-4">
-      <div className="text-sm">Session not running or not interactive</div>
-      <div className="text-xs text-muted-foreground">
+    <div className="grid gap-1.5 rounded-card border border-border bg-card px-3.5 py-4">
+      <div className="text-body">Session not running or not interactive</div>
+      <div className="text-ui text-muted-foreground">
         Start the agent and enable interactive mode (Settings → Runtime config).
       </div>
       <div className="mt-2 flex items-center gap-2">
@@ -95,7 +95,7 @@ export const InTaskComment: Story = {
         id="task-comment"
         placeholder="Comment"
         defaultValue={"Repro attached.\n/work/files/TB-142-trace.log"}
-        className="h-[92px]"
+        className="h-23"
       />
     </Grid>
   ),
@@ -113,9 +113,9 @@ export const Disabled: Story = {
         id="task-comment-busy"
         defaultValue={"Repro attached.\n/work/files/TB-142-trace.log"}
         disabled
-        className="h-[92px]"
+        className="h-23"
       />
-      <span className="text-xs text-muted-foreground">
+      <span className="text-ui text-muted-foreground">
         Saving the comment — the button is disabled, the same visual it shows while an upload of its
         own is in flight.
       </span>

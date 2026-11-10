@@ -15,9 +15,9 @@ export function BuiltImageTagsTable({
   actions: TagActionHandlers;
 }) {
   return (
-    <div className="overflow-x-auto rounded border">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+    <div className="overflow-x-auto rounded-chip border">
+      <table className="w-full text-body">
+        <thead className="bg-subtle text-left text-ui text-muted-foreground">
           <tr>
             <th className="px-3 py-2">Tag</th>
             <th className="px-3 py-2">Version</th>

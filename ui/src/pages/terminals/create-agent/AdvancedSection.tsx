@@ -11,7 +11,7 @@ import type { CreateAgentForm } from "./useCreateAgentForm";
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section aria-label={title} className="space-y-3">
-      <h4 className="text-sm font-medium">{title}</h4>
+      <h4 className="text-body font-medium">{title}</h4>
       {children}
     </section>
   );
@@ -28,7 +28,7 @@ function VersionField({ form }: { form: CreateAgentForm }) {
         value={tag}
         onChange={(event) => form.changeImage(`${choice?.name}:${event.target.value}`)}
         disabled={form.formDisabled || !choice || choice.tags.length < 2}
-        className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm"
+        className="h-8 w-full rounded-card border border-input bg-background px-2.5 text-body"
       >
         {(choice?.tags.length ? choice.tags : [tag]).map((value) => (
           <option key={value} value={value}>
@@ -58,7 +58,7 @@ export function AdvancedSection({
         type="button"
         aria-expanded={open}
         onClick={() => onOpenChange(!open)}
-        className="flex items-center gap-1 text-sm font-medium"
+        className="flex items-center gap-1 text-body font-medium"
       >
         <Chevron className="size-4" aria-hidden />
         Advanced

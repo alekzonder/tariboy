@@ -41,11 +41,11 @@ export function GroupWizardGroupSection({
           />
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-ui text-muted-foreground">
         lead: <span className="font-mono">{leaderName || "—"}</span> (the agent marked leader below)
       </p>
       {leaderName === "" && (
-        <p className="text-xs text-destructive">
+        <p className="text-ui text-destructive">
           the leader row needs an explicit name so the group is created with a lead
         </p>
       )}

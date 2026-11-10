@@ -13,7 +13,7 @@ const meta = {
   parameters: { tariboy: { daemon: true } },
   decorators: [
     (Story) => (
-      <div className="flex h-[260px] max-w-[720px] flex-col">
+      <div className="flex h-65 max-w-180 flex-col">
         <Story />
       </div>
     ),

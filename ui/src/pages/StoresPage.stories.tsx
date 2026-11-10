@@ -9,7 +9,7 @@ import StoresPage from "./StoresPage";
 const BASE = "/library/sources";
 
 const withFrame: Decorator = (Story) => (
-  <div className="h-[620px] overflow-hidden rounded-md border border-border bg-background">
+  <div className="h-155 overflow-hidden rounded-control border border-border bg-background">
     <Story />
   </div>
 );

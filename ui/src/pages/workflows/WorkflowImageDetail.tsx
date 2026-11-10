@@ -63,12 +63,12 @@ export default function WorkflowImageDetail({
 
   if (error && !manifest)
     return (
-      <p role="alert" className="p-3 text-sm text-destructive">
+      <p role="alert" className="p-3 text-body text-destructive">
         {error}
       </p>
     );
   if (!manifest)
-    return <p className="p-3 text-sm text-muted-foreground">Loading workflow image…</p>;
+    return <p className="p-3 text-body text-muted-foreground">Loading workflow image…</p>;
 
   const ref = `${name}:${tag}`;
   const definition = manifest.definition;
@@ -100,8 +100,8 @@ export default function WorkflowImageDetail({
     });
 
   return (
-    <div className="h-full space-y-5 overflow-auto p-3 text-sm">
-      <nav className="text-xs text-muted-foreground">
+    <div className="h-full space-y-5 overflow-auto p-3 text-body">
+      <nav className="text-ui text-muted-foreground">
         <Link className="text-primary hover:underline" to={basePath}>
           Workflows
         </Link>{" "}

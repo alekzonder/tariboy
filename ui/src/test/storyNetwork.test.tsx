@@ -63,4 +63,6 @@ it("mounts every story without a relative or loopback request", async () => {
   }
   expect(names.length).toBeGreaterThan(40);
   expect(requests.filter((url) => !isAllowed(url))).toEqual([]);
-});
+  // One test mounts every story, so its time grows with the catalog: about
+  // 11 seconds for 205 stories alone, and twice that beside other workers.
+}, 90_000);

@@ -46,7 +46,7 @@ export function ComposeDialog({
         <Textarea
           value={draft.text}
           onChange={(e) => draft.setText(e.target.value)}
-          className="min-h-40 max-h-[60vh] overflow-auto font-mono text-sm"
+          className="min-h-40 max-h-[60vh] overflow-auto font-mono text-body"
           aria-label="Text to inject"
         />
         <DialogFooter>

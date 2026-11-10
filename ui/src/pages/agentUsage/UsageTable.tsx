@@ -37,9 +37,9 @@ export function UsageTable({
   onOpenTask: (key: string) => void;
 }) {
   return (
-    <div className="overflow-x-auto rounded border">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+    <div className="overflow-x-auto rounded-chip border">
+      <table className="w-full text-body">
+        <thead className="bg-subtle text-left text-ui text-muted-foreground">
           <tr>
             <th className="px-3 py-2">
               {GROUPINGS.find((g) => g.key === groupBy)?.label ?? "Key"}
@@ -106,7 +106,7 @@ function RowKey({
     return (
       <Link
         to={`/agent/${encodeURIComponent(name)}/logs?iteration=${encodeURIComponent(rowKey)}`}
-        className="font-mono text-xs text-primary hover:underline"
+        className="font-mono text-ui text-primary hover:underline"
       >
         {rowKey}
       </Link>
@@ -118,7 +118,7 @@ function RowKey({
         <button
           type="button"
           onClick={() => onOpenTask(rowKey)}
-          className="font-mono text-xs text-primary hover:underline"
+          className="font-mono text-ui text-primary hover:underline"
         >
           {rowKey}
         </button>

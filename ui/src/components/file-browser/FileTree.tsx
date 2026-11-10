@@ -20,15 +20,15 @@ export function FileTree({
   const root = tree.dirs[""];
   let rootBody: ReactNode;
   if (root?.error && !root.entries) {
-    rootBody = <div className="p-3 text-xs text-muted-foreground">{root.error}</div>;
+    rootBody = <div className="p-3 text-ui text-muted-foreground">{root.error}</div>;
   } else if (root?.entries == null) {
     rootBody = (
-      <div className="flex items-center gap-2 p-3 text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 p-3 text-ui text-muted-foreground">
         <Loader2 className="size-3.5 animate-spin" /> Loading…
       </div>
     );
   } else if (root.entries.length === 0) {
-    rootBody = <div className="p-3 text-xs text-muted-foreground">Working directory is empty</div>;
+    rootBody = <div className="p-3 text-ui text-muted-foreground">Working directory is empty</div>;
   } else {
     rootBody = (
       <div className="py-1">

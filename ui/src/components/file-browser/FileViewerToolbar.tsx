@@ -28,11 +28,7 @@ export function FileViewerToolbar({
   const editControls = !canEdit ? null : editing ? (
     <>
       {dirty && (
-        <span
-          data-testid="dirty"
-          title="Unsaved changes"
-          className="text-xs text-amber-600 dark:text-amber-400"
-        >
+        <span data-testid="dirty" title="Unsaved changes" className="text-ui text-warning">
           ●
         </span>
       )}

@@ -3,7 +3,8 @@ import { useApi } from "@/components/apiContext";
 import { useApiQuery } from "@/hooks/useApiQuery";
 import type { Task } from "@/types";
 import { cn } from "@/lib/utils";
-import { FIELD_MONO, LABEL, MONO, SelectShell } from "./panelStyles";
+import { NativeSelect } from "@/components/ui/native-select";
+import { FIELD_MONO, LABEL, MONO } from "@/components/ui/recipes";
 import { taskQueries, writeTask } from "./taskQueries";
 import { assignablePool } from "./workflowShared";
 import { errorText } from "@/lib/errors";
@@ -46,7 +47,7 @@ export default function WorkflowAssignee({
   return (
     <label className="flex min-w-0 flex-col gap-1.25">
       <span className={LABEL}>Assignee</span>
-      <SelectShell
+      <NativeSelect
         className={cn("flex", FIELD_MONO)}
         value={task.assignee}
         disabled={reassign.isPending}
@@ -65,9 +66,9 @@ export default function WorkflowAssignee({
             {value}
           </option>
         ))}
-      </SelectShell>
+      </NativeSelect>
       {reassign.error && (
-        <span role="alert" className="text-ui text-status-failed">
+        <span role="alert" className="text-ui text-destructive">
           {errorText(reassign.error)}
         </span>
       )}

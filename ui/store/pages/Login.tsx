@@ -56,7 +56,7 @@ export default function Login({ onAuthed }: { onAuthed: () => void }) {
                 placeholder="paste your registry token"
               />
             </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <p className="text-body text-destructive">{error}</p>}
             <Button type="submit" disabled={busy || !token}>
               {busy ? "Signing in…" : "Sign in"}
             </Button>

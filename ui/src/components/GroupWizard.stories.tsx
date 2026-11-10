@@ -58,7 +58,7 @@ const meta = {
   parameters: { tariboy: { daemon: true } },
   decorators: [
     (Story) => (
-      <div className="w-[720px]">
+      <div className="w-180">
         <Story />
       </div>
     ),

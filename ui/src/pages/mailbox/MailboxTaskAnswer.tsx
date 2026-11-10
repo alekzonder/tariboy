@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { idempotencyKey } from "@/lib/ids";
 import { cn } from "@/lib/utils";
 import { MarkdownEditor, MarkdownModeSegment, type MarkdownMode } from "@/pages/tasks/TaskMarkdown";
-import { LABEL, QUIET_ACTION } from "@/pages/tasks/panelStyles";
+import { LABEL, QUIET_ACTION } from "@/components/ui/recipes";
 
 /**
  * The answer to a task question, written in the letter like a task comment.
@@ -39,7 +39,7 @@ export function MailboxTaskAnswer({
   return (
     <form
       aria-label={`Answer on ${taskKey}`}
-      className="grid grid-cols-[minmax(0,1fr)] gap-2 rounded-md bg-muted p-3"
+      className="grid grid-cols-[minmax(0,1fr)] gap-2 rounded-control bg-muted p-3"
       onSubmit={(event) => void submit(event)}
     >
       <div>

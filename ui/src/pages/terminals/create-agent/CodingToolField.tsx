@@ -40,10 +40,10 @@ export function CodingToolField({
   const selected = options.find((option) => option.type === draft.harness);
   return (
     <fieldset className="space-y-1">
-      <legend className="text-sm font-medium">Coding tool</legend>
+      <legend className="text-body font-medium">Coding tool</legend>
       <div role="radiogroup" aria-label="Coding tool" className="flex flex-wrap gap-x-4 gap-y-1">
         {options.map((option) => (
-          <label key={option.type} className="flex items-center gap-1.5 text-sm">
+          <label key={option.type} className="flex items-center gap-1.5 text-body">
             <input
               type="radio"
               name="create-agent-harness"
@@ -54,16 +54,16 @@ export function CodingToolField({
               aria-label={harnessLabel(option.type)}
             />
             {harnessLabel(option.type)}
-            <span className="text-xs text-muted-foreground">· {option.type}</span>
-            {option.found === false && <span className="text-xs text-destructive">not found</span>}
+            <span className="text-ui text-muted-foreground">· {option.type}</span>
+            {option.found === false && <span className="text-ui text-destructive">not found</span>}
           </label>
         ))}
       </div>
       {selected?.found === false && selected.install && (
-        <p className="text-xs text-muted-foreground">To install it: {selected.install}</p>
+        <p className="text-ui text-muted-foreground">To install it: {selected.install}</p>
       )}
       {!presetsOpen && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-ui text-muted-foreground">
           Model: {draft.model || "tool default"} · Effort: {draft.effort || "tool default"}{" "}
           <button
             type="button"

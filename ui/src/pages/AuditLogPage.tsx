@@ -52,11 +52,11 @@ export default function AuditLogPage({
             </div>
           </div>
         ) : loaded ? (
-          <p role="status" className="text-sm text-muted-foreground">
+          <p role="status" className="text-body text-muted-foreground">
             Iteration {selected} was not found.
           </p>
         ) : (
-          <p className="text-sm text-muted-foreground">Loading iteration…</p>
+          <p className="text-body text-muted-foreground">Loading iteration…</p>
         )}
       </div>
     </div>

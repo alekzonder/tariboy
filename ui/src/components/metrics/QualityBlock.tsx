@@ -5,17 +5,17 @@ import { QUALITY_AXES } from "@/lib/metricsFormat";
  *  state while nothing is scored. */
 export function QualityBlock({ quality }: { quality: MetricsQuality }) {
   return (
-    <section aria-labelledby="metrics-quality" className="space-y-2 rounded border p-3">
+    <section aria-labelledby="metrics-quality" className="space-y-2 rounded-chip border p-3">
       <div>
-        <h2 id="metrics-quality" className="text-sm font-medium">
+        <h2 id="metrics-quality" className="text-body font-medium">
           Quality
         </h2>
-        <p className="text-xs text-muted-foreground">Average assessment score from 0 to 100.</p>
+        <p className="text-ui text-muted-foreground">Average assessment score from 0 to 100.</p>
       </div>
       {quality === null ? (
         <div>
-          <p className="text-sm font-medium">No quality scores yet</p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body font-medium">No quality scores yet</p>
+          <p className="text-body text-muted-foreground">
             Scores appear here after tasks are assessed.
           </p>
         </div>
@@ -29,22 +29,22 @@ export function QualityBlock({ quality }: { quality: MetricsQuality }) {
                 aria-label={label}
                 className="grid grid-cols-1 items-center gap-1 sm:grid-cols-4 sm:gap-3"
               >
-                <span className="text-sm">{label}</span>
+                <span className="text-body">{label}</span>
                 {axis ? (
                   <>
-                    <span className="font-mono text-lg">{Math.round(axis.avg)}</span>
-                    <span aria-hidden="true" className="h-2 overflow-hidden rounded bg-muted">
+                    <span className="font-mono text-heading">{Math.round(axis.avg)}</span>
+                    <span aria-hidden="true" className="h-2 overflow-hidden rounded-chip bg-muted">
                       <span
                         className="block h-full bg-primary"
                         style={{ width: `${Math.max(0, Math.min(100, axis.avg))}%` }}
                       />
                     </span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-ui text-muted-foreground">
                       min {Math.round(axis.min)} · {axis.count} scores
                     </span>
                   </>
                 ) : (
-                  <span className="text-sm text-muted-foreground sm:col-span-3">No scores</span>
+                  <span className="text-body text-muted-foreground sm:col-span-3">No scores</span>
                 )}
               </li>
             );

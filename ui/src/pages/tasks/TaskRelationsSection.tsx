@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusPill } from "@/components/ui/status";
 import { SectionHeading } from "./TaskDetailControls";
-import { DANGER_FILL, EMPTY, FIELD, FIELD_MONO, ROW, SelectShell } from "./panelStyles";
+import { NativeSelect } from "@/components/ui/native-select";
+import { DANGER_FILL, EMPTY, FIELD, FIELD_MONO, ROW } from "@/components/ui/recipes";
 import type { useTaskDetailRelations } from "./useTaskDetailRelations";
 
 export function TaskRelationsSection({
@@ -39,7 +40,7 @@ export function TaskRelationsSection({
           <div key={relation.id} className={ROW}>
             <span
               className={cn(
-                "inline-flex h-4.75 shrink-0 items-center rounded-sm px-1.75 text-caption",
+                "inline-flex h-4.75 shrink-0 items-center rounded-chip px-1.75 text-caption",
                 relation.type === "blocks"
                   ? cn(DANGER_FILL, "font-medium")
                   : "bg-muted text-muted-foreground",
@@ -50,10 +51,10 @@ export function TaskRelationsSection({
             {/* The key is underlined only as far as it reads; the title
                 takes the rest of the row and the pill closes it, so a
                 dependency says what it is without being opened. */}
-            <span className="shrink-0 border-b border-dotted border-border font-mono text-meta font-medium tabular-nums">
+            <span className="shrink-0 border-b border-dotted border-border font-mono text-caption font-medium tabular-nums">
               {other}
             </span>
-            <span className="min-w-0 flex-1 truncate text-body-sm text-muted-foreground">
+            <span className="min-w-0 flex-1 truncate text-body text-muted-foreground">
               {otherTitle}
             </span>
             {otherStatus && (
@@ -81,7 +82,7 @@ export function TaskRelationsSection({
           submitRelation();
         }}
       >
-        <SelectShell
+        <NativeSelect
           aria-label="Relation type"
           value={relationType}
           className="h-6.5 w-auto text-ui md:text-ui"
@@ -89,7 +90,7 @@ export function TaskRelationsSection({
         >
           <option value="blocks">Blocks</option>
           <option value="related">Related</option>
-        </SelectShell>
+        </NativeSelect>
         <Input
           name="target_key"
           aria-label="Related task key"
@@ -109,7 +110,7 @@ export function TaskRelationsSection({
         </Button>
       </form>
       {relationMutation.error && (
-        <p role="alert" className="text-ui text-status-failed">
+        <p role="alert" className="text-ui text-destructive">
           {errorText(relationMutation.error)}
         </p>
       )}

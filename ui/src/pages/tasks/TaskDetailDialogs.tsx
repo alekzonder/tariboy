@@ -5,7 +5,7 @@ import TaskTransferDialog from "./TaskTransferDialog";
 import TaskRequeueDialog from "./TaskRequeueDialog";
 import { MarkdownContent } from "./TaskMarkdown";
 import { Banner, BannerButton } from "./TaskDetailControls";
-import { DANGER_FILL, LABEL, MONO } from "./panelStyles";
+import { DANGER_FILL, LABEL, MONO } from "@/components/ui/recipes";
 import type { TaskDetailProps } from "./TaskDetailTypes";
 import type { useTaskDetailDraft } from "./useTaskDetailDraft";
 
@@ -92,10 +92,13 @@ export function TaskDetailDraftAlerts({
         />
       )}
       {dirty && baseline.revision !== task.revision && (
-        <div role="alert" className={cn("flex flex-col gap-2 rounded-md px-2.5 py-2", DANGER_FILL)}>
+        <div
+          role="alert"
+          className={cn("flex flex-col gap-2 rounded-control px-2.5 py-2", DANGER_FILL)}
+        >
           <div className="flex items-start gap-2.25">
             <AlertCircle className="mt-px size-3.5 shrink-0 [stroke-width:1.4]" />
-            <p className="min-w-0 flex-1 text-body-sm leading-[1.45] font-medium text-pretty">
+            <p className="min-w-0 flex-1 text-body leading-normal font-medium text-pretty">
               This task changed while you were editing. Keep your edited fields over the latest
               values, or reload to discard your edits.
             </p>
@@ -104,7 +107,7 @@ export function TaskDetailDraftAlerts({
             <summary className="cursor-pointer">Latest values</summary>
             <dl className="mt-1.5 grid grid-cols-[76px_minmax(0,1fr)] gap-x-2.5 gap-y-1 text-foreground">
               <dt className={LABEL}>Title</dt>
-              <dd className="min-w-0 text-body-sm">{task.title}</dd>
+              <dd className="min-w-0 text-body">{task.title}</dd>
               <dt className={LABEL}>Description</dt>
               <dd className="min-w-0">
                 <MarkdownContent>{task.description}</MarkdownContent>
@@ -118,7 +121,7 @@ export function TaskDetailDraftAlerts({
               <dt className={LABEL}>Pull request</dt>
               <dd className={cn(MONO, "min-w-0 break-all")}>{task.pull_request || "None"}</dd>
               <dt className={LABEL}>Block reason</dt>
-              <dd className="min-w-0 text-body-sm">{task.manual_block_reason || "None"}</dd>
+              <dd className="min-w-0 text-body">{task.manual_block_reason || "None"}</dd>
             </dl>
           </details>
           <div className="flex gap-1.5">

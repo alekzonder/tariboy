@@ -8,7 +8,8 @@ import type {
   WorkflowImageDefinition,
   WorkflowImageListing,
 } from "@/types";
-import { EMPTY, LABEL, MONO, SelectShell } from "./panelStyles";
+import { NativeSelect } from "@/components/ui/native-select";
+import { EMPTY, LABEL, MONO } from "@/components/ui/recipes";
 import { useWorkflowConfirm } from "./WorkflowConfirm";
 import WorkflowStatusMap from "./WorkflowStatusMap";
 import { errorText } from "@/lib/errors";
@@ -235,7 +236,7 @@ function BindingSummary({
 }) {
   if (!binding) return <span className={EMPTY}>No workflow</span>;
   return (
-    <p data-testid="binding" className="text-body-sm">
+    <p data-testid="binding" className="text-body">
       {/* Tasks and the Library both open on the active host. */}
       <Link
         className="font-semibold text-primary hover:underline"
@@ -288,7 +289,7 @@ function BindControls({
 }) {
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-      <SelectShell
+      <NativeSelect
         aria-label="Workflow image"
         value={value}
         className="h-6.5 w-auto text-ui md:text-ui"
@@ -300,7 +301,7 @@ function BindControls({
             {image.name}:{image.tag}
           </option>
         ))}
-      </SelectShell>
+      </NativeSelect>
       <Button type="button" size="sm" className="h-6.5" disabled={!canBind} onClick={onBind}>
         Bind
       </Button>

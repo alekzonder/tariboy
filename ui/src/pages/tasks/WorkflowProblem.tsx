@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import type { ScriptRun, WorkflowView } from "@/types";
 import { TONE_TEXT } from "@/lib/statusTone";
 import { cn } from "@/lib/utils";
-import { DANGER_FILL, MONO, PRIMARY_FILL } from "./panelStyles";
+import { DANGER_FILL, MONO, PRIMARY_FILL } from "@/components/ui/recipes";
 import RunRow from "./RunRow";
 import { explainProblem, type Problem } from "./explainWorkflowProblem";
 import { followNoticeText, useFollowRequest, type FollowResult } from "./workflowShared";
@@ -61,8 +61,8 @@ export default function WorkflowProblem({
       role={alert ? "alert" : "status"}
       data-problem={problem.kind}
       className={cn(
-        "flex min-w-0 flex-col gap-1.5 rounded-md px-2.5 py-2",
-        fill ?? "bg-muted/50 text-muted-foreground",
+        "flex min-w-0 flex-col gap-1.5 rounded-control px-2.5 py-2",
+        fill ?? "bg-subtle text-muted-foreground",
       )}
     >
       <div className="flex min-w-0 items-start gap-2">
@@ -145,17 +145,17 @@ function ProblemText({ problem, filled }: { problem: Problem; filled: boolean })
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1">
       <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-        <span className="text-body-sm font-medium">{problem.title}</span>
+        <span className="text-body font-medium">{problem.title}</span>
         {problem.counter && <span className={cn(MONO, "opacity-80")}>{problem.counter}</span>}
       </div>
       {problem.detail && (
-        <pre className="min-w-0 font-mono text-meta whitespace-pre-wrap break-words">
+        <pre className="min-w-0 font-mono text-caption whitespace-pre-wrap break-words">
           {problem.detail}
         </pre>
       )}
       <p
         className={cn(
-          "min-w-0 text-ui leading-[1.45] text-pretty",
+          "min-w-0 text-ui leading-normal text-pretty",
           filled ? "opacity-90" : TONE_TEXT.quiet,
         )}
       >

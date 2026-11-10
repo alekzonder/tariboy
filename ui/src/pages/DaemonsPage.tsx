@@ -64,8 +64,8 @@ export default function DaemonsPage() {
     <div className="space-y-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-lg font-semibold">Hosts</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-heading font-semibold">Hosts</h1>
+          <p className="text-body text-muted-foreground">
             One place for local and remote agent sessions.
           </p>
         </div>
@@ -83,7 +83,7 @@ export default function DaemonsPage() {
       <HostWorkspacesBar />
 
       {error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-body text-destructive">
           {error}
         </p>
       )}
@@ -91,11 +91,11 @@ export default function DaemonsPage() {
         {daemons.map((host) => (
           <div
             key={host.id}
-            className="flex items-start justify-between gap-3 rounded border px-3 py-2"
+            className="flex items-start justify-between gap-3 rounded-chip border px-3 py-2"
           >
             <div className="min-w-0 space-y-1">
               <div className="font-medium">{host.label}</div>
-              <div className="truncate text-xs text-muted-foreground">
+              <div className="truncate text-ui text-muted-foreground">
                 {host.kind === "ssh" ? host.sshAlias : host.baseURL}
               </div>
               <HostStatus
@@ -116,7 +116,7 @@ export default function DaemonsPage() {
           </div>
         ))}
         {daemons.length === 0 && (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body text-muted-foreground">
             No remote hosts yet. Add an SSH alias to get started.
           </p>
         )}
@@ -141,7 +141,7 @@ function HostWorkspacesBar() {
   if (!context) return null;
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-sm text-muted-foreground">Host workspaces</span>
+      <span className="text-body text-muted-foreground">Host workspaces</span>
       <Button variant="outline" size="sm" onClick={() => context.onManageWorkspaces(false)}>
         Manage workspaces…
       </Button>

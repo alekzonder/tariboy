@@ -157,7 +157,7 @@ export function DaemonProvider({ children }: { children: ReactNode }) {
       {registryError && (
         <div
           role="alert"
-          className="border-b border-destructive/40 bg-destructive/10 px-3 py-2 text-sm"
+          className="border-b border-destructive-line bg-destructive-soft px-3 py-2 text-body"
         >
           Host registry: {registryError}
         </div>

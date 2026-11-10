@@ -19,12 +19,12 @@ function TagCell({ image, newest }: { image: ImageSummary; newest: boolean }) {
         {image.bare && <Badge variant="secondary">Terminal-only</Badge>}
       </div>
       {(image.current_agents?.length ?? 0) > 0 && (
-        <div className="mt-1 text-xs text-muted-foreground">
+        <div className="mt-1 text-ui text-muted-foreground">
           Current: {image.current_agents!.join(", ")}
         </div>
       )}
       {(image.pending_agents?.length ?? 0) > 0 && (
-        <div className="text-xs text-muted-foreground">
+        <div className="text-ui text-muted-foreground">
           Pending: {image.pending_agents!.join(", ")}
         </div>
       )}
@@ -50,15 +50,15 @@ export function BuiltImageTagRow({
     <tr
       data-testid={`built-image-${ref}`}
       aria-current={current ? "true" : undefined}
-      className={current ? "border-t bg-muted/40" : "border-t"}
+      className={current ? "border-t bg-subtle" : "border-t"}
     >
       <TagCell image={image} newest={newest} />
       <td className="px-3 py-2">{image.image_version || "Version not specified"}</td>
-      <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{image.digest ?? "—"}</td>
-      <td className="px-3 py-2 text-xs whitespace-nowrap text-muted-foreground">
+      <td className="px-3 py-2 font-mono text-ui text-muted-foreground">{image.digest ?? "—"}</td>
+      <td className="px-3 py-2 text-ui whitespace-nowrap text-muted-foreground">
         {builtDate(image)}
       </td>
-      <td className="px-3 py-2 font-mono text-xs">
+      <td className="px-3 py-2 font-mono text-ui">
         <span className="block max-w-64 truncate" title={source}>
           {source}
         </span>

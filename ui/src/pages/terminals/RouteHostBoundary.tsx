@@ -43,14 +43,14 @@ export function RouteHostBoundary({
 
   if (!knownHost || status === "unavailable") {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center text-body text-muted-foreground">
         Host unavailable.
       </div>
     );
   }
   if (status !== "ready" || activeId !== hostId) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center text-body text-muted-foreground">
         Connecting to host…
       </div>
     );
@@ -65,7 +65,7 @@ export function RouteHostBoundary({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {reconnecting && (
-        <p role="status" className="mb-2 text-sm text-muted-foreground">
+        <p role="status" className="mb-2 text-body text-muted-foreground">
           This host is reconnecting; actions are temporarily unavailable.
         </p>
       )}

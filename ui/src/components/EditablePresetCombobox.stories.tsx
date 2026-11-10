@@ -24,12 +24,12 @@ const Field = ({
   hint?: string;
   children: ReactNode;
 }) => (
-  <div className="grid w-[400px] gap-1.5">
-    <Label htmlFor={id} className="text-[13px]">
+  <div className="grid w-100 gap-1.5">
+    <Label htmlFor={id} className="text-body">
       {label}
     </Label>
     {children}
-    {hint ? <p className="m-0 text-xs text-muted-foreground">{hint}</p> : null}
+    {hint ? <p className="m-0 text-ui text-muted-foreground">{hint}</p> : null}
   </div>
 );
 

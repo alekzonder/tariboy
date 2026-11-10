@@ -37,7 +37,7 @@ export function MarkdownBody({
       ) : editing ? (
         <CodeMirror value={draft} theme={cmTheme} extensions={langFor(path)} onChange={setDraft} />
       ) : (
-        <pre data-testid="md-source" className="whitespace-pre-wrap p-4 font-mono text-xs">
+        <pre data-testid="md-source" className="whitespace-pre-wrap p-4 font-mono text-ui">
           {content}
         </pre>
       )}

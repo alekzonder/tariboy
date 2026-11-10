@@ -19,7 +19,7 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <div className="h-[330px] w-[840px] overflow-hidden rounded-lg border border-border bg-background">
+      <div className="h-82.5 w-210 overflow-hidden rounded-card border border-border bg-background">
         <Story />
       </div>
     ),

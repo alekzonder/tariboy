@@ -17,7 +17,7 @@ export function SidebarSearch({
     <SearchInput
       className="h-7.5"
       iconClassName="size-3.25"
-      inputClassName="text-body-sm"
+      inputClassName="text-body"
       value={query}
       onChange={(e) => onQuery(e.target.value)}
       aria-label="Search agents"

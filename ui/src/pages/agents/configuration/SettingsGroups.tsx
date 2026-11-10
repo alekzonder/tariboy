@@ -50,7 +50,7 @@ function ModelGroup({ draft, sources }: SectionProps) {
         <DraftField field={field("model")} draft={draft} presets={modelPresets} />
         <DraftField field={field("effort")} draft={draft} presets={effortPresets} />
       </div>
-      <p className="text-xs text-muted-foreground">Takes effect on the next run.</p>
+      <p className="text-ui text-muted-foreground">Takes effect on the next run.</p>
     </SettingsSection>
   );
 }
@@ -84,20 +84,20 @@ function FolderGroup({
           <DraftField field={field("cwd-create")} draft={draft} />
         </div>
       )}
-      <div hidden={open} data-field="cwd" className="space-y-1 text-sm">
+      <div hidden={open} data-field="cwd" className="space-y-1 text-body">
         <div className="flex flex-wrap items-center gap-3">
-          <p className="min-w-0 font-mono text-xs break-all">{cwd || "—"}</p>
+          <p className="min-w-0 font-mono text-ui break-all">{cwd || "—"}</p>
           <Button size="sm" variant="outline" className="h-7" disabled={!stopped} onClick={onEdit}>
             Change…
           </Button>
         </div>
         {cwdError && (
-          <p role="alert" className="text-xs text-destructive">
+          <p role="alert" className="text-ui text-destructive">
             {cwdError}
           </p>
         )}
         {!stopped && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-ui text-muted-foreground">
             Stop the agent before changing its working directory.
           </p>
         )}
@@ -159,12 +159,12 @@ function FieldMessages({ fieldKey, draft }: { fieldKey: string; draft: ConfigDra
   return (
     <>
       {error && (
-        <p id={`${fieldKey}-error`} role="alert" className="text-xs text-destructive">
+        <p id={`${fieldKey}-error`} role="alert" className="text-ui text-destructive">
           {error}
         </p>
       )}
       {helper && (
-        <p id={`${fieldKey}-help`} className="text-xs text-muted-foreground">
+        <p id={`${fieldKey}-help`} className="text-ui text-muted-foreground">
           {helper}
         </p>
       )}
@@ -180,11 +180,11 @@ function AutopilotGroup({ draft, sources }: SectionProps) {
   const [limit, setLimit] = useMinutesText(timeout, toMinutes(timeout), true);
   const changed = (key: string) =>
     draft.dirtyKeys.includes(key) && (
-      <span className="text-xs font-medium text-primary">Changed</span>
+      <span className="text-ui font-medium text-primary">Changed</span>
     );
   return (
     <SettingsSection id="autopilot" title="Autopilot">
-      <div role="radiogroup" aria-label="When the agent runs" className="space-y-1.5 text-sm">
+      <div role="radiogroup" aria-label="When the agent runs" className="space-y-1.5 text-body">
         <label className="flex items-center gap-2">
           <input
             type="radio"
@@ -223,12 +223,12 @@ function AutopilotGroup({ draft, sources }: SectionProps) {
         </div>
         <FieldMessages fieldKey="interval" draft={draft} />
         {sources.view?.schedule && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-ui text-muted-foreground">
             A schedule also starts runs: see Advanced → Schedule and timeouts.
           </p>
         )}
       </div>
-      <div className="space-y-1.5 text-sm">
+      <div className="space-y-1.5 text-body">
         <div className="flex flex-wrap items-center gap-2">
           <label htmlFor="timeout">Stop a run after</label>
           <MinutesInput fieldKey="timeout" draft={draft} text={limit} setText={setLimit} />
@@ -262,7 +262,7 @@ function SpendingGroup({ draft, sources }: SectionProps) {
         })}
       </div>
       {exhausted.length > 0 && (
-        <p role="status" className="text-sm text-destructive">
+        <p role="status" className="text-body text-destructive">
           Out of budget: {exhausted.join(", ")}
         </p>
       )}

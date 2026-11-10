@@ -3,7 +3,7 @@ import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import type { QueueSource } from "@/types";
 import { cn } from "@/lib/utils";
-import { COUNT, EMPTY, LABEL, MONO, QUIET_ACTION } from "./panelStyles";
+import { COUNT, EMPTY, LABEL, MONO, QUIET_ACTION } from "@/components/ui/recipes";
 import RunRow from "./RunRow";
 import { formatTaskTime } from "./taskTime";
 import { errorText } from "@/lib/errors";
@@ -88,7 +88,7 @@ export default function QueueSources({ queue }: { queue: string }) {
               </span>
             )}
             {source.failures > 0 && (
-              <span className={cn(MONO, "text-status-failed")}>
+              <span className={cn(MONO, "text-destructive")}>
                 {source.failures} failed in a row
               </span>
             )}

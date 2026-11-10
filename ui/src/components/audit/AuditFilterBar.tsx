@@ -45,7 +45,7 @@ export function AuditFilterBar({
       {filtering && (
         <button
           onClick={() => setFilter("", "")}
-          className="shrink-0 rounded border px-2 py-1 text-xs hover:bg-accent"
+          className="shrink-0 rounded-chip border px-2 py-1 text-ui hover:bg-accent"
         >
           Clear
         </button>

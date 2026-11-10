@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { COUNT, LABEL, SelectShell } from "./panelStyles";
+import { NativeSelect } from "@/components/ui/native-select";
+import { COUNT, LABEL } from "@/components/ui/recipes";
 import { TaskCommentForm } from "./TaskCommentForm";
 import { TaskCommentList } from "./TaskCommentList";
 import type { TaskComment, PrincipalInfo, WaitingFor } from "@/types";
@@ -99,15 +100,15 @@ export default function TaskComments({
         <span className={COUNT}>{comments.length}</span>
         <label className="ml-auto inline-flex items-center">
           <span className="sr-only">Comment order</span>
-          <SelectShell
+          <NativeSelect
             aria-label="Comment order"
-            className="h-6 pl-2.5 text-meta md:text-meta text-muted-foreground"
+            className="h-6 pl-2.5 text-caption md:text-caption text-muted-foreground"
             value={order}
             onChange={(event) => onOrderChange(event.target.value as "newest" | "oldest")}
           >
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
-          </SelectShell>
+          </NativeSelect>
         </label>
       </div>
       {formFirst ? [commentForm, commentList] : [commentList, commentForm]}

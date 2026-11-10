@@ -32,7 +32,7 @@ export function HostStatus({
   const handlers = { onUpdate, onConnect };
 
   return (
-    <div className="space-y-1 text-xs">
+    <div className="space-y-1 text-ui">
       <div className="flex items-center gap-1">
         {showState && <Badge variant={badgeVariant}>{state.replace("_", " ")}</Badge>}
         {actions.map(({ label, handler }) => {
@@ -43,7 +43,7 @@ export function HostStatus({
                 key={label}
                 variant="ghost"
                 size="sm"
-                className="h-6 px-2 text-xs"
+                className="h-6 px-2 text-ui"
                 aria-label={`${label} ${host.label}`}
                 onClick={onClick}
               >

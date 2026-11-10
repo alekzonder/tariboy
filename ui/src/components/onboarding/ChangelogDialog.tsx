@@ -44,7 +44,7 @@ export default function ChangelogDialog({
                   aria-current={item.version === selected ? "true" : undefined}
                   onClick={() => setSelected(item.version)}
                   className={cn(
-                    "flex w-full items-center gap-1.5 rounded-control px-2 py-1 text-left text-body-sm hover:bg-accent",
+                    "flex w-full items-center gap-1.5 rounded-control px-2 py-1 text-left text-body hover:bg-accent",
                     item.version === selected && "bg-accent font-medium",
                   )}
                 >

@@ -11,7 +11,7 @@ export default meta;
 
 type Story = StoryObj;
 
-const help = "text-xs text-muted-foreground";
+const help = "text-ui text-muted-foreground";
 
 const Field = ({ id, label, children }: { id: string; label: string; children: ReactNode }) => (
   <div className="grid gap-1.5">
@@ -22,7 +22,7 @@ const Field = ({ id, label, children }: { id: string; label: string; children: R
 
 export const FieldLabel: Story = {
   render: () => (
-    <div className="grid w-[320px] gap-1.5">
+    <div className="grid w-80 gap-1.5">
       <Label htmlFor="preview-label-name">name</Label>
       <Input id="preview-label-name" placeholder="empty = generated" />
     </div>
@@ -31,7 +31,7 @@ export const FieldLabel: Story = {
 
 export const FormLabels: Story = {
   render: () => (
-    <div className="grid w-[360px] gap-3">
+    <div className="grid w-90 gap-3">
       <Field id="preview-label-image" label="image *">
         <Input id="preview-label-image" defaultValue="worker:v2" />
       </Field>
@@ -47,7 +47,7 @@ export const FormLabels: Story = {
 
 export const WithIconAndHelp: Story = {
   render: () => (
-    <div className="grid w-[360px] gap-1.5">
+    <div className="grid w-90 gap-1.5">
       <Label htmlFor="preview-label-token">
         <Lock />
         daemon token
@@ -60,7 +60,7 @@ export const WithIconAndHelp: Story = {
 
 export const SwitchRow: Story = {
   render: () => (
-    <div className="flex w-[360px] items-center justify-between gap-3">
+    <div className="flex w-90 items-center justify-between gap-3">
       <div>
         <Label htmlFor="preview-label-interactive">Interactive</Label>
         <p className={`${help} mt-0.5 mb-0`}>Attach a terminal console.</p>
@@ -72,7 +72,7 @@ export const SwitchRow: Story = {
 
 export const Disabled: Story = {
   render: () => (
-    <div className="group grid w-[320px] gap-1.5" data-disabled="true">
+    <div className="group grid w-80 gap-1.5" data-disabled="true">
       <Label htmlFor="preview-label-host">Host</Label>
       <Input id="preview-label-host" defaultValue="This daemon (local)" disabled />
       <span className={help}>The host cannot be changed after creation.</span>

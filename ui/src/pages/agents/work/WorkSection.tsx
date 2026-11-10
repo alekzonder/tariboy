@@ -24,7 +24,7 @@ export function WorkSection({
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <h2
           id={id}
-          className="text-meta font-medium tracking-[.02em] text-muted-foreground uppercase"
+          className="text-caption font-medium tracking-wide text-muted-foreground uppercase"
         >
           {title} ({count})
         </h2>
@@ -56,7 +56,7 @@ export function WorkRow({
     <li className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-control px-2 py-1 hover:bg-accent">
       <button
         type="button"
-        className="flex min-w-0 flex-1 basis-60 items-baseline gap-2 text-left text-body-sm"
+        className="flex min-w-0 flex-1 basis-60 items-baseline gap-2 text-left text-body"
         onClick={onOpen}
       >
         <span className="shrink-0 font-mono text-caption text-muted-foreground">{task.key}</span>

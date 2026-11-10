@@ -140,7 +140,7 @@
   grid-template-columns: 9px minmax(0, 1fr);
   translate: none;
   padding: 0;
-  border-radius: var(--panel-radius);
+  border-radius: var(--radius-panel);
   gap: 0;
   overflow: hidden;
   box-shadow: var(--lift);

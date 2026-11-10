@@ -1,7 +1,7 @@
 import { useApi } from "@/components/apiContext";
 import type { ScriptRun } from "@/types";
 import { cn } from "@/lib/utils";
-import { COUNT, EMPTY, LABEL, MONO } from "./panelStyles";
+import { COUNT, EMPTY, LABEL, MONO } from "@/components/ui/recipes";
 import RunRow from "./RunRow";
 
 /**
@@ -16,7 +16,7 @@ export default function WorkflowRuns({ taskKey, runs }: { taskKey: string; runs:
       <div className="flex items-center gap-1.5">
         <span className={LABEL}>Script runs</span>
         <span className={COUNT}>{runs.length}</span>
-        <span className="text-meta text-muted-foreground">latest 20</span>
+        <span className="text-caption text-muted-foreground">latest 20</span>
       </div>
       {sorted.length === 0 && <span className={EMPTY}>No script has run yet.</span>}
       <ul className="flex min-w-0 flex-col gap-1">

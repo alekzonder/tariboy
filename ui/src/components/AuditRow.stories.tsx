@@ -162,7 +162,7 @@ const thinkingRow = (key: number): DisplayRow => ({
 });
 
 const Sheet = ({ children }: { children: ReactNode }) => (
-  <div className="w-[700px] rounded-md border border-border bg-muted p-2">{children}</div>
+  <div className="w-175 rounded-control border border-border bg-muted p-2">{children}</div>
 );
 
 export const IterationTranscript: Story = {
@@ -190,7 +190,7 @@ function ExpandedDemo() {
     if (d) d.open = true;
   }, []);
   return (
-    <div ref={ref} className="w-[700px] rounded-md border border-border bg-muted p-2">
+    <div ref={ref} className="w-175 rounded-control border border-border bg-muted p-2">
       <Line scoped open row={eventRow(4, toolUse)} />
     </div>
   );

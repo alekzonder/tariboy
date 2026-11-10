@@ -18,14 +18,14 @@ function ContextEditor({ name }: { name: string }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Context</CardTitle>
+        <CardTitle className="text-title">Context</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         <Textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={8}
-          className="font-mono text-xs"
+          className="font-mono text-ui"
         />
         <Button
           size="sm"

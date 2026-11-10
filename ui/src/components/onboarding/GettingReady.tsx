@@ -6,10 +6,10 @@ import { checklistRows, harnessLabel, type ChecklistRow } from "@/lib/onboarding
 import { errorText } from "@/lib/errors";
 
 const ICONS = {
-  done: <Check className="size-4 text-emerald-600" aria-hidden />,
+  done: <Check className="size-4 text-success" aria-hidden />,
   working: <Loader2 className="size-4 animate-spin text-muted-foreground" aria-hidden />,
   failed: <X className="size-4 text-destructive" aria-hidden />,
-  warn: <AlertTriangle className="size-4 text-amber-600" aria-hidden />,
+  warn: <AlertTriangle className="size-4 text-warning" aria-hidden />,
 };
 
 /** The "Getting ready" rows of one host: what the daemon set up by itself,
@@ -45,7 +45,7 @@ function ChecklistItem({ row, retry }: { row: ChecklistRow; retry: () => Promise
     }
   };
   return (
-    <li data-state={row.state} className="text-sm">
+    <li data-state={row.state} className="text-body">
       <div className="flex flex-wrap items-center gap-2">
         {ICONS[row.state]}
         <span>{row.text}</span>
@@ -56,13 +56,13 @@ function ChecklistItem({ row, retry }: { row: ChecklistRow; retry: () => Promise
         )}
       </div>
       {row.error && (
-        <details className="ml-6 text-xs text-muted-foreground">
+        <details className="ml-6 text-ui text-muted-foreground">
           <summary className="cursor-pointer">Details</summary>
           <pre className="whitespace-pre-wrap break-words">{row.error}</pre>
         </details>
       )}
       {row.install && row.install.length > 0 && (
-        <details className="ml-6 text-xs text-muted-foreground" open={row.state === "warn"}>
+        <details className="ml-6 text-ui text-muted-foreground" open={row.state === "warn"}>
           <summary className="cursor-pointer">
             {row.state === "warn" ? "How to install" : "Install another…"}
           </summary>
@@ -76,7 +76,7 @@ function ChecklistItem({ row, retry }: { row: ChecklistRow; retry: () => Promise
         </details>
       )}
       {retryError && (
-        <p role="alert" className="ml-6 text-xs text-destructive">
+        <p role="alert" className="ml-6 text-ui text-destructive">
           {retryError}
         </p>
       )}

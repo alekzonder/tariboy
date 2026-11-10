@@ -77,17 +77,17 @@ export function SupportBundle() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Support bundle</CardTitle>
+        <CardTitle className="text-title">Support bundle</CardTitle>
         <CardDescription>Export a bounded, privacy-safe ZIP for troubleshooting.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3 text-sm">
+      <CardContent className="space-y-3 text-body">
         <div className="space-y-1">
           <label className="font-medium" htmlFor="support-host">
             Host
           </label>
           <select
             id="support-host"
-            className="block h-9 w-full rounded-md border bg-background px-3"
+            className="block h-9 w-full rounded-control border bg-background px-3"
             value={hostId}
             disabled={!available || loading || busy}
             onChange={(event) => setHostId(event.target.value)}
@@ -106,7 +106,7 @@ export function SupportBundle() {
             and redacted lifecycle log lines. Other hosts are not collected.
           </p>
         </div>
-        <div className="space-y-1 rounded-md border p-3">
+        <div className="space-y-1 rounded-control border p-3">
           <label className="flex items-center gap-2 font-medium">
             <input
               type="checkbox"

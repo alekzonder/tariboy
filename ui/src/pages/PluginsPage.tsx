@@ -33,7 +33,7 @@ function PluginRow({
     <tr className="border-t">
       <td className="px-3 py-1.5 font-mono">{pl.name}</td>
       <td className="px-3 py-1.5">{pl.version}</td>
-      <td className="px-3 py-1.5 text-xs text-muted-foreground">{(pl.types || []).join(", ")}</td>
+      <td className="px-3 py-1.5 text-ui text-muted-foreground">{(pl.types || []).join(", ")}</td>
       <td className="px-3 py-1.5">
         {pl.state === "running" ? (
           <Badge>running</Badge>
@@ -115,10 +115,10 @@ export default function PluginsPage() {
 
   return (
     <div className="space-y-4 p-6">
-      <h2 className="text-lg font-semibold">Installed plugins</h2>
+      <h2 className="text-heading font-semibold">Installed plugins</h2>
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Install plugin</CardTitle>
+          <CardTitle className="text-title">Install plugin</CardTitle>
         </CardHeader>
         <CardContent className="flex items-end gap-2">
           <Input
@@ -143,9 +143,9 @@ export default function PluginsPage() {
           </Button>
         </CardContent>
       </Card>
-      <div className="overflow-x-auto rounded border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+      <div className="overflow-x-auto rounded-chip border">
+        <table className="w-full text-body">
+          <thead className="bg-subtle text-left text-ui text-muted-foreground">
             <tr>
               <th className="px-3 py-2">Name</th>
               <th className="px-3 py-2">Version</th>
@@ -176,11 +176,11 @@ export default function PluginsPage() {
       {logs && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base font-mono">{logs.name} logs</CardTitle>
+            <CardTitle className="text-title font-mono">{logs.name} logs</CardTitle>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="h-64 rounded border bg-muted/30 p-2">
-              <pre className="whitespace-pre-wrap text-xs">
+            <ScrollArea className="h-64 rounded-chip border bg-subtle p-2">
+              <pre className="whitespace-pre-wrap text-ui">
                 {logs.lines.join("\n") || "(no logs)"}
               </pre>
             </ScrollArea>

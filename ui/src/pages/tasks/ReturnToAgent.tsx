@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { WorkflowView } from "@/types";
 import { cn } from "@/lib/utils";
-import { EMPTY, LABEL, SelectShell } from "./panelStyles";
+import { NativeSelect } from "@/components/ui/native-select";
+import { EMPTY, LABEL } from "@/components/ui/recipes";
 import { useWorkflowConfirm } from "./WorkflowConfirm";
 import { defaultReturnTarget, returnTargets, type ReturnTarget } from "./workflowGraph";
 import { errorText } from "@/lib/errors";
@@ -26,7 +27,7 @@ function ReturnTargetSelect({
   const byOutcome = targets.filter((candidate) => candidate.via === "advance");
   const byMove = targets.filter((candidate) => candidate.via === "move");
   return (
-    <SelectShell
+    <NativeSelect
       autoFocus
       aria-label="Return to status"
       value={value}
@@ -52,7 +53,7 @@ function ReturnTargetSelect({
           ))}
         </optgroup>
       )}
-    </SelectShell>
+    </NativeSelect>
   );
 }
 
@@ -138,7 +139,7 @@ export default function ReturnToAgent({
   const busy = sending || checking;
   return (
     <form
-      className="flex min-w-0 flex-col gap-1.5 rounded-md bg-muted/50 p-2.5"
+      className="flex min-w-0 flex-col gap-1.5 rounded-control bg-subtle p-2.5"
       onSubmit={(event) => {
         event.preventDefault();
         submit();
@@ -161,7 +162,7 @@ export default function ReturnToAgent({
         disabled={busy}
         maxLength={MAX_MESSAGE}
         onChange={(event) => setMessage(event.target.value)}
-        className="min-h-16 rounded-md border-0 bg-muted text-body-sm md:text-body-sm"
+        className="min-h-16 rounded-control border-0 bg-muted text-body md:text-body"
       />
       <div className="flex items-center gap-1.5">
         <Button type="submit" size="sm" className={cn("h-6.5")} disabled={busy || !chosen}>
@@ -179,7 +180,7 @@ export default function ReturnToAgent({
         </Button>
       </div>
       {error && (
-        <p role="alert" className="text-ui text-status-failed">
+        <p role="alert" className="text-ui text-destructive">
           {error}
         </p>
       )}

@@ -38,8 +38,8 @@ export default function UsagePage() {
   return (
     <div className="space-y-4 p-6">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Usage</h2>
-        <label className="flex items-center gap-2 text-sm">
+        <h2 className="text-heading font-semibold">Usage</h2>
+        <label className="flex items-center gap-2 text-body">
           <span className="text-muted-foreground">Group</span>
           <select
             aria-label="Group"
@@ -48,7 +48,7 @@ export default function UsagePage() {
               selectedGroupRef.current = event.target.value;
               setSelectedGroup(event.target.value);
             }}
-            className="h-8 rounded border bg-background px-2"
+            className="h-8 rounded-chip border bg-background px-2"
           >
             <option value="">All groups</option>
             <option value={UNGROUPED_FILTER}>Ungrouped</option>
@@ -89,12 +89,12 @@ export default function UsagePage() {
 function UsageByAgent({ rows }: { rows: UsageReport["rows"] }) {
   return (
     <section aria-labelledby="usage-aggregates-heading">
-      <h2 id="usage-aggregates-heading" className="mb-2 text-base font-semibold">
+      <h2 id="usage-aggregates-heading" className="mb-2 text-title font-semibold">
         Usage by agent
       </h2>
-      <div className="overflow-x-auto rounded border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+      <div className="overflow-x-auto rounded-chip border">
+        <table className="w-full text-body">
+          <thead className="bg-subtle text-left text-ui text-muted-foreground">
             <tr>
               <th className="px-3 py-2">Agent</th>
               <th className="px-3 py-2">Image</th>
@@ -138,12 +138,12 @@ function UsageByAgent({ rows }: { rows: UsageReport["rows"] }) {
 function RecentRequests({ requests }: { requests: UsageReport["requests"] }) {
   return (
     <section aria-labelledby="recent-requests-heading">
-      <h2 id="recent-requests-heading" className="mb-2 text-base font-semibold">
+      <h2 id="recent-requests-heading" className="mb-2 text-title font-semibold">
         Recent requests
       </h2>
-      <div className="overflow-x-auto rounded border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+      <div className="overflow-x-auto rounded-chip border">
+        <table className="w-full text-body">
+          <thead className="bg-subtle text-left text-ui text-muted-foreground">
             <tr>
               <th className="px-3 py-2">Timestamp</th>
               <th className="px-3 py-2">Agent</th>
@@ -187,10 +187,10 @@ function RecentRequests({ requests }: { requests: UsageReport["requests"] }) {
 function DailyUsage({ series }: { series: UsageSeriesPoint[] }) {
   const max = series.reduce((highest, point) => Math.max(highest, point.cost_usd), 0);
   return (
-    <section aria-label="Daily usage" className="rounded border p-3">
-      <h2 className="text-base font-semibold">Daily usage</h2>
+    <section aria-label="Daily usage" className="rounded-chip border p-3">
+      <h2 className="text-title font-semibold">Daily usage</h2>
       {series.length === 0 ? (
-        <p className="mt-2 text-sm text-muted-foreground">No daily usage yet.</p>
+        <p className="mt-2 text-body text-muted-foreground">No daily usage yet.</p>
       ) : (
         <div className="mt-3 flex h-32 items-end gap-2" aria-label="Daily usage bars">
           {series.map((point) => {
@@ -199,13 +199,13 @@ function DailyUsage({ series }: { series: UsageSeriesPoint[] }) {
             return (
               <div key={point.bucket_start} className="flex min-w-0 flex-1 flex-col justify-end">
                 <div
-                  className="rounded-t bg-primary"
+                  className="rounded-t-chip bg-primary"
                   role="img"
                   aria-label={detail}
                   style={{ height }}
                 />
                 <span className="sr-only">{detail}</span>
-                <span className="mt-1 truncate text-center text-xs text-muted-foreground">
+                <span className="mt-1 truncate text-center text-ui text-muted-foreground">
                   {fmtDateTime(point.bucket_start)}
                 </span>
               </div>

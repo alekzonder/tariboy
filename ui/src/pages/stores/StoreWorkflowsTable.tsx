@@ -18,16 +18,14 @@ function StoreWorkflowRow({
   const latest = latestWorkflowVersion(workflowImages, workflow.name);
   const status = workflowStatus(workflow, latest);
   return (
-    <tr
-      className={`border-t ${status === "Update needed" ? "bg-amber-50 dark:bg-amber-950/30" : ""}`}
-    >
+    <tr className={`border-t ${status === "Update needed" ? "bg-warning-soft" : ""}`}>
       <td className="px-3 py-2 font-mono">{workflow.name}</td>
-      <td className="px-3 py-2 font-mono text-xs">{workflow.version || "Not specified"}</td>
-      <td className="px-3 py-2 font-mono text-xs">
+      <td className="px-3 py-2 font-mono text-ui">{workflow.version || "Not specified"}</td>
+      <td className="px-3 py-2 font-mono text-ui">
         {latest === null ? "Unknown" : (latest ?? "Not built")}
       </td>
       <td
-        className={`px-3 py-2 text-xs ${workflow.error ? "text-destructive" : "text-muted-foreground"}`}
+        className={`px-3 py-2 text-ui ${workflow.error ? "text-destructive" : "text-muted-foreground"}`}
       >
         {status}
       </td>
@@ -51,9 +49,9 @@ export default function StoreWorkflowsTable({
   ...row
 }: Omit<StoreWorkflowRowProps, "workflow"> & { workflows: StoreWorkflowView[] | undefined }) {
   return (
-    <div className="overflow-x-auto rounded border">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+    <div className="overflow-x-auto rounded-chip border">
+      <table className="w-full text-body">
+        <thead className="bg-subtle text-left text-ui text-muted-foreground">
           <tr>
             <th className="px-3 py-2">Workflow</th>
             <th className="px-3 py-2">Source workflow_version</th>

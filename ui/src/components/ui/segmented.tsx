@@ -25,7 +25,7 @@ export function Segmented<T extends string>({
       role="radiogroup"
       aria-label={label}
       data-slot="segmented"
-      className={cn("flex shrink-0 gap-0.5 rounded-[9px] bg-muted p-0.5", className)}
+      className={cn("flex shrink-0 gap-0.5 rounded-control bg-muted p-0.5", className)}
     >
       {options.map((option, index) => {
         const selected = option.value === value;
@@ -48,9 +48,9 @@ export function Segmented<T extends string>({
               onChange(options[next].value);
             }}
             className={cn(
-              "h-6 rounded-[7px] px-2.5 text-[12px]",
+              "h-6 rounded-control px-2.5 text-ui",
               selected
-                ? "bg-card font-medium text-foreground shadow-[var(--raise)]"
+                ? "bg-card font-medium text-foreground shadow-raise"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >

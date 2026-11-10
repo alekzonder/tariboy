@@ -65,7 +65,7 @@ function AgentFacts({
             data-testid="agent-cwd"
             title={cwd}
             dir="rtl"
-            className="max-w-full min-w-0 truncate text-left font-mono text-meta"
+            className="max-w-full min-w-0 truncate text-left font-mono text-caption"
           >
             {/* dir=rtl cuts the start; bdi keeps the path itself left to right. */}
             <bdi>{cwd}</bdi>
@@ -159,14 +159,14 @@ export function AgentWorkspaceHeader(props: AgentWorkspaceHeaderProps) {
         <div className="flex min-w-0 flex-1 flex-col gap-1 max-[75rem]:basis-full">
           <div className="flex min-w-0 items-center gap-2.25">
             <StatusDot tone={agentStateTone(agentState)} size={8} />
-            <h1 className="min-w-0 truncate text-title font-semibold tracking-[-.01em]">
+            <h1 className="min-w-0 truncate text-title font-semibold tracking-tight">
               {agent.name}
             </h1>
           </div>
           <p
             data-testid="agent-sentence"
             className={cn(
-              "text-body-sm",
+              "text-body",
               agentState.kind === "error" ? "font-medium text-destructive" : "text-foreground",
             )}
           >

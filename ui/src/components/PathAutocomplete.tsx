@@ -153,7 +153,7 @@ export function PathAutocomplete({
       {open && (
         <CommandList
           data-slot="path-autocomplete-list"
-          className="absolute top-full left-0 z-50 mt-1 w-full rounded-lg border bg-popover shadow-md"
+          className="absolute top-full left-0 z-overlay mt-1 w-full rounded-card border bg-popover shadow-lift"
         >
           <CommandEmpty>No matching folders</CommandEmpty>
           {filtered.map((e, i) => (

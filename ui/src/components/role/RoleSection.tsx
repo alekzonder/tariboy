@@ -69,7 +69,7 @@ function CollapsibleRole({
           aria-expanded={expanded}
           aria-controls={bodyId}
           onClick={expanded ? showLess : () => setExpanded(true)}
-          className="mt-1 h-8 rounded-control text-sm text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          className="mt-1 h-8 rounded-control text-body text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
           {expanded ? "Show less" : "Show all"}
         </button>
@@ -89,11 +89,11 @@ function RoleBody({
   headingId: string;
   fadeClass: string;
 }) {
-  if (text === null) return <p className="text-sm text-muted-foreground">{empty}</p>;
+  if (text === null) return <p className="text-body text-muted-foreground">{empty}</p>;
   return <CollapsibleRole text={text} headingId={headingId} fadeClass={fadeClass} />;
 }
 
-const source = <span className="text-xs text-muted-foreground">From ROLE.md</span>;
+const source = <span className="text-ui text-muted-foreground">From ROLE.md</span>;
 
 /**
  * The Role of an image (`card`, a card on the Overview tab) or of a workflow
@@ -116,7 +116,7 @@ export function RoleSection({
       <section aria-labelledby={headingId} className="min-w-0">
         <Card>
           <CardHeader className="flex items-baseline justify-between gap-2 pb-2">
-            <h2 id={headingId} className="font-heading text-base leading-snug font-medium">
+            <h2 id={headingId} className="font-heading text-title leading-snug font-medium">
               Role
             </h2>
             {text !== null && source}
@@ -138,7 +138,7 @@ export function RoleSection({
       {text === null ? (
         <RoleBody text={text} empty={empty} headingId={headingId} fadeClass="" />
       ) : (
-        <div className="rounded border p-3">
+        <div className="rounded-chip border p-3">
           <RoleBody text={text} empty={empty} headingId={headingId} fadeClass="from-background" />
         </div>
       )}

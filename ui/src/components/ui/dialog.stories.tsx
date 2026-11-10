@@ -24,16 +24,16 @@ type Story = StoryObj;
 // What sits under the overlay: the terminals workspace the dialogs are raised
 // from. Keeps the dimmed/blurred backdrop honest instead of dimming blank white.
 const Workspace = () => (
-  <div className="flex w-[720px] gap-4">
-    <div className="grid w-[180px] content-start gap-1.5">
-      <div className="text-xs text-muted-foreground">This daemon (local)</div>
+  <div className="flex w-180 gap-4">
+    <div className="grid w-45 content-start gap-1.5">
+      <div className="text-ui text-muted-foreground">This daemon (local)</div>
       {["builder", "reviewer", "packager", "docs-bot"].map((name) => (
-        <div key={name} className="rounded-md px-2 py-1 text-[13px]">
+        <div key={name} className="rounded-control px-2 py-1 text-body">
           {name}
         </div>
       ))}
     </div>
-    <div className="h-[220px] flex-1 rounded-lg border border-border bg-muted" />
+    <div className="h-55 flex-1 rounded-card border border-border bg-muted" />
   </div>
 );
 
@@ -139,10 +139,10 @@ export const Confirm: Story = {
         {transferHosts.map((row) => (
           <div
             key={row.host}
-            className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-[13px]"
+            className="flex items-center gap-2 rounded-control border border-border px-2 py-1.5 text-body"
           >
             <span>{row.host}</span>
-            <span className="ml-auto text-xs text-muted-foreground">{row.note}</span>
+            <span className="ml-auto text-ui text-muted-foreground">{row.note}</span>
           </div>
         ))}
       </div>
@@ -179,7 +179,7 @@ export const NoCloseButton: Story = {
       </DialogHeader>
       <div className="flex items-center gap-2">
         <Badge variant="secondary">in review</Badge>
-        <span className="text-xs text-muted-foreground">assigned to reviewer · worker:v2</span>
+        <span className="text-ui text-muted-foreground">assigned to reviewer · worker:v2</span>
       </div>
       <DialogFooter>
         <Button variant="outline">Reassign</Button>

@@ -135,7 +135,7 @@ function KeyCell({ row, style, expanded, onToggle, queues }: TaskRowCellProps) {
       {row.crossQueue && row.parentQueue && (
         <QueueMarker label={queueMarkerLabel(row.task, row.parentQueue, queues ?? [])} />
       )}
-      <span className="min-w-0 truncate font-mono text-meta text-muted-foreground tabular-nums">
+      <span className="min-w-0 truncate font-mono text-caption text-muted-foreground tabular-nums">
         {row.task.key}
       </span>
     </span>
@@ -161,7 +161,7 @@ function ParentLink({
     </>
   );
   const look =
-    "inline-flex min-h-6 min-w-6 shrink-0 items-center justify-center gap-1 text-meta text-muted-foreground";
+    "inline-flex min-h-6 min-w-6 shrink-0 items-center justify-center gap-1 text-caption text-muted-foreground";
   if (!link.canOpen || !onOpenTask) {
     return (
       <span title="You cannot open this task" className={look}>
@@ -175,7 +175,7 @@ function ParentLink({
       aria-label={`Open parent task ${link.key}`}
       className={cn(
         look,
-        "rounded-sm hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        "rounded-chip hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
       )}
       onClick={() => onOpenTask(link.key)}
     >
@@ -218,7 +218,7 @@ function AgentCell({ row, style }: TaskRowCellProps) {
   return (
     <span data-column="agent" style={style} className="shrink-0">
       {row.task.assignee && (
-        <span className="inline-flex h-4.75 max-w-full items-center truncate rounded-sm bg-muted px-1.75 text-meta">
+        <span className="inline-flex h-4.75 max-w-full items-center truncate rounded-chip bg-muted px-1.75 text-caption">
           {row.task.assignee.replace(/^agent:/, "")}
         </span>
       )}
@@ -285,7 +285,7 @@ export function TaskStatusView({
       {task.workflow_step && (
         <span
           title={`Step ${task.workflow_step.index} of ${task.workflow_step.total}`}
-          className="hidden shrink-0 font-mono text-tiny tabular-nums text-muted-foreground sm:inline"
+          className="hidden shrink-0 font-mono text-caption tabular-nums text-muted-foreground sm:inline"
         >
           {task.workflow_step.index}/{task.workflow_step.total}
         </span>
@@ -304,7 +304,7 @@ function DurationCell({ row, style }: TaskRowCellProps) {
     <span
       data-column="duration"
       style={style}
-      className="shrink-0 truncate text-right font-mono text-meta text-muted-foreground tabular-nums"
+      className="shrink-0 truncate text-right font-mono text-caption text-muted-foreground tabular-nums"
     >
       {formatTaskDuration(row.task)}
     </span>
@@ -366,7 +366,7 @@ function PriorityMenu({
       <DropdownMenuTrigger asChild disabled={saving}>
         <button
           type="button"
-          className="task-priority flex rounded-sm disabled:opacity-50"
+          className="task-priority flex rounded-chip disabled:opacity-50"
           aria-label={priorityName(priority)}
         >
           <PriorityTag priority={priority} aria-hidden="true" className="cursor-pointer" />

@@ -16,7 +16,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Unreachable: Story = {
   render: () => (
-    <div className="w-[720px]">
+    <div className="w-180">
       <DaemonBanner />
     </div>
   ),
@@ -26,12 +26,12 @@ export const Unreachable: Story = {
 // view. The frame is story scaffolding; the bar is the shipped component.
 export const UnderAppChrome: Story = {
   render: () => (
-    <div className="w-[720px] overflow-hidden rounded-lg border border-border bg-background">
-      <div className="flex h-12 items-center border-b border-border px-4 text-sm text-muted-foreground">
+    <div className="w-180 overflow-hidden rounded-card border border-border bg-background">
+      <div className="flex h-12 items-center border-b border-border px-4 text-body text-muted-foreground">
         Tariboy
       </div>
       <DaemonBanner />
-      <div className="p-6 text-sm text-muted-foreground">workspace</div>
+      <div className="p-6 text-body text-muted-foreground">workspace</div>
     </div>
   ),
 };

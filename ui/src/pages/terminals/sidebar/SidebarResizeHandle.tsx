@@ -59,7 +59,7 @@ export function SidebarResizeHandle({
       onPointerDown={startDrag}
       onKeyDown={onKeyDown}
       onDoubleClick={() => onResize(DEFAULT_SIDEBAR_WIDTH)}
-      className="w-2 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-primary/30 focus-visible:bg-primary/30 focus-visible:outline-none"
+      className="w-2 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-primary-mid focus-visible:bg-primary-mid focus-visible:outline-none"
     />
   );
 }

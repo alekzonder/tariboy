@@ -3,24 +3,24 @@ import { opensWebLinks, openExternalUrl } from "@/lib/desktop";
 import { toast } from "sonner";
 
 const markdownBodyStyles = (headings: string) => [
-  "min-w-0 max-w-none wrap-anywhere text-body-sm leading-[1.55] text-pretty [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0",
+  "min-w-0 max-w-none wrap-anywhere text-body leading-normal text-pretty [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0",
   `[&_:is(h1,h2,h3,h4,h5,h6)]:mt-4 [&_:is(h1,h2,h3,h4,h5,h6)]:mb-2 [&_:is(h1,h2,h3,h4,h5,h6)]:font-semibold ${headings}`,
   "[&_strong]:font-bold [&_em]:italic [&_del]:line-through [&_s]:line-through [&_a]:text-primary [&_a]:underline",
   "[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1",
   "[&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-4 [&_blockquote]:text-muted-foreground",
-  "[&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:font-mono [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 [&_pre_code]:p-0 [&_hr]:my-4",
+  "[&_code]:rounded-chip [&_code]:bg-muted [&_code]:px-1 [&_code]:font-mono [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-control [&_pre]:bg-muted [&_pre]:p-3 [&_pre_code]:p-0 [&_hr]:my-4",
   "[&_table]:my-3 [&_table]:block [&_table]:w-full [&_table]:overflow-x-auto [&_table]:border-collapse [&_td]:min-w-24 [&_td]:border [&_td]:p-2 [&_th]:min-w-24 [&_th]:border [&_th]:bg-muted [&_th]:p-2",
   "[&_ul[data-type=taskList]]:list-none [&_ul[data-type=taskList]]:pl-0 [&_li[data-type=taskItem]]:flex [&_li[data-type=taskItem]]:items-start [&_li[data-type=taskItem]]:gap-2 [&_li[data-type=taskItem]>div]:min-w-0 [&_li[data-type=taskItem]>div]:flex-1 [&_li[data-type=taskItem]>label]:pt-0.5 [&_.task-list-item]:list-none [&_.task-list-item>input]:mr-2",
 ];
 
 export const markdownStyles = markdownBodyStyles(
-  "[&_h1]:text-2xl [&_h2]:text-xl [&_h3]:text-lg",
+  "[&_h1]:text-display [&_h2]:text-heading [&_h3]:text-heading",
 ).join(" ");
 
 /** A ROLE.md sits inside a card or a form: its headings stay small, and a table
  *  keeps its words whole and scrolls inside its box instead of breaking them. */
 export const roleMarkdownStyles = [
-  ...markdownBodyStyles("[&_h1]:text-lg [&_h2]:text-base [&_:is(h3,h4,h5,h6)]:text-sm"),
+  ...markdownBodyStyles("[&_h1]:text-heading [&_h2]:text-title [&_:is(h3,h4,h5,h6)]:text-body"),
   "[&_:is(th,td)]:wrap-normal [&>:first-child]:mt-0",
 ].join(" ");
 

@@ -7,7 +7,7 @@ export function TransferSummary(props: {
   selectedCount: number;
 }) {
   return (
-    <p aria-live="polite" className="text-sm text-muted-foreground">
+    <p aria-live="polite" className="text-body text-muted-foreground">
       {transferSummaryText(props)}
     </p>
   );

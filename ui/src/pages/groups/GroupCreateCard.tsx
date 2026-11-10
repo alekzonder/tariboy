@@ -26,7 +26,7 @@ export function GroupCreateCard({ api, name, onNameChange, lead, onLeadChange, o
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Create group</CardTitle>
+        <CardTitle className="text-title">Create group</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-wrap items-end gap-2">
         <Input

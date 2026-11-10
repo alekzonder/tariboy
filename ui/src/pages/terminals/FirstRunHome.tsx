@@ -19,7 +19,7 @@ export function FirstRunHome({
   return (
     <div className="mx-auto max-w-2xl space-y-6 overflow-y-auto p-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">Welcome to Tariboy</h1>
+        <h1 className="text-display font-semibold">Welcome to Tariboy</h1>
         <p className="text-muted-foreground">Run an AI coding agent in one of your repositories.</p>
       </div>
       {status && (
@@ -30,7 +30,7 @@ export function FirstRunHome({
           <GettingReady status={status} retry={retry} />
         </section>
       )}
-      <section aria-labelledby="first-run-card" className="space-y-4 rounded-lg border p-4">
+      <section aria-labelledby="first-run-card" className="space-y-4 rounded-card border p-4">
         <h2 id="first-run-card" className="font-medium">
           Run your first agent
         </h2>
@@ -39,7 +39,7 @@ export function FirstRunHome({
           <CreateAgentFooter form={form} tourAnchor={TOUR_ANCHORS.newAgent} />
         </div>
       </section>
-      <p className="text-sm text-muted-foreground">
+      <p className="text-body text-muted-foreground">
         Later: connect another computer over SSH in Settings.
       </p>
     </div>

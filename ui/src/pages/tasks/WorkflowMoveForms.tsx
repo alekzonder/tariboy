@@ -4,7 +4,8 @@ import { Input } from "@/components/ui/input";
 import type { WorkflowView } from "@/types";
 import { errorText } from "@/lib/errors";
 import { cn } from "@/lib/utils";
-import { FIELD, LABEL, SelectShell } from "./panelStyles";
+import { NativeSelect } from "@/components/ui/native-select";
+import { FIELD, LABEL } from "@/components/ui/recipes";
 import { useMounted } from "./workflowShared";
 
 /**
@@ -63,7 +64,7 @@ export function MoveForm({
   const { open, terminal } = moveTargets(view);
   return (
     <form
-      className="flex min-w-0 flex-col gap-1.5 rounded-md bg-muted/50 p-2.5"
+      className="flex min-w-0 flex-col gap-1.5 rounded-control bg-subtle p-2.5"
       onSubmit={(event) => {
         event.preventDefault();
         submit(() => onMove(to, reason.trim()));
@@ -71,7 +72,7 @@ export function MoveForm({
     >
       <span className={LABEL}>Move to status</span>
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        <SelectShell
+        <NativeSelect
           autoFocus
           aria-label="Target status"
           value={to}
@@ -93,7 +94,7 @@ export function MoveForm({
               ))}
             </optgroup>
           )}
-        </SelectShell>
+        </NativeSelect>
         <Input
           aria-label="Reason"
           placeholder="Reason (optional)"
@@ -109,7 +110,7 @@ export function MoveForm({
         </Button>
       </div>
       {error && (
-        <p role="alert" className="text-ui text-status-failed">
+        <p role="alert" className="text-ui text-destructive">
           {error}
         </p>
       )}
@@ -128,7 +129,7 @@ export function UpgradeForm({
   const { error, busy, submit } = useReasonSubmit(onDone);
   return (
     <form
-      className="flex min-w-0 flex-col gap-1.5 rounded-md bg-muted/50 p-2.5"
+      className="flex min-w-0 flex-col gap-1.5 rounded-control bg-subtle p-2.5"
       onSubmit={(event) => {
         event.preventDefault();
         submit(() => onUpgrade(reason.trim()));
@@ -152,7 +153,7 @@ export function UpgradeForm({
         </Button>
       </div>
       {error && (
-        <p role="alert" className="text-ui text-status-failed">
+        <p role="alert" className="text-ui text-destructive">
           {error}
         </p>
       )}

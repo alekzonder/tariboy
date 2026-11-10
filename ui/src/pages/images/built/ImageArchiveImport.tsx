@@ -27,7 +27,7 @@ function ImportFields({
 }) {
   return (
     <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
-      <label className="text-xs">
+      <label className="text-ui">
         Import name
         <Input
           aria-label="Import name"
@@ -35,7 +35,7 @@ function ImportFields({
           onChange={(event) => onChange({ ...imageImport, name: event.target.value })}
         />
       </label>
-      <label className="text-xs">
+      <label className="text-ui">
         Import tag
         <Input
           aria-label="Import tag"
@@ -77,8 +77,8 @@ export function ImageArchiveImport({
   const [imageImport, setImageImport] = useState<PendingImport | null>(null);
 
   return (
-    <div className="rounded border p-3">
-      <label htmlFor="image-archive" className="text-sm font-medium">
+    <div className="rounded-chip border p-3">
+      <label htmlFor="image-archive" className="text-body font-medium">
         Import runnable image
       </label>
       <Input

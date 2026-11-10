@@ -18,7 +18,7 @@ export function RefreshControl({
   onRefresh: () => void;
 }) {
   return (
-    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+    <div className="flex items-center gap-2 text-ui text-muted-foreground">
       {updatedAt && <span>Updated {hhmm(updatedAt)}</span>}
       <Button
         type="button"

@@ -47,18 +47,18 @@ export function SshServerForm({
           autoComplete="off"
           className="h-8"
         />
-        <p className="text-xs text-muted-foreground">
+        <p className="text-ui text-muted-foreground">
           Uses your system OpenSSH config and ssh-agent.
         </p>
       </div>
 
       {!editing && (
         <fieldset
-          className="space-y-2 rounded-lg border p-3"
+          className="space-y-2 rounded-card border p-3"
           disabled={operation.status === "running"}
         >
-          <legend className="px-1 text-sm font-medium">Setup</legend>
-          <label className="flex items-start gap-2 text-sm">
+          <legend className="px-1 text-body font-medium">Setup</legend>
+          <label className="flex items-start gap-2 text-body">
             <input
               type="radio"
               aria-label="Install Tariboy"
@@ -72,12 +72,12 @@ export function SshServerForm({
             />
             <span>
               <span className="block font-medium">Install Tariboy</span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-ui text-muted-foreground">
                 Install and start the bundled version.
               </span>
             </span>
           </label>
-          <label className="flex items-start gap-2 text-sm">
+          <label className="flex items-start gap-2 text-body">
             <input
               type="radio"
               aria-label="Connect to existing Tariboy"
@@ -91,7 +91,7 @@ export function SshServerForm({
             />
             <span>
               <span className="block font-medium">Connect to existing Tariboy</span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-ui text-muted-foreground">
                 Connect without installing or restarting Tariboy.
               </span>
             </span>
@@ -108,8 +108,8 @@ export function SshServerForm({
       />
 
       {prompt && (
-        <div className="space-y-2 rounded border p-2">
-          <div className="text-sm">{prompt.text || "SSH authentication reply required"}</div>
+        <div className="space-y-2 rounded-chip border p-2">
+          <div className="text-body">{prompt.text || "SSH authentication reply required"}</div>
           <Label htmlFor="host-prompt-reply">SSH reply</Label>
           <div className="flex gap-2">
             <Input

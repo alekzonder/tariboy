@@ -51,7 +51,7 @@ function ScriptRow({ definition, state }: { definition: AgentScript; state: Agen
           <div className="max-w-md whitespace-pre-wrap pl-7 text-muted-foreground">
             {definition.description}
           </div>
-          <div className="max-w-md whitespace-pre-wrap break-words pl-7 text-xs text-muted-foreground">
+          <div className="max-w-md whitespace-pre-wrap break-words pl-7 text-ui text-muted-foreground">
             <span className="font-medium text-foreground">Command: </span>
             <code className="font-mono">{definition.command}</code>
           </div>
@@ -61,15 +61,15 @@ function ScriptRow({ definition, state }: { definition: AgentScript; state: Agen
         </td>
         <td className="p-2">
           {definition.state}
-          <div className="text-xs text-muted-foreground">
+          <div className="text-ui text-muted-foreground">
             latest {definition.latest_run?.status ?? "—"}
           </div>
         </td>
-        <td className="p-2 text-xs text-muted-foreground">{when(definition.next_run_at)}</td>
+        <td className="p-2 text-ui text-muted-foreground">{when(definition.next_run_at)}</td>
         <ScriptActions definition={definition} state={state} />
       </tr>
       {open && (
-        <tr className="border-t bg-muted/10">
+        <tr className="border-t bg-subtle">
           <td colSpan={5} className="p-3">
             <ScriptRunList
               id={`runs-${definition.id}`}
@@ -92,13 +92,13 @@ function ScriptRow({ definition, state }: { definition: AgentScript; state: Agen
 export function ScriptList({ state }: { state: AgentScriptsState }) {
   return (
     <section>
-      <h2 className="mb-3 text-lg font-semibold">Scripts</h2>
+      <h2 className="mb-3 text-heading font-semibold">Scripts</h2>
       {state.scripts.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No scripts yet.</p>
+        <p className="text-body text-muted-foreground">No scripts yet.</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-muted/50 text-muted-foreground">
+        <div className="overflow-x-auto rounded-card border">
+          <table className="w-full text-left text-body">
+            <thead className="bg-subtle text-muted-foreground">
               <tr>
                 <th className="p-2">Script</th>
                 <th className="p-2">Mode</th>

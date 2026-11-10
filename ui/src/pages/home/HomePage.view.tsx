@@ -88,7 +88,7 @@ export function HomeView({
   return (
     <div className="h-full space-y-6 overflow-y-auto p-4">
       <header className="flex items-center gap-3">
-        <h1 className="text-lg font-semibold">Home</h1>
+        <h1 className="text-heading font-semibold">Home</h1>
         <Button
           className="ml-auto"
           size="sm"
@@ -103,14 +103,14 @@ export function HomeView({
       {/* Full width: the six Today tiles need it at 1024 px. */}
       <Section title={`Running now (${runningTotal})`}>
         {runningTotal === 0 && (
-          <p className="px-2 text-body-sm text-muted-foreground">No agent is running.</p>
+          <p className="px-2 text-body text-muted-foreground">No agent is running.</p>
         )}
         <ul className="space-y-0.5">
           {running.map((row) => (
             <li key={row.key}>
               <Link
                 to={row.href}
-                className="flex items-baseline gap-2 rounded-control px-2 py-1 text-body-sm hover:bg-accent"
+                className="flex items-baseline gap-2 rounded-control px-2 py-1 text-body hover:bg-accent"
               >
                 <span
                   aria-hidden="true"
@@ -138,7 +138,7 @@ export function HomeView({
         aside={
           <Link
             to={activityHref}
-            className="ml-auto text-body-sm text-muted-foreground hover:text-foreground"
+            className="ml-auto text-body text-muted-foreground hover:text-foreground"
           >
             History ›
           </Link>
@@ -146,7 +146,7 @@ export function HomeView({
       >
         <ActivityTotals totals={totals} />
         {todayError && (
-          <p role="alert" className="px-2 text-body-sm text-destructive">
+          <p role="alert" className="px-2 text-body text-destructive">
             {todayError}
           </p>
         )}
@@ -157,7 +157,7 @@ export function HomeView({
             <li key={row.key} className="min-w-0">
               <Link
                 to={row.href}
-                className="flex items-baseline gap-2 rounded-control px-2 py-1 text-body-sm hover:bg-accent"
+                className="flex items-baseline gap-2 rounded-control px-2 py-1 text-body hover:bg-accent"
               >
                 <AgentLinkText name={row.name} meta={row.meta} />
               </Link>

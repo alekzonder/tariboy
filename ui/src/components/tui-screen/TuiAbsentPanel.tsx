@@ -25,9 +25,9 @@ export function TuiAbsentPanel({
       onDragLeave={drop.onDragLeave}
       onDrop={drop.onDrop}
       className={cn(
-        "flex flex-col items-center justify-center gap-2 bg-zinc-950 text-zinc-400",
-        workspaceSurface ? "border-0" : "rounded-md border",
-        fill ? "h-full" : "h-[32rem]",
+        "flex flex-col items-center justify-center gap-2 bg-terminal text-terminal-foreground",
+        workspaceSurface ? "border-0" : "rounded-control border",
+        fill ? "h-full" : "h-128",
         drop.dragActive && "ring-2 ring-primary",
       )}
     >

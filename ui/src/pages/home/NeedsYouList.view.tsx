@@ -21,7 +21,7 @@ export interface NeedsYouListViewProps {
 // meta under the title. From `sm` up it is one line and the meta takes at
 // most half of the space after the key.
 const ROW_CLASS =
-  "grid w-full min-w-0 grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-x-3 rounded-control px-2 py-1.5 text-left text-body-sm hover:bg-accent sm:flex";
+  "grid w-full min-w-0 grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-x-3 rounded-control px-2 py-1.5 text-left text-body hover:bg-accent sm:flex";
 
 /** The rows of Needs you, already formatted by the container. */
 export function NeedsYouListView({
@@ -85,7 +85,7 @@ export function NeedsYouListView({
       {showAll && (
         <Link
           to={showAll.href}
-          className="ml-8 inline-block rounded-control px-2 py-1 text-body-sm text-muted-foreground hover:text-foreground"
+          className="ml-8 inline-block rounded-control px-2 py-1 text-body text-muted-foreground hover:text-foreground"
         >
           {showAll.label}
         </Link>

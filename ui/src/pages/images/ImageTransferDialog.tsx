@@ -61,7 +61,7 @@ function ImageTransferDialogSession(props: Omit<ImageTransferDialogProps, "open"
         </DialogHeader>
         <div className="space-y-3">
           {targets.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-body text-muted-foreground">
               No ready servers are available for transfer.
             </p>
           ) : (

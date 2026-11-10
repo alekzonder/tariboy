@@ -51,7 +51,7 @@ export function EditablePresetCombobox({
         setFilter("");
         setOpen(false);
       }}
-      className="block w-full rounded px-2 py-1.5 text-left text-sm hover:bg-accent"
+      className="block w-full rounded-chip px-2 py-1.5 text-left text-body hover:bg-accent"
     >
       {option}
     </button>
@@ -89,10 +89,10 @@ export function EditablePresetCombobox({
         <div
           id={listboxId}
           role="listbox"
-          className="absolute top-full left-0 z-50 mt-1 max-h-64 w-full overflow-auto rounded-lg border bg-popover p-1 shadow-md"
+          className="absolute top-full left-0 z-overlay mt-1 max-h-64 w-full overflow-auto rounded-card border bg-popover p-1 shadow-lift"
         >
           {visibleGroups.length === 0 && (
-            <div className="px-2 py-2 text-sm text-muted-foreground">No presets</div>
+            <div className="px-2 py-2 text-body text-muted-foreground">No presets</div>
           )}
           {visibleGroups.map((group) => {
             if (!group.label) return group.options.map(renderOption);
@@ -101,12 +101,12 @@ export function EditablePresetCombobox({
               <div key={group.label} role="group" aria-labelledby={headerId}>
                 <div
                   id={headerId}
-                  className="px-2 pt-1.5 pb-1 text-xs font-medium text-muted-foreground"
+                  className="px-2 pt-1.5 pb-1 text-ui font-medium text-muted-foreground"
                 >
                   {group.label}
                 </div>
                 {group.note && (
-                  <div className="px-2 pb-1.5 text-xs text-muted-foreground">{group.note}</div>
+                  <div className="px-2 pb-1.5 text-ui text-muted-foreground">{group.note}</div>
                 )}
                 {group.options.map(renderOption)}
               </div>

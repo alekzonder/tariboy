@@ -37,9 +37,9 @@ function RowStatusBadge({ status: st }: { status: RowStatus | undefined }) {
 export function GroupWizardAgentRow(props: Props) {
   const { agent: a, index: i, isLeader, images, onPatch: patch } = props;
   return (
-    <div data-slot="agent-row" className="space-y-3 rounded-lg border p-3">
+    <div data-slot="agent-row" className="space-y-3 rounded-card border p-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-body">
           <label className="flex items-center gap-1.5">
             <input
               type="radio"

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { effectiveLimits, ownerLabel } from "./workflowImages";
 
 const CELL = "px-3 py-2 align-top";
-const HEAD = "bg-muted/50 text-left text-xs text-muted-foreground";
+const HEAD = "bg-subtle text-left text-ui text-muted-foreground";
 const DEFAULT_TIMEOUT = "60s";
 
 type Transition = NonNullable<WorkflowImageStatus["transitions"]>[number];
@@ -29,7 +29,7 @@ function TableSection({
 }) {
   return (
     <Section title={title}>
-      <div className="overflow-x-auto rounded border">
+      <div className="overflow-x-auto rounded-chip border">
         <table aria-label={title} className="w-full">
           <thead className={HEAD}>
             <tr>
@@ -82,10 +82,10 @@ export function WorkflowImageHeader({
 }) {
   return (
     <header className="space-y-2">
-      <h1 className="text-lg font-medium">
+      <h1 className="text-heading font-medium">
         {manifest.name} {manifest.version}
       </h1>
-      <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-xs">
+      <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-ui">
         <dt className="text-muted-foreground">Digest</dt>
         <dd className="break-all font-mono">{manifest.digest}</dd>
         <dt className="text-muted-foreground">Built at</dt>
@@ -120,12 +120,12 @@ function TransitionItem({ transition }: { transition: Transition }) {
         {transition.on} → {transition.to}
       </span>
       {transition.requires?.length ? (
-        <div className="text-xs text-muted-foreground">
+        <div className="text-ui text-muted-foreground">
           requires {transition.requires.join(", ")}
         </div>
       ) : null}
       {(transition.checks ?? []).map((check, index) => (
-        <div key={index} className="font-mono text-xs text-muted-foreground">
+        <div key={index} className="font-mono text-ui text-muted-foreground">
           check {check.script} as {check.run_as || "queue"}, {check.timeout || DEFAULT_TIMEOUT}
         </div>
       ))}
@@ -151,13 +151,13 @@ function StatusRow({
         ]
           .filter(Boolean)
           .map((label) => (
-            <span key={String(label)} className="ml-1 rounded bg-muted px-1 text-xs">
+            <span key={String(label)} className="ml-1 rounded-chip bg-muted px-1 text-ui">
               {label}
             </span>
           ))}
       </td>
       <td className={`${CELL} font-mono`}>{ownerLabel(status)}</td>
-      <td className={`${CELL} font-mono text-xs`}>{status.instructions ?? "—"}</td>
+      <td className={`${CELL} font-mono text-ui`}>{status.instructions ?? "—"}</td>
       <td className={CELL}>
         <ul className="space-y-1">
           {(status.transitions ?? []).map((transition) => (
@@ -165,7 +165,7 @@ function StatusRow({
           ))}
         </ul>
       </td>
-      <td className={`${CELL} font-mono text-xs`}>
+      <td className={`${CELL} font-mono text-ui`}>
         {status.watch
           ? `${status.watch.script} every ${status.watch.every}, timeout ${status.watch.timeout || DEFAULT_TIMEOUT}`
           : "—"}
@@ -204,7 +204,7 @@ export function LimitsTable({ definition }: { definition: WorkflowImageDefinitio
           <td className={`${CELL} font-mono`}>{scope}</td>
           {values.map((limit) => (
             <td key={limit.key} className={CELL}>
-              {limit.value} <span className="text-xs text-muted-foreground">({limit.source})</span>
+              {limit.value} <span className="text-ui text-muted-foreground">({limit.source})</span>
             </td>
           ))}
         </tr>

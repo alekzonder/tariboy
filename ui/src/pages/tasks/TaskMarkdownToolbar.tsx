@@ -268,7 +268,7 @@ export default function MarkdownToolbar({
             </Button>
           </div>
           {linkError && (
-            <p role="alert" className="text-xs text-destructive">
+            <p role="alert" className="text-ui text-destructive">
               {linkError}
             </p>
           )}

@@ -19,8 +19,10 @@ for part in \
   'viewLintPolicy.test.ts' \
   'storybookSafety.test.ts' \
   'storyNetwork.test.tsx' \
-  'arbitraryPxPolicy.test.ts' \
+  'tokenPolicy.test.ts' \
   'textInputPolicy.test.ts' \
+  'src/theme.test.ts' \
+  'src/lib/utils.test.ts' \
   'npm run knip' \
   'build-storybook'; do
   case "$rest" in

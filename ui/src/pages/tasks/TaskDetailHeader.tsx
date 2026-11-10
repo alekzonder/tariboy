@@ -63,7 +63,7 @@ export function TaskDetailHeader({
             <h2
               ref={titleRef}
               tabIndex={-1}
-              className="shrink-0 rounded-sm font-mono text-ui font-medium tabular-nums text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              className="shrink-0 rounded-chip font-mono text-ui font-medium tabular-nums text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             >
               {task.key}
             </h2>
@@ -79,7 +79,7 @@ export function TaskDetailHeader({
               onBlur={() => setEditing(false)}
             />
           ) : (
-            <span className="min-w-0 truncate text-title font-semibold tracking-[-.01em]">
+            <span className="min-w-0 truncate text-title font-semibold tracking-tight">
               {title}
             </span>
           )}
@@ -126,7 +126,7 @@ export function TaskDetailHeader({
                 size="icon"
                 aria-label="Task actions"
                 disabled={pending}
-                className="size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                className="size-7 rounded-control text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 <MoreHorizontal className="size-3.5" />
               </Button>
@@ -152,7 +152,7 @@ export function TaskDetailHeader({
           aria-label="Close task detail"
           disabled={pending}
           onClick={close}
-          className="size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="size-7 rounded-control text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <X className="size-3.5" />
         </Button>

@@ -3,7 +3,7 @@ import { taskStatusLabel } from "@/lib/tasks";
 import { queueMarkerLabel } from "@/lib/taskTree";
 import { cn } from "@/lib/utils";
 import { BannerButton, SectionHeading } from "./TaskDetailControls";
-import { EMPTY, MONO } from "./panelStyles";
+import { EMPTY, MONO } from "@/components/ui/recipes";
 import QueueMarker from "./QueueMarker";
 import { TaskStatusView } from "./TaskRowCells";
 import type { TaskDetailProps } from "./TaskDetailTypes";
@@ -30,7 +30,7 @@ function SubtaskRow({
     <button
       type="button"
       aria-label={`Open subtask ${task.key}: ${task.title}, ${taskStatusLabel(task)}`}
-      className="flex w-full flex-wrap items-center gap-x-2 gap-y-0.5 rounded-md px-2 py-1.5 text-left text-body hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:flex-nowrap"
+      className="flex w-full flex-wrap items-center gap-x-2 gap-y-0.5 rounded-control px-2 py-1.5 text-left text-body hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:flex-nowrap"
       onClick={() => onOpen(task.key)}
     >
       <span className="order-1 flex min-w-0 shrink-0 items-center gap-1.5">
@@ -44,7 +44,7 @@ function SubtaskRow({
       </span>
       <TaskStatusView task={task} className="order-2 ml-auto sm:order-3 sm:ml-0" />
       {task.assignee && (
-        <span className="order-4 hidden h-4.75 max-w-[12ch] shrink-0 items-center truncate rounded-sm bg-muted px-1.75 text-meta sm:inline-flex">
+        <span className="order-4 hidden h-4.75 max-w-[12ch] shrink-0 items-center truncate rounded-chip bg-muted px-1.75 text-caption sm:inline-flex">
           {task.assignee.replace(/^agent:/, "")}
         </span>
       )}
@@ -105,8 +105,8 @@ export default function TaskSubtasksSection({
     <section aria-label="Subtasks" className="flex min-w-0 flex-col gap-1.5">
       <SectionHeading label="Subtasks" count={list.length} />
       {error ? (
-        <div role="alert" className="flex items-center gap-2 text-body-sm">
-          <span className="text-status-failed">Could not load subtasks.</span>
+        <div role="alert" className="flex items-center gap-2 text-body">
+          <span className="text-destructive">Could not load subtasks.</span>
           <BannerButton tone="quiet" onClick={onRetry}>
             Retry
           </BannerButton>
@@ -117,7 +117,7 @@ export default function TaskSubtasksSection({
             key={index}
             data-testid="subtask-placeholder"
             aria-hidden="true"
-            className="h-8 animate-pulse rounded-md bg-muted"
+            className="h-8 animate-pulse rounded-control bg-muted"
           />
         ))
       ) : (

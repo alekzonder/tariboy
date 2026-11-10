@@ -19,13 +19,13 @@ type Story = StoryObj;
 // The agent detail screen the sheet slides over.
 function AgentScreen({ children }: { children?: ReactNode }) {
   return (
-    <div className="grid w-[700px] gap-3">
+    <div className="grid w-175 gap-3">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-medium">reviewer</span>
-        <span className="text-xs text-muted-foreground">worker:v2 · This daemon (local)</span>
+        <span className="text-body font-medium">reviewer</span>
+        <span className="text-ui text-muted-foreground">worker:v2 · This daemon (local)</span>
         <span className="ml-auto">{children}</span>
       </div>
-      <div className="h-[220px] rounded-lg border border-border bg-muted" />
+      <div className="h-55 rounded-card border border-border bg-muted" />
     </div>
   );
 }
@@ -46,12 +46,12 @@ const HOSTS = [
 function StatusList() {
   return (
     <div className="overflow-hidden px-4">
-      <h3 className="border-b border-border py-2 text-xs font-semibold text-muted-foreground">
+      <h3 className="border-b border-border py-2 text-ui font-semibold text-muted-foreground">
         Iteration: 2024-05-15T11-57
       </h3>
       {EVENTS.map((event) => (
-        <div key={event.ts} className="border-b border-border py-2 text-[13px]">
-          <div className="text-xs text-muted-foreground">{event.ts}</div>
+        <div key={event.ts} className="border-b border-border py-2 text-body">
+          <div className="text-ui text-muted-foreground">{event.ts}</div>
           <div>{event.message}</div>
         </div>
       ))}
@@ -112,10 +112,10 @@ export const SideLeft: Story = {
             {HOSTS.map((host) => (
               <div
                 key={host.label}
-                className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-[13px]"
+                className="flex items-center gap-2 rounded-control border border-border px-2 py-1.5 text-body"
               >
                 <span>{host.label}</span>
-                <span className="ml-auto text-xs text-muted-foreground">{host.note}</span>
+                <span className="ml-auto text-ui text-muted-foreground">{host.note}</span>
               </div>
             ))}
           </div>
@@ -166,7 +166,7 @@ export const SideBottom: Story = {
             {["release-notes.md", "worker-manifest.json"].map((name) => (
               <div
                 key={name}
-                className="rounded-md border border-border px-2 py-1.5 font-mono text-[13px]"
+                className="rounded-control border border-border px-2 py-1.5 font-mono text-body"
               >
                 {name}
               </div>

@@ -26,7 +26,7 @@ function Emit({ run }: { run: () => void }) {
 
 function Frame({ visible, children }: { visible: number; children: ReactNode }) {
   return (
-    <div className="flex h-60 w-[460px] items-end justify-center pb-2 text-[13px] text-muted-foreground">
+    <div className="flex h-60 w-115 items-end justify-center pb-2 text-body text-muted-foreground">
       <Toaster position="top-center" expand visibleToasts={visible} />
       {children}
     </div>

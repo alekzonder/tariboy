@@ -137,13 +137,13 @@ export function IterationAuditLog({
   return (
     <div className="flex h-full flex-col gap-1">
       <div className="flex shrink-0 items-center justify-between gap-2">
-        <div className="font-mono text-xs text-muted-foreground">
+        <div className="font-mono text-ui text-muted-foreground">
           {iterationId ? `iteration ${shortId} · ${iterationStatus || "?"}` : "no iterations yet"}
           {iterationId && iterationProductive === false && " · idle"}
         </div>
         {iterationId && <AuditExportActions name={name} iteration={iterationId} />}
       </div>
-      <ScrollArea ref={rootRef} className="min-h-0 flex-1 rounded border bg-muted/30 p-2">
+      <ScrollArea ref={rootRef} className="min-h-0 flex-1 rounded-chip border bg-subtle p-2">
         {(() => {
           const mode = hasHarnessOutput(events) ? "enrich" : "full";
           const rows = mergeProxyCalls(collapseThinking(events), calls, mode);
@@ -158,7 +158,7 @@ export function IterationAuditLog({
             />
           ));
         })()}
-        {events.length === 0 && <p className="text-sm text-muted-foreground">No events.</p>}
+        {events.length === 0 && <p className="text-body text-muted-foreground">No events.</p>}
       </ScrollArea>
     </div>
   );

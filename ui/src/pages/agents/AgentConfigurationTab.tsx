@@ -52,7 +52,7 @@ function About({ view }: { view: AgentView }) {
   const multiHost = useMultiHost();
   return (
     <SettingsSection id="about" title="About">
-      <p className="text-sm">
+      <p className="text-body">
         <span className="text-muted-foreground">image</span>{" "}
         {view.image ? (
           <Link
@@ -138,7 +138,7 @@ function ConfigurationPage({
       <ConfigSaveRow draft={draft} groups={[...dirtyByGroup.keys()]} />
       <FirstVisitHint hostId={hostId} agent={name} tab="settings" />
       {!view ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-body text-muted-foreground">Loading…</p>
       ) : (
         <>
           <ConfigSearch query={query} onQuery={setQuery} empty={matches.length === 0} />

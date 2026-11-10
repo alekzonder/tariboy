@@ -66,7 +66,7 @@ export default function TaskTableHeader({
       <div
         data-testid="task-table-header"
         className={cn(
-          "flex h-7.5 items-center gap-2.5 px-4 text-meta text-muted-foreground",
+          "flex h-7.5 items-center gap-2.5 px-4 text-caption text-muted-foreground",
           sticky && "sticky top-0 z-2 bg-card",
         )}
       >
@@ -100,8 +100,8 @@ function TaskHeaderCell({ column, editable }: { column: TaskColumn; editable: bo
         "relative flex h-full shrink-0 items-center",
         column.id === "task" && "min-w-0 flex-1",
         end && "justify-end",
-        isDragging && "z-4 rounded-sm bg-muted opacity-80",
-        isOver && !isDragging && "rounded-sm ring-1 ring-primary ring-inset",
+        isDragging && "z-4 rounded-chip bg-muted opacity-80",
+        isOver && !isDragging && "rounded-chip ring-1 ring-primary ring-inset",
       )}
     >
       {editable ? (

@@ -23,7 +23,7 @@ function Row({
     <div className="flex items-center justify-between gap-4">
       <div>
         <Label htmlFor={id}>{label}</Label>
-        <p className="mt-0.5 mb-0 text-xs text-muted-foreground">{hint}</p>
+        <p className="mt-0.5 mb-0 text-ui text-muted-foreground">{hint}</p>
       </div>
       {children}
     </div>
@@ -32,7 +32,7 @@ function Row({
 
 export const SettingsRows: Story = {
   render: () => (
-    <div className="grid w-[400px] gap-3.5">
+    <div className="grid w-100 gap-3.5">
       <Row id="preview-switch-interactive" label="Interactive" hint="Attach a terminal console.">
         <Switch id="preview-switch-interactive" defaultChecked />
       </Row>
@@ -94,7 +94,7 @@ export const Sizes: Story = {
 
 export const DisabledAndInvalid: Story = {
   render: () => (
-    <div className="grid w-[400px] gap-3.5">
+    <div className="grid w-100 gap-3.5">
       <Row
         id="preview-switch-disabled-on"
         label="Interactive"

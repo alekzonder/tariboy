@@ -170,7 +170,7 @@ export function AgentSidebar({
               type="button"
               data-tour={TOUR_ANCHORS.addAgent}
               onClick={() => actions.onCreate(actions.selectedHostId ?? "")}
-              className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-body-sm text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+              className="flex h-7 w-full items-center gap-2 rounded-control px-2 text-body text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
             >
               <Plus className="size-3.25" aria-hidden="true" />
               New agent

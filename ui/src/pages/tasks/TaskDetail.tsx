@@ -85,7 +85,7 @@ export default function TaskDetail({
         aria-describedby={undefined}
         /* The sheet dims the whole window — topbar and sidebar included — with the
          theme's own foreground, so both read as one tone behind it. */
-        overlayClassName="bg-[color-mix(in_oklab,var(--foreground)_7%,transparent)] supports-backdrop-filter:backdrop-blur-none"
+        overlayClassName="bg-scrim supports-backdrop-filter:backdrop-blur-none"
         style={{ "--tasks-detail-width": `${width}px` } as CSSProperties}
         onOpenAutoFocus={(event) => {
           event.preventDefault();
@@ -109,7 +109,7 @@ export default function TaskDetail({
         />
         <div className="task-detail-panel relative min-h-0 min-w-0 overflow-auto bg-card">
           {/* Sticky: whatever the panel is scrolled to, the key, the title and the
-          status stay in view. The one shadow here is the same rule the selected
+          status stay in view. The one elevation here is the same rule the selected
           row and the active segment carry. */}
           {workflow && task.access !== "context" && task.access !== "respond" ? (
             <TaskDecisionPanel
@@ -121,7 +121,7 @@ export default function TaskDetail({
               {header}
             </TaskDecisionPanel>
           ) : (
-            <div className="sticky top-0 z-[3] bg-card shadow-[var(--raise)]">{header}</div>
+            <div className="sticky top-0 z-3 bg-card shadow-raise">{header}</div>
           )}
           <div className="flex min-w-0 flex-col gap-4.5 px-4 pt-3.5 pb-7">
             <TaskDetailDraftAlerts

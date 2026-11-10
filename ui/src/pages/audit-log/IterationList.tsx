@@ -55,7 +55,7 @@ export function IterationList({
       <button
         onClick={() => select(null)}
         className={cn(
-          "flex w-full items-center px-2 py-1.5 text-left text-sm hover:bg-accent",
+          "flex w-full items-center px-2 py-1.5 text-left text-body hover:bg-accent",
           selected === null && "bg-accent",
         )}
       >
@@ -66,11 +66,11 @@ export function IterationList({
           key={it.id}
           onClick={() => select(it.id)}
           className={cn(
-            "flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left text-sm hover:bg-accent",
+            "flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left text-body hover:bg-accent",
             selected === it.id && "bg-accent",
           )}
         >
-          <span className="font-mono text-xs">{fmtDateTime(it.started_at)}</span>
+          <span className="font-mono text-ui">{fmtDateTime(it.started_at)}</span>
           <span className="flex flex-wrap items-center justify-end gap-1">
             {(it.tags ?? []).map((tag) => (
               <Badge key={tag} variant="outline">

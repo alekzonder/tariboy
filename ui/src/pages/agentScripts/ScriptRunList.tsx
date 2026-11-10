@@ -17,7 +17,7 @@ function RunDetails({
 }: { run: AgentScriptRun; log?: string } & RunActions) {
   return (
     <div id={`run-${run.id}`} className="grid gap-3 border-t p-3">
-      <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs">
+      <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-ui">
         <dt>Status</dt>
         <dd>
           {run.status}
@@ -54,7 +54,7 @@ function RunDetails({
           Download log
         </Button>
       </div>
-      <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded bg-muted p-3 text-xs">
+      <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-chip bg-muted p-3 text-ui">
         {log ?? "Loading log…"}
       </pre>
     </div>
@@ -73,7 +73,7 @@ function RunItem({
   actions: RunActions;
 }) {
   return (
-    <div className="rounded border bg-background">
+    <div className="rounded-chip border bg-background">
       <div className="flex flex-wrap items-center gap-2 p-2">
         <Button
           size="sm"
@@ -91,7 +91,7 @@ function RunItem({
         {run.exit_code !== undefined && (
           <span className="text-muted-foreground">exit {run.exit_code}</span>
         )}
-        <span className="ml-auto text-xs text-muted-foreground">
+        <span className="ml-auto text-ui text-muted-foreground">
           {when(run.finished_at || run.started_at || run.created_at)}
         </span>
         {isRunActive(run.status) && !run.cancel_requested && (
@@ -120,13 +120,13 @@ export function ScriptRunList({
 } & RunActions) {
   if (!runs)
     return (
-      <p id={id} className="text-sm text-muted-foreground">
+      <p id={id} className="text-body text-muted-foreground">
         Loading runs…
       </p>
     );
   if (runs.length === 0)
     return (
-      <p id={id} className="text-sm text-muted-foreground">
+      <p id={id} className="text-body text-muted-foreground">
         No runs.
       </p>
     );

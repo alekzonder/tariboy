@@ -2,196 +2,148 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "./styles/tokens.css";
 
 @custom-variant dark (&:is(.dark *));
 
-/* identifiers line up: task keys, durations, digests, timestamps. Declared as
-   a theme variable rather than a plain :root one: Tailwind already ships
-   --font-mono in its own :root,:host block, and replacing it there keeps one
-   declaration of the name — both `font-mono` and `var(--font-mono)` resolve. */
-@theme {
+/* The scales. `static` writes every variable into the stylesheet, used or not,
+   so a plain CSS file and the Foundations stories can read them.
+
+   Each scale first clears the Tailwind default (`--text-*: initial`), so the
+   names below are the only ones that exist: `text-sm`, `rounded-md`,
+   `shadow-md` and `bg-amber-500` produce no CSS at all.
+   src/test/tokenPolicy.test.ts fails on such a class, and
+   src/lib/utils.ts lists the same names for tailwind-merge. */
+@theme static {
+  /* Identifiers line up: task keys, durations, digests, timestamps. */
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
-  /* Named sizes for the dense UI text. They set font-size only: without a
-     --text-*--line-height the element keeps its inherited line height. */
-  --text-nano: 9px;
-  --text-micro: 10px;
-  --text-tiny: 10.5px;
+  /* Text: six sizes, each with its line height. */
+  --text-*: initial;
   --text-caption: 11px;
-  --text-meta: 11.5px;
+  --text-caption--line-height: 16px;
   --text-ui: 12px;
-  --text-body-sm: 12.5px;
+  --text-ui--line-height: 16px;
   --text-body: 13px;
-  --text-body-lg: 14px;
-  --text-title: 15px;
+  --text-body--line-height: 20px;
+  --text-title: 16px;
+  --text-title--line-height: 24px;
+  --text-heading: 18px;
+  --text-heading--line-height: 28px;
+  --text-display: 24px;
+  --text-display--line-height: 32px;
 
-  /* Fixed radii between the --radius steps (rounded-xs 2px, sm 6px, md 8px,
-     lg 10px, xl 14px). */
-  --radius-hair: 1.5px;
-  --radius-chip: 5px;
-  --radius-control: 7px;
-  --radius-panel: 9px;
+  /* Radius: five steps, named by what they round. */
+  --radius-*: initial;
+  --radius-mark: 2px;
+  --radius-chip: 6px;
+  --radius-control: 8px;
   --radius-card: 12px;
+  --radius-panel: 14px;
+
+  /* Layers above the page. A number below 10 (`z-2`) orders parts inside one
+     component and is not a layer. */
+  --z-sticky: 10;
+  --z-overlay: 50;
+  --z-dialog: 60;
+  --z-alert: 70;
 }
 
+/* Colours and shadows point at the roles of styles/tokens.css. `inline` puts
+   the var() into each utility, so a utility follows the theme of the element
+   it is on. */
 @theme inline {
-  --font-heading: var(--font-sans);
   --font-sans: "Geist Variable", sans-serif;
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
+  --font-heading: var(--font-sans);
+
+  --color-*: initial;
+  /* --background is a gradient, and background-color drops a gradient value.
+     Every utility built on this name therefore takes the flat base tone. */
+  --color-background: var(--background-base);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  /* Half of --muted: a hovered row, a quiet table header, a code block. */
+  --color-subtle: color-mix(in oklab, var(--muted) 50%, transparent);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
   --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-terminal: var(--terminal);
+  --color-terminal-foreground: var(--terminal-foreground);
+  --color-scrim: var(--scrim);
+  --color-scrim-strong: var(--scrim-strong);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
   --color-ring: var(--ring);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: color-mix(in oklab, var(--primary) 80%, transparent);
+  --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-success: var(--success);
   --color-status-running: var(--status-running);
   --color-status-queued: var(--status-queued);
   --color-status-done: var(--status-done);
-  --color-status-failed: var(--status-failed);
   --color-status-stopped: var(--status-stopped);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --color-foreground: var(--foreground);
-  /* --background is a gradient, and background-color drops a gradient value.
-       Every utility built on this name therefore takes the flat base tone. */
-  --color-background: var(--background-base);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
-}
 
-:root {
-  /* metal neutrals — achromatic chrome at hue 250, chroma <= .008. The window
-       carries one near-invisible gradient (delta ~3% lightness); it reads as
-       brushed metal, not as decoration. */
-  --background: linear-gradient(
-    175deg,
-    oklch(94.8% 0.004 250) 0%,
-    oklch(93.4% 0.005 250) 55%,
-    oklch(91.8% 0.006 250) 100%
+  /* The three tints of each tone: `-soft` is a fill, `-mid` is that fill
+     hovered or a focus ring, `-line` is a border. */
+  --color-primary-soft: color-mix(in oklab, var(--primary) var(--tint-soft), transparent);
+  --color-primary-mid: color-mix(in oklab, var(--primary) var(--tint-mid), transparent);
+  --color-primary-line: color-mix(in oklab, var(--primary) var(--tint-line), transparent);
+  --color-destructive-soft: color-mix(in oklab, var(--destructive) var(--tint-soft), transparent);
+  --color-destructive-mid: color-mix(in oklab, var(--destructive) var(--tint-mid), transparent);
+  --color-destructive-line: color-mix(in oklab, var(--destructive) var(--tint-line), transparent);
+  --color-status-running-soft: color-mix(
+    in oklab,
+    var(--status-running) var(--tint-soft),
+    transparent
   );
-  /* The flat tone the gradient settles on. Anything that needs a colour rather
-       than an image — background-color, color-mix(), the bg-background utility —
-       uses this name; only the window itself paints --background. */
-  --background-base: oklch(93.4% 0.005 250);
-  --foreground: oklch(20% 0.006 250);
-  /* Content islands are plain white on the metal, separated by --lift. */
-  --card: oklch(100% 0 0);
-  --card-foreground: var(--foreground);
-  --popover: oklch(100% 0 0);
-  --popover-foreground: var(--foreground);
-  /* blue is the single accent */
-  --primary: oklch(54% 0.125 252);
-  --primary-foreground: oklch(99% 0.003 252);
-  --secondary: oklch(96.4% 0.003 250);
-  --secondary-foreground: var(--foreground);
-  --muted: oklch(97% 0.003 250);
-  --muted-foreground: oklch(48% 0.008 250);
-  --accent: oklch(95% 0.004 250);
-  --accent-foreground: var(--foreground);
-  --destructive: oklch(55% 0.155 27);
-  --border: oklch(88.5% 0.005 250);
-  --input: oklch(88.5% 0.005 250);
-  --ring: oklch(64% 0.12 252);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: var(--background-base);
-  --sidebar-foreground: var(--foreground);
-  --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: oklch(95% 0.004 250);
-  --sidebar-accent-foreground: var(--foreground);
-  --sidebar-border: var(--border);
-  --sidebar-ring: var(--ring);
+  --color-status-running-mid: color-mix(
+    in oklab,
+    var(--status-running) var(--tint-mid),
+    transparent
+  );
+  --color-status-running-line: color-mix(
+    in oklab,
+    var(--status-running) var(--tint-line),
+    transparent
+  );
+  --color-warning-soft: color-mix(in oklab, var(--warning) var(--tint-soft), transparent);
+  --color-warning-mid: color-mix(in oklab, var(--warning) var(--tint-mid), transparent);
+  --color-warning-line: color-mix(in oklab, var(--warning) var(--tint-line), transparent);
+  --color-success-soft: color-mix(in oklab, var(--success) var(--tint-soft), transparent);
+  --color-success-mid: color-mix(in oklab, var(--success) var(--tint-mid), transparent);
+  --color-success-line: color-mix(in oklab, var(--success) var(--tint-line), transparent);
 
-  /* status — one lightness, one chroma band, hue does the work */
-  --status-running: oklch(62% 0.15 168);
-  --status-queued: oklch(62% 0.1 300);
-  --status-done: oklch(54% 0.125 252);
-  --status-failed: oklch(58% 0.19 18);
-  --status-stopped: oklch(64% 0.012 250);
-
-  /* elevation: the island, not a box-shadow zoo */
-  --lift: 0 1px 2px oklch(24% 0.03 255/0.05), 0 10px 28px -14px oklch(24% 0.03 255/0.22);
-  /* The second and last level of elevation: the selected sidebar row and the
-       active segment of a segmented control. The handoff writes it inline; it
-       is a token here so no markup has to spell out a color. */
-  --raise: 0 1px 2px oklch(24% 0.03 255/0.1);
-  --panel-radius: 14px;
+  --shadow-*: initial;
+  --shadow-raise: var(--raise);
+  --shadow-lift: var(--lift);
 }
 
-.dark {
-  /* The same metal, turned down. --background carries no gradient here: on a
-       dark ground the sheen reads as banding rather than as metal. */
-  --background: oklch(19.5% 0.005 250);
-  --background-base: oklch(19.5% 0.005 250);
-  --foreground: oklch(95% 0.003 250);
-  --card: oklch(23.2% 0.006 250);
-  --card-foreground: var(--foreground);
-  --popover: oklch(24.5% 0.006 250);
-  --popover-foreground: var(--foreground);
-  --primary: oklch(74% 0.13 252);
-  --primary-foreground: oklch(19% 0.012 252);
-  --secondary: oklch(26% 0.006 250);
-  --secondary-foreground: var(--foreground);
-  --muted: oklch(26% 0.006 250);
-  --muted-foreground: oklch(70% 0.008 250);
-  --accent: oklch(28% 0.007 250);
-  --accent-foreground: var(--foreground);
-  --destructive: oklch(66% 0.15 27);
-  --border: oklch(31% 0.007 250);
-  --input: oklch(31% 0.007 250);
-  --ring: oklch(64% 0.12 252);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(17.5% 0.005 250);
-  --sidebar-foreground: var(--foreground);
-  --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: oklch(28% 0.007 250);
-  --sidebar-accent-foreground: var(--foreground);
-  --sidebar-border: var(--border);
-  --sidebar-ring: var(--ring);
-  /* The light row's hue and chroma at the dark theme's lightness, so one
-       status reads as the same colour in both themes. */
-  --status-running: oklch(70% 0.15 168);
-  --status-queued: oklch(66% 0.1 300);
-  --status-done: oklch(62% 0.11 252);
-  --status-failed: oklch(66% 0.19 18);
-  --status-stopped: oklch(56% 0.01 250);
-  --lift: 0 1px 2px oklch(0 0 0/0.3), 0 12px 30px -14px oklch(0 0 0/0.55);
-  --raise: 0 1px 2px oklch(0 0 0/0.3);
+@utility z-sticky {
+  z-index: var(--z-sticky);
+}
+@utility z-overlay {
+  z-index: var(--z-overlay);
+}
+@utility z-dialog {
+  z-index: var(--z-dialog);
+}
+@utility z-alert {
+  z-index: var(--z-alert);
 }
 
 @layer base {
@@ -199,7 +151,7 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply text-foreground;
+    @apply text-body text-foreground;
     background: var(--background);
   }
   html {

@@ -27,7 +27,7 @@ const recent = agentLinks.many.slice(0, 8).map((row, i) => ({ ...row, meta: `${i
 
 const base = {
   needsYouCount: "0",
-  needsYou: <p className="px-2 text-body-sm text-muted-foreground">Nothing needs you.</p>,
+  needsYou: <p className="px-2 text-body text-muted-foreground">Nothing needs you.</p>,
   running,
   runningTotal: running.length,
   runningExpanded: false,

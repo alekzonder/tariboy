@@ -12,7 +12,7 @@ export const Default: Story = {};
 export const InTitlebar: Story = {
   render: (args) => (
     <div className="flex h-12 items-center justify-end gap-2 border-b border-border px-4">
-      <span className="text-sm text-muted-foreground">Settings</span>
+      <span className="text-body text-muted-foreground">Settings</span>
       <ThemeToggle {...args} />
     </div>
   ),

@@ -68,19 +68,19 @@ export default function RepoDetail() {
     [name, tag],
   );
 
-  if (error) return <p className="p-6 text-sm text-destructive">{error}</p>;
-  if (!rows) return <p className="p-6 text-sm text-muted-foreground">Loading…</p>;
+  if (error) return <p className="p-6 text-body text-destructive">{error}</p>;
+  if (!rows) return <p className="p-6 text-body text-muted-foreground">Loading…</p>;
 
   return (
     <div className="flex flex-col gap-4 p-6">
-      <h1 className="text-xl font-semibold">{name}</h1>
+      <h1 className="text-heading font-semibold">{name}</h1>
 
       <Card>
         <CardHeader>
           <CardTitle>Pull</CardTitle>
         </CardHeader>
         <CardContent className="flex items-center gap-2">
-          <code className="flex-1 overflow-x-auto rounded bg-muted px-2 py-1 text-sm">
+          <code className="flex-1 overflow-x-auto rounded-chip bg-muted px-2 py-1 text-body">
             {pullCmd}
           </code>
           <Button
@@ -99,7 +99,7 @@ export default function RepoDetail() {
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-body">
               <thead>
                 <tr className="text-left text-muted-foreground">
                   <th className="py-1 pr-4">tag</th>
@@ -116,7 +116,7 @@ export default function RepoDetail() {
                     onClick={() => selectTag(r.tag)}
                   >
                     <td className="py-1 pr-4">{r.tag === tag ? <Badge>{r.tag}</Badge> : r.tag}</td>
-                    <td className="py-1 pr-4 font-mono text-xs">{r.digest}</td>
+                    <td className="py-1 pr-4 font-mono text-ui">{r.digest}</td>
                     <td className="py-1 pr-4">{r.built_at}</td>
                     <td className="py-1">{r.pushed_at}</td>
                   </tr>
@@ -134,7 +134,7 @@ export default function RepoDetail() {
               Manifest — {name}:{tag}
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-3 text-sm">
+          <CardContent className="flex flex-col gap-3 text-body">
             <div>
               <span className="text-muted-foreground">harness: </span>
               {manifest.harness.type}

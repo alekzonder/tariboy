@@ -9,7 +9,7 @@ interface Props {
 
 export function TeamImportProgress({ operation, canRetry, onRetry }: Props) {
   return (
-    <div className="space-y-1 text-xs" aria-label="Team import progress">
+    <div className="space-y-1 text-ui" aria-label="Team import progress">
       <div>Import status: {operation.status}</div>
       {(operation.steps ?? []).map((step, index) => (
         <div key={`${step.kind}-${step.name}-${index}`}>

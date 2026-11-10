@@ -13,14 +13,14 @@ import { TONE_DOT, TONE_FILL, TONE_TEXT, priorityTone, type StatusTone } from "@
 type PillSize = "sm" | "md";
 
 const PILL_SIZE: Record<PillSize, string> = {
-  sm: "h-[17px] rounded-[5px] px-1.5 text-[10.5px] tracking-[.01em]",
-  md: "h-5 rounded-[6px] px-2 text-[11.5px]",
+  sm: "h-4.25 rounded-chip px-1.5 text-caption tracking-wide",
+  md: "h-5 rounded-chip px-2 text-caption",
 };
 
 /** The height without the box, so a quiet status still sits on the row's baseline. */
 const TEXT_SIZE: Record<PillSize, string> = {
-  sm: "h-[17px] text-[10.5px] tracking-[.01em]",
-  md: "h-5 text-[11.5px]",
+  sm: "h-4.25 text-caption tracking-wide",
+  md: "h-5 text-caption",
 };
 
 export function StatusPill({
@@ -82,7 +82,7 @@ export function PriorityTag({
       size="sm"
       quiet="chip"
       className={cn(
-        "min-w-[22px] justify-center px-[5px] font-mono font-medium tabular-nums",
+        "min-w-5.5 justify-center px-1.25 font-mono font-medium tabular-nums",
         className,
       )}
       {...props}

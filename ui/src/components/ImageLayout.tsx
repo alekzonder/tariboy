@@ -61,7 +61,7 @@ function NewestImageDetail({ hostKey, name }: { hostKey: string; name: string })
   return (
     <div className="flex h-full flex-col">
       <Breadcrumbs name={name} />
-      <div className="p-4 text-sm">
+      <div className="p-4 text-body">
         {error ? (
           <p role="alert" className="text-destructive">
             {error}
@@ -83,7 +83,7 @@ function NewestImageDetail({ hostKey, name }: { hostKey: string; name: string })
 
 function Breadcrumbs({ name, tag }: { name: string; tag?: string }) {
   return (
-    <nav aria-label="Image breadcrumbs" className="flex gap-2 border-b px-4 py-2 text-sm">
+    <nav aria-label="Image breadcrumbs" className="flex gap-2 border-b px-4 py-2 text-body">
       <Link className="text-primary hover:underline" to={IMAGES_PATH}>
         Images
       </Link>
@@ -136,7 +136,7 @@ function ImageDetail({
     <div className="flex h-full flex-col">
       <Breadcrumbs name={name} tag={nameRoute ? undefined : tag} />
       {notice && (
-        <p role="status" className="px-4 py-2 text-sm text-muted-foreground">
+        <p role="status" className="px-4 py-2 text-body text-muted-foreground">
           {notice}
         </p>
       )}
@@ -155,7 +155,7 @@ function ImageDetail({
             end={tabItem.path === ""}
             className={({ isActive }) =>
               cn(
-                "px-3 py-2 text-sm",
+                "px-3 py-2 text-body",
                 isActive ? "border-b-2 border-primary font-medium" : "text-muted-foreground",
               )
             }

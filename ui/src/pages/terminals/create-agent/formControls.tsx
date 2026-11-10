@@ -39,7 +39,7 @@ export function SwitchRow({
     <div className="flex items-center justify-between gap-3">
       <div>
         <Label htmlFor={id}>{label}</Label>
-        <p className="text-xs text-muted-foreground">{help}</p>
+        <p className="text-ui text-muted-foreground">{help}</p>
       </div>
       <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
     </div>
@@ -99,7 +99,7 @@ export function PolicyField({
         value={value}
         onChange={(event) => onChange(event.target.value as AgentPolicy)}
         disabled={disabled}
-        className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm"
+        className="h-8 w-full rounded-card border border-input bg-background px-2.5 text-body"
       >
         <option value="restart">restart</option>
         <option value="stop">stop</option>

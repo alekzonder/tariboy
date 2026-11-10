@@ -216,7 +216,7 @@ export default function Mailbox({
                 }}
               />
             ) : (
-              <p className="px-4 py-3 text-sm text-muted-foreground">Select a letter.</p>
+              <p className="px-4 py-3 text-body text-muted-foreground">Select a letter.</p>
             )}
           </section>
         )}

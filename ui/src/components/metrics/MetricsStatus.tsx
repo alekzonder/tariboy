@@ -7,15 +7,15 @@ import { metricsErrorKind } from "@/lib/metricsFormat";
 export function MetricsLoading() {
   return (
     <div className="space-y-3">
-      <p role="status" className="text-sm text-muted-foreground">
+      <p role="status" className="text-body text-muted-foreground">
         Loading metrics…
       </p>
       <div aria-hidden="true" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
         {Array.from({ length: 8 }, (_, i) => (
-          <div key={i} className="h-18 animate-pulse rounded border bg-muted/50" />
+          <div key={i} className="h-18 animate-pulse rounded-chip border bg-subtle" />
         ))}
       </div>
-      <div aria-hidden="true" className="h-40 animate-pulse rounded border bg-muted/50" />
+      <div aria-hidden="true" className="h-40 animate-pulse rounded-chip border bg-subtle" />
     </div>
   );
 }
@@ -34,7 +34,7 @@ export function MetricsError({
   const kind = metricsErrorKind(error);
   if (kind === "old_daemon") {
     return (
-      <div role="alert" className="rounded border p-3 text-sm">
+      <div role="alert" className="rounded-chip border p-3 text-body">
         <p>This host runs an older daemon without metrics. Update the host to see them.</p>
         <Link to="/settings/hosts" className="text-primary hover:underline">
           Settings → Hosts
@@ -43,7 +43,10 @@ export function MetricsError({
     );
   }
   return (
-    <div role="alert" className="space-y-2 rounded border border-destructive/40 p-3 text-sm">
+    <div
+      role="alert"
+      className="space-y-2 rounded-chip border border-destructive-line p-3 text-body"
+    >
       <p className="font-medium">{title}</p>
       <p className="text-muted-foreground">
         {kind === "timeout" ? "The host did not answer in 30 seconds." : errorText(error)}

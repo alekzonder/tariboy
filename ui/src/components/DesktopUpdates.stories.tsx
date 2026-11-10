@@ -15,7 +15,7 @@ type Story = StoryObj<typeof meta>;
 export const BrowserFallback: Story = {
   render: () => (
     <DesktopUpdatesProvider>
-      <div className="h-[460px] w-[820px] overflow-hidden">
+      <div className="h-115 w-205 overflow-hidden">
         <AppSettings />
       </div>
     </DesktopUpdatesProvider>

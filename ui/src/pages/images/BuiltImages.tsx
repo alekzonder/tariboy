@@ -102,7 +102,7 @@ export default function BuiltImages({
     }
   };
 
-  if (error) return <p className="text-sm text-destructive">{error}</p>;
+  if (error) return <p className="text-body text-destructive">{error}</p>;
   return (
     <section aria-label="Versions" className="space-y-2">
       <h2 className="font-medium">Versions</h2>

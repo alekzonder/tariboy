@@ -13,7 +13,7 @@ type Story = StoryObj;
 
 export const AdvancedOptionsOpen: Story = {
   render: () => (
-    <Collapsible defaultOpen className="w-[420px]">
+    <Collapsible defaultOpen className="w-105">
       <CollapsibleTrigger asChild>
         <Button variant="outline" size="sm" type="button">
           <ChevronDown className="size-4" />
@@ -28,13 +28,9 @@ export const AdvancedOptionsOpen: Story = {
         <div className="grid gap-1.5">
           <Label>env (K=V)</Label>
           <div className="flex items-center gap-2">
-            <Input
-              aria-label="env key 0"
-              defaultValue="TARIBOY_PROFILE"
-              className="h-8 w-[168px]"
-            />
+            <Input aria-label="env key 0" defaultValue="TARIBOY_PROFILE" className="h-8 w-42" />
             <span className="text-muted-foreground">=</span>
-            <Input aria-label="env value 0" defaultValue="team" className="h-8 w-[120px]" />
+            <Input aria-label="env value 0" defaultValue="team" className="h-8 w-30" />
           </div>
         </div>
       </CollapsibleContent>
@@ -44,7 +40,7 @@ export const AdvancedOptionsOpen: Story = {
 
 export const AdvancedOptionsClosed: Story = {
   render: () => (
-    <Collapsible className="w-[420px]">
+    <Collapsible className="w-105">
       <CollapsibleTrigger asChild>
         <Button variant="outline" size="sm" type="button">
           <ChevronRight className="size-4" />
@@ -63,7 +59,7 @@ export const AdvancedOptionsClosed: Story = {
 
 export const IterationDetail: Story = {
   render: () => (
-    <Collapsible defaultOpen className="w-[440px] rounded-[10px] border border-border p-3">
+    <Collapsible defaultOpen className="w-110 rounded-card border border-border p-3">
       <CollapsibleTrigger asChild>
         <Button variant="ghost" size="sm" type="button" className="pl-1">
           <ChevronDown className="size-4" />
@@ -71,7 +67,7 @@ export const IterationDetail: Story = {
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-2">
-        <pre className="m-0 whitespace-pre-wrap font-mono text-xs leading-[18px] text-muted-foreground">
+        <pre className="m-0 whitespace-pre-wrap font-mono text-ui leading-4.5 text-muted-foreground">
           {
             "claimed TB-142 from queue tasks\nimage worker:v2 · host This daemon (local)\nexit 0 · $0.14"
           }

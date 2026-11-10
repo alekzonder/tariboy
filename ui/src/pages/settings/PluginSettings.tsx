@@ -93,10 +93,10 @@ export default function PluginSettings({ name }: { name: string }) {
     }
   };
 
-  if (loading) return <p className="text-sm text-muted-foreground">Loading integration…</p>;
+  if (loading) return <p className="text-body text-muted-foreground">Loading integration…</p>;
   if (!plugin?.settings)
     return (
-      <p role="alert" className="text-sm text-destructive">
+      <p role="alert" className="text-body text-destructive">
         {error || "Integration settings not found"}
       </p>
     );
@@ -104,13 +104,13 @@ export default function PluginSettings({ name }: { name: string }) {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="space-y-2">
-        <h2 className="text-xl font-semibold">{plugin.settings.title}</h2>
+        <h2 className="text-heading font-semibold">{plugin.settings.title}</h2>
         {plugin.description && (
-          <p className="text-sm text-muted-foreground">{plugin.description}</p>
+          <p className="text-body text-muted-foreground">{plugin.description}</p>
         )}
       </div>
       {!!plugin.settings.status?.length && (
-        <div className="space-y-1 rounded-lg border p-4 text-sm">
+        <div className="space-y-1 rounded-card border p-4 text-body">
           {plugin.settings.status.map((item) => (
             <p key={item.name}>
               {item.label}: {statusValue(status[item.name])}
@@ -121,7 +121,7 @@ export default function PluginSettings({ name }: { name: string }) {
       {plugin.settings.sections?.map((section) => {
         const fields = section.fields ?? [];
         return (
-          <section key={section.title} className="space-y-4 rounded-lg border p-4">
+          <section key={section.title} className="space-y-4 rounded-card border p-4">
             <h3 className="font-medium">{section.title}</h3>
             {fields.map((field) => (
               <div key={field.name} className="space-y-1.5">
@@ -136,15 +136,15 @@ export default function PluginSettings({ name }: { name: string }) {
                     setValues((current) => ({ ...current, [field.name]: event.target.value }))
                   }
                 />
-                {field.help && <p className="text-xs text-muted-foreground">{field.help}</p>}
+                {field.help && <p className="text-ui text-muted-foreground">{field.help}</p>}
               </div>
             ))}
             {error && (
-              <p role="alert" className="text-sm text-destructive">
+              <p role="alert" className="text-body text-destructive">
                 {error}
               </p>
             )}
-            <p role="status" className="text-sm text-muted-foreground">
+            <p role="status" className="text-body text-muted-foreground">
               {notice}
             </p>
             <div className="flex gap-2">

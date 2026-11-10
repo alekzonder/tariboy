@@ -18,7 +18,7 @@ const field = (key: string) => fieldOfKey(key) as ConfigField;
 // follows Save, not the unsaved draft.
 function ScheduleNextRun({ nextAt }: { nextAt?: string }) {
   return (
-    <p data-testid="schedule-next-run" className="text-xs text-muted-foreground">
+    <p data-testid="schedule-next-run" className="text-ui text-muted-foreground">
       {nextAt ? `Next run: ${new Date(nextAt).toLocaleString()}` : "No scheduled run"}
     </p>
   );
@@ -107,7 +107,7 @@ const OTHER_VIEWS = [
 function OtherViews({ base }: { base: string }) {
   return (
     <SettingsSection id="views" title="Other views" level={4}>
-      <nav aria-label="Other views" className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+      <nav aria-label="Other views" className="flex flex-wrap gap-x-4 gap-y-1 text-body">
         <Link className="text-primary hover:underline" to={`${base}/mailbox`}>
           Open mailbox
         </Link>
@@ -140,13 +140,13 @@ export function AdvancedSettings(
   const { base, open, onOpenChange, dirty, hidden, ...section } = props;
   return (
     <Collapsible open={open} onOpenChange={onOpenChange} hidden={hidden} className="border-t pt-3">
-      <CollapsibleTrigger className="group flex items-center gap-2 text-sm font-semibold">
+      <CollapsibleTrigger className="group flex items-center gap-2 text-body font-semibold">
         <ChevronRight
           aria-hidden="true"
           className="size-4 transition-transform group-data-[state=open]:rotate-90"
         />
         Advanced
-        {dirty > 0 && <span className="text-xs font-medium text-primary">{unsaved(dirty)}</span>}
+        {dirty > 0 && <span className="text-ui font-medium text-primary">{unsaved(dirty)}</span>}
       </CollapsibleTrigger>
       <CollapsibleContent
         forceMount

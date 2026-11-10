@@ -40,9 +40,9 @@ export function priorityTone(priority: string): StatusTone {
 /** Filled pill: background + text. `quiet`/`faint` get the neutral chip, used
  *  where the pill shape has to hold a column (agent rows, priorities). */
 export const TONE_FILL: Record<StatusTone, string> = {
-  live: "bg-status-running/13 text-status-running font-medium",
-  attention: "bg-primary/12 text-primary font-medium",
-  danger: "bg-status-failed/12 text-status-failed font-medium",
+  live: "bg-status-running-soft text-status-running font-medium",
+  attention: "bg-primary-soft text-primary font-medium",
+  danger: "bg-destructive-soft text-destructive font-medium",
   quiet: "bg-muted text-muted-foreground",
   faint: "bg-muted text-muted-foreground opacity-70",
 };
@@ -52,7 +52,7 @@ export const TONE_FILL: Record<StatusTone, string> = {
 export const TONE_TEXT: Record<StatusTone, string> = {
   live: "text-status-running font-medium",
   attention: "text-primary font-medium",
-  danger: "text-status-failed font-medium",
+  danger: "text-destructive font-medium",
   quiet: "text-muted-foreground",
   faint: "text-muted-foreground opacity-70",
 };
@@ -60,9 +60,9 @@ export const TONE_TEXT: Record<StatusTone, string> = {
 /** Status dot. Only a live dot carries the halo; a quiet one is the flat
  *  stopped grey, which is a different token from muted text on purpose. */
 export const TONE_DOT: Record<StatusTone, string> = {
-  live: "bg-status-running ring-3 ring-status-running/18",
+  live: "bg-status-running ring-3 ring-status-running-mid",
   attention: "bg-primary",
-  danger: "bg-status-failed",
+  danger: "bg-destructive",
   quiet: "bg-status-stopped",
   faint: "bg-status-stopped",
 };

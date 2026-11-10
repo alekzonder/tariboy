@@ -122,7 +122,7 @@ function InstructionsDisclosure({ call }: { call: Call }) {
       <button className="text-left" onClick={() => setShowInstr((v) => !v)}>
         📜 instructions
         {call.instructions_changed && call.seq > 0 && (
-          <span className="text-amber-600"> ⚠ changed</span>
+          <span className="text-warning"> ⚠ changed</span>
         )}
       </button>
       {showInstr && <pre className="whitespace-pre-wrap opacity-80">{call.instructions}</pre>}
@@ -209,8 +209,8 @@ export function ProxyCallRow({
   };
 
   return (
-    <div className="border-l-2 border-blue-500/40 pl-2 my-1 font-mono text-xs">
-      {call.parse_error && <div className="text-amber-600">parse error — raw only</div>}
+    <div className="border-l-2 border-primary-line pl-2 my-1 font-mono text-ui">
+      {call.parse_error && <div className="text-warning">parse error — raw only</div>}
 
       <InstructionsDisclosure call={call} />
 

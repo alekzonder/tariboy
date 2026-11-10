@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import type { ApiClient } from "@/lib/api";
 import type { AgentPool, CreateQueueInput, Queue, UpdateQueueInput } from "@/types";
 import { cn } from "@/lib/utils";
-import { EMPTY, MONO } from "./panelStyles";
+import { EMPTY, MONO } from "@/components/ui/recipes";
 import { NewQueuePane, QueueDetail } from "./QueueSettingsDetail";
 import {
   queueSummary,
@@ -242,7 +242,7 @@ function QueueList({
     <nav
       aria-label="Queue list"
       className={cn(
-        "flex w-67.5 shrink-0 flex-col border-r bg-muted/30 max-sm:w-full max-sm:border-r-0",
+        "flex w-67.5 shrink-0 flex-col border-r bg-subtle max-sm:w-full max-sm:border-r-0",
         hidden && "max-sm:hidden",
       )}
     >
@@ -294,21 +294,20 @@ function QueueListItem({
         aria-current={current ? "true" : undefined}
         aria-label={`Queue ${queue.prefix}: ${queue.name}, ${summary}${warn ? ", a pool has no agents" : ""}`}
         className={cn(
-          "flex w-full flex-col gap-0.5 rounded-panel px-2.5 py-2 text-left hover:bg-muted",
-          current &&
-            "bg-[color-mix(in_oklab,var(--primary)_10%,transparent)] hover:bg-[color-mix(in_oklab,var(--primary)_14%,transparent)]",
+          "flex w-full flex-col gap-0.5 rounded-control px-2.5 py-2 text-left hover:bg-muted",
+          current && "bg-primary-soft hover:bg-primary-soft",
         )}
         onClick={onChoose}
       >
         <span className="flex min-w-0 items-baseline gap-2">
           <strong className={cn(MONO, "text-ui font-medium")}>{queue.prefix}</strong>
-          <span className="min-w-0 truncate text-body-sm">{queue.name}</span>
+          <span className="min-w-0 truncate text-body">{queue.name}</span>
           {warn && (
             <span
               role="img"
               aria-label="A pool has no agents"
               title="A pool the workflow uses has no agents"
-              className="ml-auto size-2 shrink-0 self-center rounded-full bg-status-failed"
+              className="ml-auto size-2 shrink-0 self-center rounded-full bg-destructive"
             />
           )}
         </span>

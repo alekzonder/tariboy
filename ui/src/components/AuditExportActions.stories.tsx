@@ -15,16 +15,16 @@ export default meta;
 
 type Story = StoryObj;
 
-const mono = "font-mono text-xs text-muted-foreground";
+const mono = "font-mono text-ui text-muted-foreground";
 
 export const IterationHeader: Story = {
   render: () => (
-    <div className="flex w-[520px] flex-col gap-1">
+    <div className="flex w-130 flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
         <div className={mono}>iteration 4f2a91 · ok</div>
         <AuditExportActions name="builder" iteration="4f2a91c7-2b60-4f1e-8f0a-91d2c7e51a33" />
       </div>
-      <div className={`rounded-md border border-border bg-muted p-2 ${mono}`}>
+      <div className={`rounded-control border border-border bg-muted p-2 ${mono}`}>
         18:22:41 iteration loop · 18:22:49 Bash go test ./... · 18:23:07 iteration ok
       </div>
     </div>
@@ -33,8 +33,8 @@ export const IterationHeader: Story = {
 
 export const FullAuditToolbar: Story = {
   render: () => (
-    <div className="flex w-[560px] items-center gap-2">
-      <div className="flex h-8 items-center rounded-md border border-input px-2.5 text-[13px] whitespace-nowrap text-muted-foreground">
+    <div className="flex w-140 items-center gap-2">
+      <div className="flex h-8 items-center rounded-control border border-input px-2.5 text-body whitespace-nowrap text-muted-foreground">
         all types
       </div>
       <Input
@@ -50,9 +50,9 @@ export const FullAuditToolbar: Story = {
 
 export const AgentScoped: Story = {
   render: () => (
-    <div className="flex w-[340px] items-center gap-2.5">
-      <span className="text-[13px]">
-        Full audit for <span className="font-mono text-xs">docs-bot</span>
+    <div className="flex w-85 items-center gap-2.5">
+      <span className="text-body">
+        Full audit for <span className="font-mono text-ui">docs-bot</span>
       </span>
       <span className="ml-auto">
         <AuditExportActions name="docs-bot" />

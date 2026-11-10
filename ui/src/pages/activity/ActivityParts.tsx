@@ -26,7 +26,7 @@ export function ActivityPeriodBar<P extends string = ActivityPeriod>({
       <div
         role="group"
         aria-label="Period"
-        className="flex overflow-hidden rounded-md border text-sm"
+        className="flex overflow-hidden rounded-control border text-body"
       >
         {periods.map(({ period, label }) => (
           <button
@@ -44,14 +44,14 @@ export function ActivityPeriodBar<P extends string = ActivityPeriod>({
         ))}
       </div>
       {window.period === "custom" && (
-        <div className="flex flex-wrap items-center gap-2 text-sm">
+        <div className="flex flex-wrap items-center gap-2 text-body">
           <label className="flex items-center gap-1">
             <span className="text-muted-foreground">From</span>
             <Input
               type="datetime-local"
               value={window.customSince}
               onChange={(e) => onCustom("since", e.target.value)}
-              className="h-auto w-auto rounded border bg-background px-2 py-1 text-sm dark:bg-background"
+              className="h-auto w-auto rounded-chip border bg-background px-2 py-1 text-body dark:bg-background"
             />
           </label>
           <label className="flex items-center gap-1">
@@ -60,17 +60,17 @@ export function ActivityPeriodBar<P extends string = ActivityPeriod>({
               type="datetime-local"
               value={window.customUntil}
               onChange={(e) => onCustom("until", e.target.value)}
-              className="h-auto w-auto rounded border bg-background px-2 py-1 text-sm dark:bg-background"
+              className="h-auto w-auto rounded-chip border bg-background px-2 py-1 text-body dark:bg-background"
             />
           </label>
         </div>
       )}
       {window.error ? (
-        <span role="alert" className="text-sm text-destructive">
+        <span role="alert" className="text-body text-destructive">
           {window.error}
         </span>
       ) : (
-        <span className="text-xs text-muted-foreground">
+        <span className="text-ui text-muted-foreground">
           {fmtPeriod(window.since, window.until)}
         </span>
       )}
@@ -118,9 +118,9 @@ export function ActivityTotals({
       )}
     >
       {cards.map(([label, value]) => (
-        <div key={label} data-total={label} className="flex flex-col rounded border p-3">
-          <div className="text-xs text-muted-foreground">{label}</div>
-          <div className="mt-auto pt-1 font-mono text-lg">{value}</div>
+        <div key={label} data-total={label} className="flex flex-col rounded-chip border p-3">
+          <div className="text-ui text-muted-foreground">{label}</div>
+          <div className="mt-auto pt-1 font-mono text-heading">{value}</div>
         </div>
       ))}
     </div>
@@ -150,7 +150,7 @@ export function ActivityTabs<V extends string>({
           aria-selected={active === view}
           onClick={() => onSelect(view)}
           className={cn(
-            "shrink-0 rounded px-3 py-1 text-sm whitespace-nowrap hover:bg-accent",
+            "shrink-0 rounded-chip px-3 py-1 text-body whitespace-nowrap hover:bg-accent",
             active === view ? "bg-accent font-medium" : "text-muted-foreground",
           )}
         >
@@ -180,9 +180,9 @@ export function TaskActivityTable({
   showAgents?: boolean;
 }) {
   return (
-    <div className="overflow-x-auto rounded border">
-      <table className="w-full min-w-180 text-sm">
-        <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+    <div className="overflow-x-auto rounded-chip border">
+      <table className="w-full min-w-180 text-body">
+        <thead className="bg-subtle text-left text-ui text-muted-foreground">
           <tr>
             <th className="px-3 py-2">Task</th>
             <th className="px-3 py-2">Title</th>
@@ -202,7 +202,7 @@ export function TaskActivityTable({
                 <button
                   type="button"
                   onClick={() => onOpenTask(row.key)}
-                  className="font-mono text-xs text-primary hover:underline"
+                  className="font-mono text-ui text-primary hover:underline"
                 >
                   {row.key}
                 </button>
@@ -243,9 +243,9 @@ export function AgentActivityTable({
   agentHref: (agent: string) => string;
 }) {
   return (
-    <div className="overflow-x-auto rounded border">
-      <table className="w-full min-w-130 text-sm">
-        <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+    <div className="overflow-x-auto rounded-chip border">
+      <table className="w-full min-w-130 text-body">
+        <thead className="bg-subtle text-left text-ui text-muted-foreground">
           <tr>
             <th className="px-3 py-2">Agent</th>
             <th className="px-3 py-2 text-right">Tasks</th>
@@ -285,7 +285,7 @@ export function AgentActivityTable({
 
 export function TruncatedNote({ shown }: { shown: number }) {
   return (
-    <p className="text-xs text-muted-foreground">
+    <p className="text-ui text-muted-foreground">
       Showing the {shown} most recent tasks. The totals count every task in the period.
     </p>
   );

@@ -26,7 +26,7 @@ export function UsageWindowPicker({
           key={p}
           onClick={() => onPreset(p)}
           className={cn(
-            "rounded border px-3 py-1 text-sm hover:bg-accent",
+            "rounded-chip border px-3 py-1 text-body hover:bg-accent",
             preset === p && "bg-accent font-medium",
           )}
         >
@@ -34,7 +34,7 @@ export function UsageWindowPicker({
         </button>
       ))}
       {preset === "custom" && (
-        <div className="flex flex-wrap items-center gap-2 text-sm">
+        <div className="flex flex-wrap items-center gap-2 text-body">
           <RangeInput label="from" value={customSince} onChange={onCustomSince} />
           <RangeInput label="to" value={customUntil} onChange={onCustomUntil} />
         </div>
@@ -59,7 +59,7 @@ function RangeInput({
         type="datetime-local"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-auto w-auto rounded border bg-background px-2 py-1 text-sm dark:bg-background"
+        className="h-auto w-auto rounded-chip border bg-background px-2 py-1 text-body dark:bg-background"
       />
     </label>
   );
@@ -80,7 +80,7 @@ export function UsageGroupBySwitch({
           key={g.key}
           onClick={() => onGroupBy(g.key)}
           className={cn(
-            "rounded px-3 py-1 text-sm hover:bg-accent",
+            "rounded-chip px-3 py-1 text-body hover:bg-accent",
             groupBy === g.key ? "bg-accent font-medium" : "text-muted-foreground",
           )}
         >

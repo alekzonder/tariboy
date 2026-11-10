@@ -37,7 +37,7 @@ export default function AgentMailboxTab({
           fixedTo={principal}
           toolbar={
             <>
-              <span className="text-meta text-muted-foreground tabular-nums">
+              <span className="text-caption text-muted-foreground tabular-nums">
                 batch {batch ?? "—"} · inbox {pending}/{max || "—"}
               </span>
               <ClearInbox name={name} disabled={pending === 0} />

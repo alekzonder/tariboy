@@ -17,10 +17,10 @@ const Field = ({ id, label, children }: { id: string; label: string; children: R
 
 export const LabelledField: Story = {
   render: () => (
-    <div className="grid w-[320px] gap-1.5">
+    <div className="grid w-80 gap-1.5">
       <Label htmlFor="preview-agent-name">name</Label>
       <Input id="preview-agent-name" placeholder="empty = generated" />
-      <span className="text-xs text-muted-foreground">
+      <span className="text-ui text-muted-foreground">
         Leave empty and the daemon names the agent.
       </span>
     </div>
@@ -29,7 +29,7 @@ export const LabelledField: Story = {
 
 export const IdentityForm: Story = {
   render: () => (
-    <div className="grid w-[460px] grid-cols-2 gap-3">
+    <div className="grid w-115 grid-cols-2 gap-3">
       <Field id="preview-identity-name" label="name">
         <Input id="preview-identity-name" defaultValue="builder" />
       </Field>
@@ -48,7 +48,7 @@ export const IdentityForm: Story = {
 
 export const States: Story = {
   render: () => (
-    <div className="grid w-[340px] gap-3">
+    <div className="grid w-85 gap-3">
       <Field id="preview-state-value" label="image">
         <Input id="preview-state-value" defaultValue="worker:v2" />
       </Field>
@@ -60,7 +60,7 @@ export const States: Story = {
       </Field>
       <Field id="preview-state-invalid" label="limit USD">
         <Input id="preview-state-invalid" defaultValue="-20" aria-invalid />
-        <span className="text-xs text-destructive">Budget limit must be a positive amount.</span>
+        <span className="text-ui text-destructive">Budget limit must be a positive amount.</span>
       </Field>
     </div>
   ),
@@ -68,7 +68,7 @@ export const States: Story = {
 
 export const Types: Story = {
   render: () => (
-    <div className="grid w-[340px] gap-3">
+    <div className="grid w-85 gap-3">
       <Field id="preview-type-search" label="Search agents">
         <Input id="preview-type-search" type="search" placeholder="Search agents…" />
       </Field>

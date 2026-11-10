@@ -13,32 +13,32 @@ export function HostDiagnostics({
   return (
     <>
       {displayHost?.platform && displayHost.arch && (
-        <p className={unsupported ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
+        <p className={unsupported ? "text-ui text-destructive" : "text-ui text-muted-foreground"}>
           {unsupported
             ? `Unsupported host: ${displayHost.platform}/${displayHost.arch}`
             : `Server: ${displayHost.platform}/${displayHost.arch}`}
         </p>
       )}
       {installRequirements.length > 0 && (
-        <div className="space-y-0.5 text-xs text-destructive">
+        <div className="space-y-0.5 text-ui text-destructive">
           <p className="font-medium">Install blocked</p>
           <p>Missing install requirements: {installRequirements.join(", ")}</p>
         </div>
       )}
       {optionalTools.length > 0 && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-ui text-muted-foreground">
           Optional agent tools not found: {optionalTools.join(", ")}
         </p>
       )}
 
       {output.length > 0 && (
-        <details className="min-w-0 rounded-md border bg-muted/40">
-          <summary className="cursor-pointer px-2 py-1.5 text-xs font-medium">
+        <details className="min-w-0 rounded-control border bg-subtle">
+          <summary className="cursor-pointer px-2 py-1.5 text-ui font-medium">
             Technical details
           </summary>
           <pre
             aria-label="SSH technical details"
-            className="max-h-40 min-w-0 max-w-full overflow-auto border-t p-2 text-xs whitespace-pre-wrap [overflow-wrap:anywhere]"
+            className="max-h-40 min-w-0 max-w-full overflow-auto border-t p-2 text-ui whitespace-pre-wrap [overflow-wrap:anywhere]"
           >
             {output.map((event) => event.text).join("\n")}
           </pre>

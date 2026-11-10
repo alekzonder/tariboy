@@ -31,7 +31,7 @@ export interface HostActions {
 }
 
 const SUBHEADING_CLASS =
-  "px-2 pt-1.5 pb-1 text-caption font-medium tracking-[.02em] text-muted-foreground";
+  "px-2 pt-1.5 pb-1 text-caption font-medium tracking-wide text-muted-foreground";
 
 /** The host's own menu: its settings, then Edit and Remove. The implicit
  *  local host has no registry entry (id ""), so there is nothing to edit or
@@ -140,7 +140,7 @@ function TeamsSection({
         .filter(([, rows]) => !filtering || rows.length > 0)
         .map(([name, rows]) => (
           <details key={name} open>
-            <summary className="cursor-pointer px-2 py-1 text-sm font-medium">
+            <summary className="cursor-pointer px-2 py-1 text-body font-medium">
               <SortableButton
                 dragKey={dragId("groups", hostId, name)}
                 type="button"
@@ -205,7 +205,7 @@ function HostPart({
           />
         </div>
       )}
-      {host.error && <div className="px-2 text-xs text-destructive">{host.error}</div>}
+      {host.error && <div className="px-2 text-ui text-destructive">{host.error}</div>}
       <TeamsSection
         hostId={host.host.id}
         teams={teams}
@@ -258,7 +258,7 @@ export function AgentList({
         section.host.agents.length === 0 && section.teams.size === 0 && !section.host.error,
     );
   if (empty && !layout.byHost) {
-    return <div className="px-2 pt-1.5 text-body-sm text-muted-foreground">No agents.</div>;
+    return <div className="px-2 pt-1.5 text-body text-muted-foreground">No agents.</div>;
   }
   return (
     <>
@@ -266,10 +266,7 @@ export function AgentList({
         <SidebarAgentRow key={row.key} row={row} actions={rowActions} />
       ))}
       {layout.pinned.length > 0 && (
-        <div
-          aria-hidden="true"
-          className="mx-3.5 my-2.5 h-px bg-[color-mix(in_oklab,var(--border)_55%,transparent)]"
-        />
+        <div aria-hidden="true" className="mx-3.5 my-2.5 h-px bg-border" />
       )}
       {layout.sections.map((section) => (
         <HostPart

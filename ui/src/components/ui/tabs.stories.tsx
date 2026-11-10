@@ -19,7 +19,7 @@ const WORKSPACE_TABS = [
 
 export const AgentWorkspace: Story = {
   render: () => (
-    <Tabs defaultValue="console" className="w-[640px]">
+    <Tabs defaultValue="console" className="w-160">
       <TabsList>
         {WORKSPACE_TABS.map(([value, label]) => (
           <TabsTrigger key={value} value={value}>
@@ -28,7 +28,7 @@ export const AgentWorkspace: Story = {
         ))}
       </TabsList>
       <TabsContent value="console">
-        <div className="rounded-[10px] border border-border px-3 py-2.5 font-mono text-[13px]/5 whitespace-pre-wrap text-foreground">
+        <div className="rounded-card border border-border px-3 py-2.5 font-mono text-body/5 whitespace-pre-wrap text-foreground">
           {"builder · iteration 42 · worker:v2\n$ tariboy task claim TB-142"}
         </div>
       </TabsContent>
@@ -38,7 +38,7 @@ export const AgentWorkspace: Story = {
 
 export const MessageQueueViews: Story = {
   render: () => (
-    <Tabs defaultValue="queue" className="w-[420px]">
+    <Tabs defaultValue="queue" className="w-105">
       <div className="flex items-center gap-2">
         <TabsList>
           <TabsTrigger value="queue">Queue</TabsTrigger>
@@ -48,7 +48,7 @@ export const MessageQueueViews: Story = {
         <Badge variant="secondary">12 pending</Badge>
       </div>
       <TabsContent value="queue">
-        <div className="grid gap-1.5 text-[13px]">
+        <div className="grid gap-1.5 text-body">
           <div>
             <span className="font-mono">reviewer</span>
             <span className="text-muted-foreground"> · review TB-142 before packaging</span>
@@ -65,7 +65,7 @@ export const MessageQueueViews: Story = {
 
 export const WithDisabledTab: Story = {
   render: () => (
-    <Tabs defaultValue="configuration" className="w-[480px]">
+    <Tabs defaultValue="configuration" className="w-120">
       <TabsList>
         <TabsTrigger value="configuration">Configuration</TabsTrigger>
         <TabsTrigger value="activity">Activity</TabsTrigger>
@@ -74,7 +74,7 @@ export const WithDisabledTab: Story = {
         </TabsTrigger>
       </TabsList>
       <TabsContent value="configuration">
-        <p className="mb-2 text-[13px] text-muted-foreground">
+        <p className="mb-2 text-body text-muted-foreground">
           Host build-01 is unavailable; advanced actions are disabled until it reconnects.
         </p>
         <Button variant="outline" size="sm" disabled>

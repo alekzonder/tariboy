@@ -18,11 +18,11 @@ export default function Catalog() {
     };
   }, []);
 
-  if (error) return <p className="p-6 text-sm text-destructive">{error}</p>;
-  if (!repos) return <p className="p-6 text-sm text-muted-foreground">Loading…</p>;
+  if (error) return <p className="p-6 text-body text-destructive">{error}</p>;
+  if (!repos) return <p className="p-6 text-body text-muted-foreground">Loading…</p>;
   if (repos.length === 0)
     return (
-      <p className="p-6 text-sm text-muted-foreground">
+      <p className="p-6 text-body text-muted-foreground">
         No repositories yet. Push an image with <code>tariboy push</code>.
       </p>
     );

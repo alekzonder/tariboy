@@ -29,7 +29,7 @@ export function PluginsFields({
       <Label>plugins</Label>
       <div className="flex flex-wrap gap-1">
         {displayedPlugins.length === 0 && (
-          <span className="text-xs text-muted-foreground">none</span>
+          <span className="text-ui text-muted-foreground">none</span>
         )}
         {displayedPlugins.map((plugin) => (
           <Badge key={plugin} variant="secondary" className="gap-1">
@@ -52,7 +52,7 @@ export function PluginsFields({
         ))}
       </div>
       {schemaV2 ? (
-        <p className="text-xs text-muted-foreground">Plugins are owned by this schema-v2 image.</p>
+        <p className="text-ui text-muted-foreground">Plugins are owned by this schema-v2 image.</p>
       ) : (
         <div className="flex gap-2">
           <Input

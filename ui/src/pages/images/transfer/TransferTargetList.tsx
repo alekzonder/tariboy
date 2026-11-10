@@ -24,7 +24,7 @@ export function TransferTargetList({
       <ul className="space-y-2" aria-label="Eligible transfer targets">
         {targets.map((target) => (
           <li key={target.id}>
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex items-center gap-2 text-body">
               <input
                 type="checkbox"
                 aria-label={`Transfer to ${target.label}`}

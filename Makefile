@@ -752,9 +752,9 @@ frontend-check:
 
 # The designer's hand-off check (docs/docs/architecture/web-ui.mdx): the type
 # check, oxlint on the UI files changed against origin/main (uncommitted ones
-# included), the oxfmt format check, the five policy tests that read designer
-# files (view lint, Storybook safety, story network, arbitrary px, text
-# input), Knip, and the Storybook build. It does not run ui-api-types,
+# included), the oxfmt format check, the policy tests that read designer
+# files (view lint, Storybook safety, story network, design tokens, text
+# input, the theme and cn()), Knip, and the Storybook build. It does not run ui-api-types,
 # ui-lint, the rest of ui-test, ui-branding, ui-bundle-budget or docs: the
 # developer's pull request runs those. It takes the host check slot and runs
 # every step like frontend-check does. A successful
@@ -772,7 +772,7 @@ designer-check:
 		failed=1; rows="$$rows$$(printf '%-28s %-4s %5ss' ui-oxlint FAIL 0)\n"; \
 	fi; \
 	run_step "ui-fmt-check" 'cd ui && npm run fmt:check'; \
-	run_step "ui-designer-tests" 'cd ui && TARIBOY_VITEST_MAX_WORKERS=2 npx vitest run src/test/viewLintPolicy.test.ts src/test/storybookSafety.test.ts src/test/storyNetwork.test.tsx src/test/arbitraryPxPolicy.test.ts src/test/textInputPolicy.test.ts'; \
+	run_step "ui-designer-tests" 'cd ui && TARIBOY_VITEST_MAX_WORKERS=2 npx vitest run src/test/viewLintPolicy.test.ts src/test/storybookSafety.test.ts src/test/storyNetwork.test.tsx src/test/tokenPolicy.test.ts src/test/textInputPolicy.test.ts src/theme.test.ts src/lib/utils.test.ts'; \
 	run_step "ui-dead-code" 'cd ui && npm run knip'; \
 	run_step "ui-storybook" 'cd ui && npm run build-storybook -- --output-dir "$$TMPDIR/storybook-static" --quiet'; \
 	summarize designer-check

@@ -11,7 +11,7 @@ export default function StoresPage({ name, basePath }: { name?: string; basePath
     <div className="h-full min-h-0 space-y-4 overflow-y-auto p-4">
       {name ? (
         <>
-          <Link className="text-sm text-primary hover:underline" to={basePath}>
+          <Link className="text-body text-primary hover:underline" to={basePath}>
             ← Sources
           </Link>
           <StoreCard name={name} basePath={basePath} />
@@ -42,7 +42,7 @@ function SourcesList({ basePath }: { basePath: string }) {
         onRemoved={data.reload}
       />
       {data.error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-body text-destructive">
           {data.error}
         </p>
       )}

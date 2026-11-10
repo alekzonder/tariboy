@@ -87,7 +87,7 @@ function WeekdayToggles({ model, update, disabled }: ModeProps) {
             disabled={disabled || (on && model.days.length === 1)}
             onClick={() => toggle(code)}
             className={cn(
-              "h-9 w-11 rounded-lg border border-input text-sm transition-colors",
+              "h-9 w-11 rounded-card border border-input text-body transition-colors",
               on ? "border-primary bg-primary text-primary-foreground" : "bg-background",
             )}
           >
@@ -196,7 +196,7 @@ export function ScheduleControl({ value, set, common, unloaded }: ControlProps) 
         disabled={unloaded}
       />
       {built && (
-        <div className="space-y-0.5 text-xs">
+        <div className="space-y-0.5 text-ui">
           <p data-testid="schedule-summary">{describeSchedule(model)}</p>
           <code
             data-testid="schedule-rrule"

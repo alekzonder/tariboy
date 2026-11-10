@@ -19,7 +19,7 @@ import PluginSettings from "./PluginSettings";
 function SettingsSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold">{title}</h1>
+      <h1 className="text-heading font-semibold">{title}</h1>
       {children}
     </div>
   );
@@ -30,7 +30,7 @@ export function UsageSettings() {
   const [searchParams] = useSearchParams();
   return (
     <SettingsSection title="Usage & budgets">
-      <p className="text-sm text-muted-foreground">
+      <p className="text-body text-muted-foreground">
         Cost per completed task, rework and lead time are in{" "}
         <Link to={metricsPathFrom(searchParams)} className="underline">
           Metrics

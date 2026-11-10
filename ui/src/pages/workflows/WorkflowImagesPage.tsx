@@ -55,7 +55,7 @@ export default function WorkflowImagesPage({ basePath }: { basePath: string }) {
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-auto px-4 pb-4">
         {error && (
-          <div role="alert" className="flex items-center gap-2 text-sm text-destructive">
+          <div role="alert" className="flex items-center gap-2 text-body text-destructive">
             <span>{error}</span>
             <Button
               size="sm"
@@ -70,12 +70,12 @@ export default function WorkflowImagesPage({ basePath }: { basePath: string }) {
           </div>
         )}
         {images === null ? (
-          !error && <p className="text-sm text-muted-foreground">Loading workflows…</p>
+          !error && <p className="text-body text-muted-foreground">Loading workflows…</p>
         ) : images.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No workflows on this host.</p>
+          <p className="text-body text-muted-foreground">No workflows on this host.</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-muted-foreground">
+          <table className="w-full text-body">
+            <thead className="text-left text-ui text-muted-foreground">
               <tr>
                 {["Name", "Version", "Bound to"].map((label) => (
                   <th key={label} className={`${CELL} font-medium`}>
@@ -104,7 +104,7 @@ export default function WorkflowImagesPage({ basePath }: { basePath: string }) {
                       </Link>
                     </td>
                     <td className={CELL}>{newest.version}</td>
-                    <td className={`${CELL} text-xs`}>
+                    <td className={`${CELL} text-ui`}>
                       <span title={bound.title}>{bound.text}</span>
                     </td>
                   </tr>
