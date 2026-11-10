@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { Queue } from "@/types";
 import { Input } from "@/components/ui/input";
 
@@ -8,12 +8,15 @@ export default function TaskForm({
   parentKey = "",
   onCreate,
   onCancel,
+  hostControl,
 }: {
   queues: Queue[];
   initialQueue: string;
   parentKey?: string;
   onCreate: (input: { queue: string; parent_key: string; title: string }) => Promise<void>;
   onCancel: () => void;
+  /** Shown first, e.g. the host a task across hosts is made on. */
+  hostControl?: ReactNode;
 }) {
   const [queue, setQueue] = useState(initialQueue || queues[0]?.prefix || "");
   const [title, setTitle] = useState("");
@@ -36,6 +39,7 @@ export default function TaskForm({
       className="task-inline-form mx-3.5 my-2.5 flex gap-1.5 rounded-panel border border-border bg-card p-2.5 shadow-[0_8px_30px_oklch(0_0_0/0.07)]"
       onSubmit={(event) => void submit(event)}
     >
+      {hostControl}
       {parentKey ? (
         // A child is made in its parent's queue; another queue is not offered.
         <span className="shrink-0 self-center text-meta text-muted-foreground">

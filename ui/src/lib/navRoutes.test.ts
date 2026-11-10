@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   activeNav,
+  allHostsTarget,
   legacyServerRedirect,
   legacySettingsPath,
   hostSettingsPath,
   navPath,
   scopedPath,
+  showsAllHosts,
 } from "./navRoutes";
 
 describe("hostSettingsPath", () => {
@@ -151,5 +153,22 @@ describe("scopedPath", () => {
     expect(scopedPath("tasks", "")).toBe("/tasks?host=local");
     expect(scopedPath("inbox", "d_abc", { letter: "m-1" })).toBe("/inbox?host=d_abc&letter=m-1");
     expect(scopedPath("tasks", undefined, { task: "DEV-1" })).toBe("/tasks?task=DEV-1");
+  });
+});
+
+describe("allHostsTarget", () => {
+  it("drops the host and its task and keeps the rest of the query", () => {
+    expect(allHostsTarget("/tasks", "?host=d1&task=DEV-1&view=x")).toBe("/tasks?view=x");
+    expect(allHostsTarget("/tasks", "?host=local")).toBe("/tasks");
+  });
+});
+
+describe("showsAllHosts", () => {
+  it("is Tasks without ?host= in a workspace of two or more hosts", () => {
+    expect(showsAllHosts("tasks", new URLSearchParams(""), 2)).toBe(true);
+    expect(showsAllHosts("tasks", new URLSearchParams("task=DEV-1"), 3)).toBe(true);
+    expect(showsAllHosts("tasks", new URLSearchParams("host=local"), 2)).toBe(false);
+    expect(showsAllHosts("tasks", new URLSearchParams(""), 1)).toBe(false);
+    expect(showsAllHosts("mail", new URLSearchParams(""), 2)).toBe(false);
   });
 });

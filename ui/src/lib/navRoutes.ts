@@ -168,6 +168,26 @@ export function hostScopeTarget(pathname: string, search: string, hostId: string
   return `${pathname}?${params.toString()}`;
 }
 
+/** The same page across every host: without `?host=`, and without the
+ *  `?task=` that named a task of that host. */
+export function allHostsTarget(pathname: string, search: string): string {
+  const params = new URLSearchParams(search);
+  params.delete("host");
+  params.delete("task");
+  const rest = params.toString();
+  return `${pathname}${rest ? `?${rest}` : ""}`;
+}
+
+/** Whether Tasks shows every host of the workspace: a `/tasks` route without
+ *  `?host=` in a workspace with two or more hosts. */
+export function showsAllHosts(
+  serverView: string | undefined,
+  search: URLSearchParams,
+  workspaceHosts: number,
+): boolean {
+  return serverView === "tasks" && !search.has("host") && workspaceHosts >= 2;
+}
+
 /** Whether more than one host is registered: a link the UI builds then names
  *  its host. */
 export function useMultiHost(): boolean {

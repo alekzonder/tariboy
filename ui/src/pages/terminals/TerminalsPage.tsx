@@ -1,7 +1,7 @@
 import { lazy, Suspense, useContext, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { legacyServerRedirect } from "@/lib/navRoutes";
+import { legacyServerRedirect, showsAllHosts } from "@/lib/navRoutes";
 import { needsYouCounts, type HostNeeds } from "@/lib/needsYou";
 import { ServerDialog } from "./ServerDialog";
 import { useDaemons } from "@/components/daemonContext";
@@ -156,6 +156,7 @@ function ConsolePage({
     [hostId, hosts, polling.lastSuccessfulHostsById],
   );
   const server = useServerActions({ hostId, refresh, setHostError, setServerDialog });
+  const allHosts = showsAllHosts(serverView, searchParams, orderedSidebarHosts.length);
   const workspaceHosts = useMemo(
     () => buildWorkspaceHosts(createHosts, hosts, daemons),
     [createHosts, daemons, hosts],
@@ -191,7 +192,7 @@ function ConsolePage({
         <TerminalsSidebar
           hosts={orderedSidebarHosts}
           labelHosts={sidebarHosts}
-          hostId={hostId}
+          hostId={allHosts ? undefined : hostId}
           pageHostId={pageHostId}
           counts={needs.counts}
           query={query}
@@ -215,6 +216,7 @@ function ConsolePage({
                 <TerminalsRoutes
                   serverView={serverView}
                   workspaceHosts={orderedSidebarHosts}
+                  allHosts={allHosts}
                   hostId={hostId}
                   selectedHost={selectedHost}
                   routeUnavailable={Boolean(liveSelectedHost?.error)}

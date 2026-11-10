@@ -21,14 +21,14 @@ function preferSpecificDropTarget(args: Parameters<typeof pointerWithin>[0]) {
   return specific.length > 0 ? specific : collisions;
 }
 
-function RootDrop({ children }: { children: React.ReactNode }) {
+function RootDrop({ grouped, children }: { grouped: boolean; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id: "__root__" });
   return (
     <div
       ref={setNodeRef}
       data-testid="tasks-tree-root"
       className={cn(
-        "min-h-[calc(100%-60px)] pb-20",
+        !grouped && "min-h-[calc(100%-60px)] pb-20",
         isOver && "shadow-[inset_0_0_0_2px_color-mix(in_oklch,var(--primary)_30%,transparent)]",
       )}
     >
@@ -51,6 +51,7 @@ export default function TaskTree({
   onAddChild,
   onMove,
   onPriorityChange,
+  grouped = false,
 }: {
   tasks: Task[];
   /** Every loaded task: a root links to a parent the queue filter left out. */
@@ -66,6 +67,9 @@ export default function TaskTree({
   onAddChild: (key: string) => void;
   onMove: (key: string, parentKey: string, beforeKey: string) => void;
   onPriorityChange: (key: string, priority: TaskPriority) => Promise<void>;
+  /** One host's group in a table of several: the table draws the header once,
+   *  and the group takes only the height of its rows. */
+  grouped?: boolean;
 }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -88,13 +92,13 @@ export default function TaskTree({
   // The header moves columns in its own drag context, outside the rows' one.
   return (
     <>
-      <TaskTableHeader mode={mode} sticky={mode === "all"} />
+      {!grouped && <TaskTableHeader mode={mode} sticky={mode === "all"} />}
       <DndContext
         sensors={sensors}
         collisionDetection={preferSpecificDropTarget}
         onDragEnd={finish}
       >
-        <RootDrop>
+        <RootDrop grouped={grouped}>
           {visible.map((row) => (
             <TaskRow
               key={row.task.key}
@@ -112,7 +116,7 @@ export default function TaskTree({
               onPriorityChange={(priority) => onPriorityChange(row.task.key, priority)}
             />
           ))}
-          {visible.length === 0 && (
+          {visible.length === 0 && !grouped && (
             <div className="px-5 py-10 text-center text-body text-muted-foreground">
               No tasks match this view.
             </div>

@@ -143,7 +143,7 @@ export function renderAt(path: string, attention: ReadonlyMap<string, number> = 
                 <Route path="/agents/:hostId/teams/:team" element={<TerminalsPage />} />
                 <Route path="/servers/:hostId/mail" element={<TerminalsPage />} />
                 <Route path="/inbox" element={<TerminalsPage serverView="mail" scoped />} />
-                <Route path="/tasks" element={<TerminalsPage scoped />} />
+                <Route path="/tasks" element={<TerminalsPage serverView="tasks" scoped />} />
                 <Route path="/settings" element={<TerminalsPage serverView="settings" scoped />}>
                   <Route path="hosts" element={<DaemonsPage />} />
                   <Route path="agent-defaults" element={<p>Agent defaults page</p>} />
