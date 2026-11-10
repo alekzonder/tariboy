@@ -191,11 +191,30 @@ describe("host workspaces", () => {
     addHostToWorkspace("d2", production);
     selectWorkspace(production);
     // The remembered host is the local daemon, which Production does not hold.
-    renderAt("/tasks");
+    renderAt("/inbox");
 
     expect(await screen.findByRole("button", { name: "Open host prod" })).toHaveAttribute(
       "aria-current",
       "page",
+    );
+  });
+
+  it("shows Tasks without ?host= across every host of the workspace", async () => {
+    vi.mocked(fetchAllAgents).mockResolvedValue([
+      { host: { id: "", label: "This daemon (local)" }, agents: [] },
+      { host: { id: "d1", label: "prod" }, agents: [] },
+      { host: { id: "d2", label: "stage" }, agents: [] },
+    ]);
+    const production = createWorkspace("Production")!;
+    addHostToWorkspace("d1", production);
+    addHostToWorkspace("d2", production);
+    selectWorkspace(production);
+    renderAt("/tasks");
+
+    expect(await screen.findByTestId("all-hosts-tasks")).toBeInTheDocument();
+    expect(await screen.findByRole("combobox", { name: "Host" })).toHaveTextContent("All hosts");
+    expect(screen.getByRole("button", { name: "Open host prod" })).not.toHaveAttribute(
+      "aria-current",
     );
   });
 

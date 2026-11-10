@@ -19,6 +19,7 @@ import type { CreateDialogState } from "./TerminalsSidebar";
 // agent list and the agent workspace.
 const InboxPage = lazy(() => import("@/pages/mailbox/InboxPage"));
 const TasksWorkspace = lazy(() => import("@/pages/tasks/TasksWorkspace"));
+const AllHostsTasks = lazy(() => import("@/pages/tasks/AllHostsTasks"));
 const ServerActivityPage = lazy(() => import("@/pages/activity/ServerActivityPage"));
 const MetricsPage = lazy(() => import("@/pages/metrics/MetricsPage"));
 const MetricsComparePage = lazy(() => import("@/pages/metrics/MetricsComparePage"));
@@ -139,25 +140,12 @@ function storesPage({ hostId, storeName }: ServerRoute) {
   );
 }
 
-/**
- * The content island's page for the current route: a page of the sidebar, a
- * team, or an agent. Every host page and the team page sit in the same
- * RouteHostBoundary slot, so moving between them keeps the boundary mounted.
- */
-export function TerminalsRoutes({
-  serverView,
-  workspaceHosts,
-  hostId,
-  selectedHost,
-  routeUnavailable,
-  refresh,
-  hostsContext,
-  onCreate,
-  fallback,
-}: {
+interface TerminalsRoutesProps {
   serverView?: ServerView;
   /** The current workspace's hosts, for the host selector. */
   workspaceHosts: HostAgents[];
+  /** Tasks shows every host of the workspace instead of the route host. */
+  allHosts?: boolean;
   hostId?: string;
   selectedHost?: HostAgents;
   routeUnavailable: boolean;
@@ -168,7 +156,43 @@ export function TerminalsRoutes({
   onCreate: (state: CreateDialogState) => void;
   /** What shows when the route names no page this component can open. */
   fallback: ReactNode;
-}) {
+}
+
+/**
+ * The content island's page for the current route: a page of the sidebar, a
+ * team, or an agent. Every host page and the team page sit in the same
+ * RouteHostBoundary slot, so moving between them keeps the boundary mounted.
+ */
+export function TerminalsRoutes(props: TerminalsRoutesProps) {
+  if (props.allHosts && props.hostId !== undefined)
+    return <AllHostsTasksRoute hosts={props.workspaceHosts} />;
+  return <HostRoutes {...props} />;
+}
+
+/** Tasks across every host of the workspace. */
+function AllHostsTasksRoute({ hosts }: { hosts: HostAgents[] }) {
+  const { refreshHost } = useCustomerQuestionNotifications();
+  return (
+    <AllHostsTasks
+      hosts={hosts}
+      hostControl={<HostScopeSelect hosts={hosts} hostId={undefined} allHosts />}
+      onNotificationsChanged={(id) => void refreshHost(id)}
+    />
+  );
+}
+
+/** A page of the route host, a team, or an agent. */
+function HostRoutes({
+  serverView,
+  workspaceHosts,
+  hostId,
+  selectedHost,
+  routeUnavailable,
+  refresh,
+  hostsContext,
+  onCreate,
+  fallback,
+}: TerminalsRoutesProps) {
   const { agent: agentName, team: teamName, name: storeName, tag: routeTag } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -184,7 +208,13 @@ export function TerminalsRoutes({
         initialTaskKey: searchParams.get("task") ?? undefined,
         multiHost,
         agents: selectedHost?.agents.map((agent) => agent.name) ?? [],
-        hostControl: multiHost ? <HostScopeSelect hosts={workspaceHosts} hostId={hostId} /> : null,
+        hostControl: multiHost ? (
+          <HostScopeSelect
+            hosts={workspaceHosts}
+            hostId={hostId}
+            allHosts={serverView === "tasks"}
+          />
+        ) : null,
         onNotificationsChanged: () => void refreshHost(hostId),
         boundary: (body) => (
           <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
