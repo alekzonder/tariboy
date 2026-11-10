@@ -129,6 +129,51 @@ task notices start no iteration; see
 <a href="/tariboy/docs/architecture/messaging#task-notifications">Task notifications</a>.
 After a <code>harness_error</code> iteration, the end closes only the Goal letters. The
 <code>task.assigned</code> and <code>task.answered</code> notices stay open for the next iteration.</p>
+<h4 id="the-iteration-task"><a class="blume-heading-anchor" href="#the-iteration-task">The iteration task</a></h4>
+<p>One iteration works one task: the iteration task. The prompt letters, the Goal
+block and the AI proxy attribution all use this task. The task of a letter is
+the <code>task_key</code> value in its <code>data</code>. A letter without <code>task_key</code> is about no
+task.</p>
+<p>Before the prompt is assembled, the runner selects the iteration task in this
+order:</p>
+<ol>
+<li>If the agent has a Goal and the Goal has open letters, the iteration task is
+the Goal.</li>
+<li>If no letter is open, the iteration task is the Goal, or no task when the
+agent has no Goal.</li>
+<li>Otherwise, the iteration task is the task of the first open letter in render
+order: requests first, then notices, oldest first.</li>
+</ol>
+<p>The prompt shows only the letters of the iteration task. The letters of other
+tasks stay open. Their attempts do not change, and the end of the iteration
+does not close them. If a done iteration leaves open letters only about other
+tasks, the runner asks for the next message iteration at once. While a letter
+of the iteration task stays open, for example a request without a reply, the
+runner does not ask: that task would come first again.</p>
+<p>The Goal block depends on the iteration task:</p>
+<ul>
+<li>If the agent may take the task as a Goal now (<code>taskgoal.Store.Candidate</code>,
+the rules of <code>goal.sh set</code>), the Goal block shows that task. The mode is
+<code>workflow</code> or <code>flexible</code> by that task. The sticky Goal of the agent does not
+change.</li>
+<li>If the agent may not take it, for example the task is in a customer status
+or <code>done</code>, the mode is <code>request</code>. The Goal block says
+<code>Letters of this iteration are about task `KEY`.</code></li>
+<li>If the letters are about no task, the mode is <code>request</code>.</li>
+</ul>
+<p>The proxy token gets <code>task_id</code>, the iteration task, and <code>epic_id</code>, the root of
+its tree. For a task that is not a Goal, the daemon reads the task as the
+customer. If the daemon cannot read it, the iteration runs without attribution
+and the daemon logs a warning with the agent, the key and the error. If the
+daemon cannot read the open letters, the iteration task is the Goal and the
+prompt shows every open letter, as before.</p>
+<p>The end of the iteration reports the iteration task as its Goal task key. So
+the closing of task notices and the idle count use the iteration task. An
+instant letter about another task is not delivered into the running
+iteration. It waits for an iteration of its task.</p>
+<p>The daemon does not read a task key from the letter subject. A sender that
+writes about a task sets <code>task_key</code>, for example
+<code>tmail send --data &#39;{&quot;task_key&quot;:&quot;DEV-12&quot;}&#39;</code>.</p>
 <h4 id="redelivery-after-a-failed-iteration"><a class="blume-heading-anchor" href="#redelivery-after-a-failed-iteration">Redelivery after a failed iteration</a></h4>
 <p>A failed iteration is an iteration that ended without <code>loop.sh done</code>, with the
 status <code>harness_error</code>, <code>timeout</code> or <code>no_i_am_done</code>. If the newest iteration of
@@ -243,7 +288,7 @@ line is the same for all images and does not depend on the image template:</p>
 </tr>
 <tr>
 <td><code>request</code></td>
-<td>No Goal task is selected</td>
+<td>No Goal task is selected for the iteration task (see <a href="#the-iteration-task">The iteration task</a>)</td>
 <td><code>Iteration mode: `request`. No goal task is selected: work from the one-shot instruction or the messages.</code></td>
 </tr>
 </tbody>

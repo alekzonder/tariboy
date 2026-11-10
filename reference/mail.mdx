@@ -143,8 +143,19 @@ Every route returns letters in one JSON shape:
 ## The prompt block
 
 The platform-owned `# Task Processing Order` block has a `## Messages`
-section. When the agent has open letters, it lists them oldest first, up to
-`messages_batch`, requests first and notices after them:
+section. It lists only the open letters about the
+[iteration task](/docs/architecture/iteration-loop#the-iteration-task). The
+task of a letter is `task_key` in its `data`. A letter about a task sets it,
+for example:
+
+```bash
+tmail send --to agent:dev --subject "DEV-12: missing evidence" --text "..." --notice --data '{"task_key":"DEV-12"}'
+```
+
+A letter without `task_key` is about no task, also when its subject names a
+key. Letters of other tasks wait for the next iteration. The section lists
+the letters oldest first, up to `messages_batch`, requests first and notices
+after them:
 
 ```text
 ## Messages

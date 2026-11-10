@@ -102,12 +102,18 @@ request. This drives the non-blocking stalled-agent signal described in the
 <a href="/tariboy/docs/architecture/state-model">state model</a>: it never rejects, cancels, or
 otherwise changes the request or iteration lifecycle, and a recording failure
 is diagnostic-only.</p>
-<p>Before starting a harness, the daemon reads its selected Goal once, resolves
-the task’s top-level root through Native Tasks (see
+<p>Before starting a harness, the daemon selects the iteration task once: the
+Goal, or the task of the open letters when the Goal has none (see
+<a href="/tariboy/docs/architecture/iteration-loop#the-iteration-task">The iteration task</a>).
+It resolves the task’s top-level root through Native Tasks (see
 <a href="#root-of-a-goal-in-another-queue">Root of a Goal in another queue</a>), and stamps the
 AI-proxy lease with <code>task_id</code> and <code>epic_id</code>. All requests in the iteration are
-therefore attributed without an agent command. An iteration without a selected
-Goal remains unattributed.</p>
+therefore attributed without an agent command. An iteration task that the
+agent may not take as a Goal, for example a task in a customer status, is read
+with the rights of the customer. If the daemon cannot read it, the iteration
+runs unattributed and the daemon logs a warning. An iteration without an
+iteration task, with no Goal and only letters without <code>task_key</code>, remains
+unattributed.</p>
 <p>An agent that creates or claims work after its iteration starts may use
 <code>scripts/goal.sh set &lt;TASK-KEY&gt;</code>. The daemon validates and persists that Goal,
 resolves its top-level root, and updates the live lease. Only later requests use
