@@ -1,6 +1,6 @@
 # Tariboy internal alpha release runbook
 
-Release: `0.112.0`
+Release: `0.113.0`
 
 ## Ownership
 
@@ -71,11 +71,11 @@ before packaging when either signing variable is missing. Ordinary `make desktop
 keeps updater artifacts disabled and does not require the release key.
 
 ```text
-dist/releases/0.112.0/
-  Tariboy_0.112.0_aarch64.dmg
-  tariboy_0.112.0_linux-x86_64.tar.gz
-  tariboy_0.112.0_linux-aarch64.tar.gz
-  tariboy_0.112.0_darwin-arm64.tar.gz
+dist/releases/0.113.0/
+  Tariboy_0.113.0_aarch64.dmg
+  tariboy_0.113.0_linux-x86_64.tar.gz
+  tariboy_0.113.0_linux-aarch64.tar.gz
+  tariboy_0.113.0_darwin-arm64.tar.gz
   SHA256SUMS
   release.json
 ```
@@ -118,7 +118,7 @@ make desktop-smoke
 Re-run the independent gate:
 
 ```bash
-scripts/check-alpha-artifacts.sh dist/releases/0.112.0
+scripts/check-alpha-artifacts.sh dist/releases/0.113.0
 ```
 
 The tag workflow then derives the generated `.app.tar.gz` filename, requires
@@ -161,8 +161,8 @@ before the release tag is pushed.
 After both approvals, push an exact tag whose version matches the release:
 
 ```bash
-git tag -a v0.112.0 -m 'Tariboy 0.112.0'
-git push origin v0.112.0
+git tag -a v0.113.0 -m 'Tariboy 0.113.0'
+git push origin v0.113.0
 ```
 
 `.github/workflows/desktop-release.yml` validates the tag against

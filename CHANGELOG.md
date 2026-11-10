@@ -1,3 +1,14 @@
+## [0.113.0] - 2026-11-10
+
+### Changed
+
+- The header of the task sheet stays in view while the sheet scrolls and holds two blocks: Details and Workflow. Each block closes to one row, and the Desktop remembers for every task whether it is open.
+- Closed, Details is a row of chips: the status, the priority, the assignee, the budget with what is spent, the pull request as a link, and the update time. You change a chip in place, then Save task. Open, the block adds the rare fields and the dependencies.
+- Closed, Workflow shows the current status with its number among the steps and whose turn it is. Open, it shows the status graph and the operator actions. The decision that the workflow asks for follows the two blocks. The runs, logs and visits move to a collapsed Workflow log near the bottom of the sheet.
+- The task description shows as formatted text. Edit description opens the editor. A task with no description opens in the editor.
+
+[0.113.0]: https://github.com/alekzonder/tariboy/compare/v0.112.0...v0.113.0
+
 ## [0.112.0] - 2026-11-10
 
 ### Added
