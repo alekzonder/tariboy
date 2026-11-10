@@ -1,41 +1,26 @@
-import { useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { HelpCircle } from "lucide-react";
 import { isWorkflowTask } from "@/lib/tasks";
 import type { Task, WaitingFor } from "@/types";
 import DismissQuestionButton from "./DismissQuestionButton";
-import { taskCommentWaits, taskEventSequence } from "@/lib/taskDetail";
+import { taskCommentWaits } from "@/lib/taskDetail";
 import TaskComments from "./TaskComments";
-import { WorkflowPanel } from "./WorkflowPanel";
+import { WorkflowLog, WorkflowProduce, WorkflowTrouble } from "./WorkflowPanel";
 import { MarkdownContent, type MarkdownMode } from "./TaskMarkdown";
-import { Banner, Meta } from "./TaskDetailControls";
+import { Banner } from "./TaskDetailControls";
 import { LABEL, EMPTY } from "./panelStyles";
-import { TaskDetailFields, TaskDetailProperties } from "./TaskDetailFields";
-import { TaskRelationsSection } from "./TaskRelationsSection";
+import { TaskDescription } from "./TaskDetailFields";
 import { TaskHistorySection } from "./TaskHistorySection";
-import { TaskParentField } from "./TaskDetailParent";
 import { TaskDetailSubtasks } from "./TaskSubtasksSection";
 import { TaskMetricsSection } from "./TaskMetricsSection";
 import type { useTaskDetailDraft } from "./useTaskDetailDraft";
-import type { useTaskDetailRelations } from "./useTaskDetailRelations";
+import type { WorkflowPanelState } from "./useWorkflowPanel";
 import type { TaskDetailProps } from "./TaskDetailTypes";
 
-/** A section that starts collapsed unless `open`; its content stays mounted. */
-function Collapsed({
-  label,
-  open,
-  id,
-  children,
-}: {
-  label: string;
-  open?: boolean;
-  id?: string;
-  children: ReactNode;
-}) {
-  // Only the first value counts: a later change must not close a section the
-  // user opened, or open one they closed.
-  const [initial] = useState(open);
+/** A section that starts collapsed; its content stays mounted. */
+function Collapsed({ label, id, children }: { label: string; id?: string; children: ReactNode }) {
   return (
-    <details id={id} open={initial} className="group min-w-0">
+    <details id={id} className="group min-w-0">
       <summary className={`${LABEL} cursor-pointer select-none py-1`}>{label}</summary>
       <div className="flex min-w-0 flex-col gap-4.5 pt-2.5">{children}</div>
     </details>
@@ -75,13 +60,11 @@ function QuestionBanner({
 export function TaskDetailBody({
   detail,
   events,
-  liveSequence,
   principals,
-  assigneeOptions,
   onTaskChanged,
   onComment,
   draft,
-  relations,
+  panel,
   descriptionMode,
   setDescriptionMode,
   setUploadingDescription,
@@ -98,9 +81,7 @@ export function TaskDetailBody({
   TaskDetailProps,
   | "detail"
   | "events"
-  | "liveSequence"
   | "principals"
-  | "assigneeOptions"
   | "onTaskChanged"
   | "onComment"
   | "queues"
@@ -108,7 +89,8 @@ export function TaskDetailBody({
   | "subtasksStatus"
 > & {
   draft: ReturnType<typeof useTaskDetailDraft>;
-  relations: ReturnType<typeof useTaskDetailRelations>;
+  /** The workflow of the task, when it has one the reader may steer. */
+  panel?: WorkflowPanelState;
   descriptionMode: MarkdownMode;
   setDescriptionMode: (mode: MarkdownMode) => void;
   setUploadingDescription: Dispatch<SetStateAction<boolean>>;
@@ -124,7 +106,6 @@ export function TaskDetailBody({
   const comments = commentOrder === "newest" ? [...detail.comments].reverse() : detail.comments;
   const commentWaits = taskCommentWaits(detail.waiting_for, workflow);
   const openWaits = commentWaits.filter((wait) => !wait.resolved_at);
-  const eventSequence = taskEventSequence(events, liveSequence);
   const editable = task.access !== "respond";
 
   return (
@@ -132,8 +113,16 @@ export function TaskDetailBody({
       {openWaits.length > 0 && (
         <QuestionBanner task={task} openWaits={openWaits} onTaskChanged={onTaskChanged} />
       )}
+      {/* What is wrong and what the workflow produced come before the task's
+          own text: they are what the customer acts on. */}
+      {panel && (
+        <>
+          <WorkflowTrouble panel={panel} />
+          <WorkflowProduce panel={panel} />
+        </>
+      )}
       {editable ? (
-        <TaskDetailFields
+        <TaskDescription
           draft={draft}
           descriptionMode={descriptionMode}
           setDescriptionMode={setDescriptionMode}
@@ -164,46 +153,9 @@ export function TaskDetailBody({
         onUploadingChange={setUploadingComment}
       />
       <TaskMetricsSection key={task.key} task={task} />
-      <Collapsed label="Details">
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-2.25">
-          <Meta label="Author" value={task.author} />
-          <Meta label="Customer" value={task.customer} />
-          <Meta label="Queue" value={task.queue} />
-          <Meta label="Group" value={task.group} />
-          <Meta label="Blocked" value={task.blocked ? "Yes" : "No"} mono={false} />
-          <Meta
-            label="Parent"
-            value={
-              <TaskParentField
-                parentKey={task.parent_key}
-                parent={detail.parent}
-                onOpen={onOpenTask}
-              />
-            }
-          />
-        </dl>
-        {editable && (
-          <>
-            <TaskDetailProperties
-              task={task}
-              draft={draft}
-              principals={principals}
-              assigneeOptions={assigneeOptions}
-              onTaskChanged={onTaskChanged}
-            />
-            <TaskRelationsSection detail={detail} relations={relations} />
-          </>
-        )}
-      </Collapsed>
-      {/* In place of the status select: the workflow changes the status. */}
-      {editable && workflow && (
-        <Collapsed id="task-workflow-details" label="Workflow" open={!!task.workflow_attention}>
-          <WorkflowPanel
-            task={task}
-            eventSequence={eventSequence}
-            onTaskChanged={onTaskChanged}
-            decisionsElsewhere
-          />
+      {panel && (
+        <Collapsed id="task-workflow-log" label="Workflow log">
+          <WorkflowLog panel={panel} />
         </Collapsed>
       )}
       <TaskHistorySection

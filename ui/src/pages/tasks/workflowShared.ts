@@ -10,6 +10,11 @@ import { errorText } from "@/lib/errors";
 // A queue env or secret key: the daemon's rule (internal/tasks/workflow_secrets.go), shared by env vars.
 const KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+/** The DOM id of an artifact in the task body, for the links that show it. */
+export function artifactElementId(name: string): string {
+  return `task-artifact-${name}`;
+}
+
 export function keyProblem(key: string): string {
   if (!KEY_PATTERN.test(key))
     return "A key starts with a letter or underscore and holds letters, digits, and underscores.";

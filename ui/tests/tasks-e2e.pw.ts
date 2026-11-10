@@ -98,21 +98,19 @@ async function pointerDrag(
   await page.mouse.up();
 }
 
-// The drawer keeps Details and Workflow collapsed in a <details>; open one
-// before its controls are used. Its content stays mounted while collapsed.
-// A <details> takes no accessible name from its summary, so it is found by it.
-function detailsSection(scope: Locator, summary: string) {
-  return scope.locator("details").filter({
-    has: scope.page().locator("xpath=./summary", { hasText: new RegExp(`^\\s*${summary}\\s*$`) }),
-  });
-}
-
+// The task header keeps Details and Workflow as two blocks that close to one
+// row; open one before its controls are used. Whether a block is open is the
+// user's stored choice, so a test never assumes it. The Workflow block is a
+// named region only once its workflow has loaded.
 async function expandSection(scope: Locator, name: "Details" | "Workflow") {
-  const section = detailsSection(scope, name);
-  if ((await section.getAttribute("open")) === null) {
-    await section.locator("xpath=./summary").click();
-  }
-  await expect(section).toHaveAttribute("open", "");
+  const block = name.toLowerCase();
+  const section = scope.getByRole("region", { name, exact: true });
+  await expect(section).toBeVisible();
+  const expand = section.getByRole("button", { name: `Expand ${block}`, exact: true });
+  if ((await expand.count()) > 0) await expand.click();
+  await expect(
+    section.getByRole("button", { name: `Collapse ${block}`, exact: true }),
+  ).toBeVisible();
 }
 
 // An agent the daemon knows, so a closed assignee list or a Work tab can name it.
@@ -348,6 +346,9 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   await expect(detail.getByRole("heading", { name: rootKey })).toBeVisible();
   await detail.getByRole("button", { name: "Edit title" }).click();
   await detail.getByLabel("Title").fill("Root task updated");
+  // A saved description reads as text until Edit description opens the editor.
+  const editDescription = detail.getByRole("button", { name: "Edit description" });
+  if ((await editDescription.count()) > 0) await editDescription.click();
   await detail
     .getByRole("textbox", { name: "Description" })
     .fill("Edited from the production Tasks form");

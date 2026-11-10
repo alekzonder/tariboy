@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@/test/queryRender";
+import { act, fireEvent, render, screen, waitFor, within } from "@/test/queryRender";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import { ApiError, type WorkflowView } from "@/lib/api";
@@ -20,6 +20,7 @@ const api = {
 const client = fakeApi({ workflows: api });
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
   api.getTaskWorkflow.mockResolvedValue(customerView);
 });
 
@@ -72,17 +73,14 @@ it("shows the initial customer's real outcomes above the description with no dup
   const panel = await screen.findByRole("region", { name: "Workflow decision" });
   expect(within(panel).getByRole("button", { name: "begin → draft" })).toBeEnabled();
   expect(
-    panel.compareDocumentPosition(screen.getByText("Description", { selector: "label" })) &
+    panel.compareDocumentPosition(screen.getByText("Description")) &
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
   expect(screen.getAllByText(workflowTask.title)).toHaveLength(1);
-  expect(
-    screen.getByText("Workflow", { selector: "summary" }).closest("details"),
-  ).not.toHaveAttribute("open");
   expect(api.advanceTask).not.toHaveBeenCalled();
 });
 
-it("opens the plan outside the sticky controls and focuses its material", async () => {
+it("shows the plan outside the sticky controls and focuses it among the artifacts", async () => {
   show({
     ...customerView,
     outcomes: [
@@ -95,11 +93,10 @@ it("opens the plan outside the sticky controls and focuses its material", async 
   expect(within(panel).getByRole("button", { name: "approve → publish" })).toBeDisabled();
   expect(within(panel).getByText("needs: evidence")).toBeInTheDocument();
   await userEvent.click(within(panel).getByRole("button", { name: "View plan" }));
-  const material = screen.getByRole("group", { name: "plan" });
-  expect(material).toHaveAttribute("open");
-  expect(material.querySelector("summary")).toHaveFocus();
+  const material = document.getElementById("task-artifact-plan")!;
+  await waitFor(() => expect(material).toHaveFocus());
   expect(within(material).getByText("The detailed plan")).toBeVisible();
-  expect(screen.getByRole("group", { name: "evidence" })).toHaveTextContent("No value yet");
+  expect(document.getElementById("task-artifact-evidence")).toHaveTextContent("no value");
   expect(api.advanceTask).not.toHaveBeenCalled();
 });
 
@@ -132,12 +129,14 @@ it("keeps a stale decision draft accessible when another participant changes the
   fireEvent.change(message, { target: { value: "My decision" } });
   api.getTaskWorkflow.mockResolvedValue(poolView);
   await userEvent.click(screen.getByRole("button", { name: "rework → draft" }));
-  expect(await screen.findByText(/The agent continues/)).toBeInTheDocument();
+  await waitFor(() =>
+    expect(screen.queryByRole("button", { name: "rework → draft" })).not.toBeInTheDocument(),
+  );
   expect(screen.getByRole("textbox", { name: "Outcome message" })).toHaveValue("My decision");
 });
 
 it.each(["rejected", "failed"] as const)(
-  "shows a settled %s request by the outcome and opens its details",
+  "shows a settled %s request in full in the body and keeps the decision draft",
   async (state) => {
     const request = {
       id: 11,
@@ -156,15 +155,10 @@ it.each(["rejected", "failed"] as const)(
     api.advanceTask.mockResolvedValue(request);
     api.getTaskWorkflow.mockResolvedValue({ ...customerView, last_request: request });
     await userEvent.click(within(panel).getByRole("button", { name: "approve → publish" }));
-    const details = await within(panel).findByRole("button", { name: "View failure details" });
-    expect(within(panel).getByText("The check needs attention")).toBeVisible();
+    expect((await screen.findAllByText(/The check needs attention/))[0]).toBeVisible();
     expect(within(panel).getByRole("textbox", { name: "Outcome message" })).toHaveValue(
       "Keep the decision",
     );
-    await userEvent.click(details);
-    const summary = screen.getByText("Workflow", { selector: "summary" });
-    expect(summary.closest("details")).toHaveAttribute("open");
-    expect(summary).toHaveFocus();
     expect(api.advanceTask).toHaveBeenCalledOnce();
   },
 );
@@ -217,8 +211,10 @@ it("shows the pause reason and keeps Continue confirmation in the compact panel"
 
 it("keeps closed workflow tasks free of outcomes even if the view still lists them", async () => {
   show({ ...customerView, category: "done" });
-  const panel = await screen.findByRole("region", { name: "Workflow decision" });
-  expect(within(panel).queryByRole("button", { name: /approve/ })).not.toBeInTheDocument();
+  await screen.findByText("release@1.2.0");
+  const panel = screen.getByRole("region", { name: "Workflow decision" });
+  expect(panel).toBeEmptyDOMElement();
+  expect(screen.queryByRole("button", { name: /approve/ })).not.toBeInTheDocument();
   expect(screen.queryByRole("textbox", { name: "Outcome message" })).not.toBeInTheDocument();
 });
 

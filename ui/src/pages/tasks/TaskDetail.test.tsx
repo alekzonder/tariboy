@@ -54,6 +54,7 @@ const flexible: Task = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
   api.getTaskWorkflow.mockResolvedValue(customerView);
 });
 
@@ -407,7 +408,7 @@ it("pins the workflow decision above the task fields", async () => {
   ).toBeInTheDocument();
   // The card holds the decision, so the workflow section does not repeat it.
   expect(screen.queryByRole("button", { name: "approve" })).not.toBeInTheDocument();
-  const title = screen.getByText("Description", { selector: "label" });
+  const title = screen.getByText("Description");
   expect(card.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
@@ -416,80 +417,107 @@ it("pins no card on a task that waits on nobody", () => {
   expect(screen.queryByRole("region", { name: "Needs you" })).not.toBeInTheDocument();
 });
 
-it("collapses Details and History and keeps the workflow in its own section", async () => {
+it("keeps Details closed and Workflow open in the header until the customer changes them", async () => {
   renderDetail(workflowTask, [], [], people);
   await screen.findByText("release@1.2.0");
-  const details = screen.getByText("Details", { selector: "summary" }).closest("details")!;
-  expect(details).not.toHaveAttribute("open");
-  expect(within(details).getByLabelText("Priority")).toBeInTheDocument();
-  expect(within(details).getByText("Dependencies")).toBeInTheDocument();
-  const workflow = screen.getByText("Workflow", { selector: "summary" }).closest("details")!;
-  expect(within(workflow).getByText("release@1.2.0")).toBeInTheDocument();
+  const details = screen.getByRole("region", { name: "Details" });
+  const expand = within(details).getByRole("button", { name: "Expand details" });
+  expect(expand).toHaveAttribute("aria-expanded", "false");
+  // The chips stay in view; the rare fields and the dependencies wait closed.
+  expect(within(details).getByLabelText("Priority")).toBeVisible();
+  expect(within(details).getByText("Dependencies")).not.toBeVisible();
+  await userEvent.click(expand);
+  expect(within(details).getByText("Dependencies")).toBeVisible();
+  expect(within(details).getByLabelText("Pull request")).toBeVisible();
+  expect(localStorage.getItem("tasks:details-open:v1")).toBe("open");
+
+  const workflow = screen.getByRole("region", { name: "Workflow" });
+  expect(within(workflow).getByRole("list", { name: "Workflow steps" })).toBeInTheDocument();
+  expect(within(workflow).getByRole("button", { name: "Move to status…" })).toBeInTheDocument();
+  await userEvent.click(within(workflow).getByRole("button", { name: "Collapse workflow" }));
+  expect(within(workflow).queryByRole("list", { name: "Workflow steps" })).not.toBeInTheDocument();
+  expect(within(workflow).queryByRole("button", { name: "Move to status…" })).toBeNull();
+  const summary = within(workflow).getByRole("button", { name: /Show all workflow steps/ });
+  expect(summary).toHaveTextContent("review");
+  expect(within(workflow).getByText("your decision")).toBeInTheDocument();
+  expect(localStorage.getItem("tasks:workflow-open:v1")).toBe("closed");
+  // The decision does not close with the block.
+  expect(screen.getByRole("button", { name: "approve → publish" })).toBeEnabled();
+  await userEvent.click(summary);
+  expect(within(workflow).getByRole("list", { name: "Workflow steps" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Expand" })).toHaveAttribute("aria-expanded", "false");
 });
 
-it("puts a closed Metrics section right before Details and asks for no metrics", async () => {
+it("remembers the two blocks for every task, not for one", async () => {
+  localStorage.setItem("tasks:details-open:v1", "open");
+  localStorage.setItem("tasks:workflow-open:v1", "closed");
+  renderDetail({ ...workflowTask, key: "REL-2" }, [], [], people);
+  expect(await screen.findByRole("button", { name: "Collapse details" })).toBeInTheDocument();
+  expect(screen.getByText("Dependencies")).toBeVisible();
+  expect(await screen.findByRole("button", { name: "Expand workflow" })).toBeInTheDocument();
+  expect(screen.queryByRole("list", { name: "Workflow steps" })).not.toBeInTheDocument();
+});
+
+it("shows the description as text and opens the editor on Edit description", async () => {
+  const { onSave } = renderDetail(flexible);
+  // The comment form has an editor of its own; only the description is in question.
+  const section = within(document.querySelector(".task-description") as HTMLElement);
+  expect(section.getByText(flexible.description)).toBeInTheDocument();
+  expect(section.queryByTestId("rich-editor-stub")).not.toBeInTheDocument();
+  await userEvent.click(section.getByRole("button", { name: "Edit description" }));
+  expect(await section.findByTestId("rich-editor-stub")).toBeInTheDocument();
+  await userEvent.click(section.getByRole("button", { name: "Cancel editing" }));
+  expect(section.queryByTestId("rich-editor-stub")).not.toBeInTheDocument();
+  expect(onSave).not.toHaveBeenCalled();
+});
+
+it("starts a task with no description in the editor", async () => {
+  renderDetail({ ...flexible, description: "" });
+  const section = within(document.querySelector(".task-description") as HTMLElement);
+  expect(await section.findByTestId("rich-editor-stub")).toBeInTheDocument();
+  expect(section.queryByRole("button", { name: "Cancel editing" })).not.toBeInTheDocument();
+});
+
+it("puts a closed Metrics section after the comments and before the log, and asks for no metrics", async () => {
   const fetchSpy = vi.spyOn(globalThis, "fetch");
   renderDetail(workflowTask, [], [], people);
   await screen.findByText("release@1.2.0");
   const metrics = screen.getByRole("button", { name: "Metrics" });
   expect(metrics).toHaveAttribute("aria-expanded", "false");
-  const details = screen.getByText("Details", { selector: "summary" });
-  expect(metrics.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const log = screen.getByText("Workflow log", { selector: "summary" });
+  expect(log.closest("details")).not.toHaveAttribute("open");
+  expect(metrics.compareDocumentPosition(log) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   const comments = screen.getAllByText(/comment/i)[0];
   expect(comments.compareDocumentPosition(metrics) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(fetchSpy.mock.calls.some(([url]) => String(url).includes("/api/metrics"))).toBe(false);
 });
 
-it("opens the workflow section when the workflow reports a problem", async () => {
-  renderDetail(
-    { ...workflowTask, workflow_attention: { kind: "rejected", message: "CI is red", count: 1 } },
-    [],
-    [],
-    people,
-  );
-  await screen.findByText("release@1.2.0");
-  expect(screen.getByText("Workflow", { selector: "summary" }).closest("details")).toHaveAttribute(
-    "open",
-  );
-});
-
-it("keeps the workflow section open after its problem clears", async () => {
-  const troubled = {
-    ...workflowTask,
-    workflow_attention: { kind: "rejected" as const, message: "CI is red", count: 1 },
-  };
-  const element = (task: Task) => (
-    <TaskDetail
-      detail={{
-        task,
-        comments: [],
-        waiting_for: [],
-        relations: [],
-        descendants: 0,
-        active_descendants: 0,
-        children: [],
-        hidden_children: 0,
-      }}
-      events={[]}
-      principals={people}
-      width={600}
-      resizeHandle={null}
-      onClose={vi.fn()}
-      onSave={vi.fn()}
-      onComment={vi.fn()}
-      onAddRelation={vi.fn()}
-      onDeleteRelation={vi.fn()}
-      onTransfer={vi.fn()}
-      onRequeue={vi.fn()}
-    />
-  );
-  const { rerender } = render(element(troubled));
-  await screen.findByText("release@1.2.0");
-  rerender(element({ ...troubled, workflow_attention: undefined, revision: 5 }));
-  expect(screen.getByText("Workflow", { selector: "summary" }).closest("details")).toHaveAttribute(
-    "open",
-  );
+it("shows a workflow problem in full at the top of the body, with nothing to open", async () => {
+  api.getTaskWorkflow.mockResolvedValue({
+    ...customerView,
+    last_request: {
+      id: 11,
+      task_key: "REL-1",
+      outcome: "approve",
+      actor: "user:owner",
+      state: "rejected",
+      created_at: "2026-10-01T10:06:00Z",
+      result_message: "CI is red",
+    },
+  });
+  renderDetail(workflowTask, [], [], people);
+  const problem = await screen.findByText("A check rejected the request: approve");
+  expect(problem).toBeVisible();
+  expect(screen.getByText("CI is red")).toBeVisible();
+  const description = screen.getByText("Description");
+  expect(
+    problem.compareDocumentPosition(description) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  // The artifacts follow the problem and come before the task's own text.
+  const artifacts = screen.getByText("Artifacts");
+  expect(
+    artifacts.compareDocumentPosition(description) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
 });
 
 it("picks a flexible task's assignee from me and the agents, never from typed text", async () => {

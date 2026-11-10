@@ -8,6 +8,7 @@ import { COUNT, DANGER_FILL, EMPTY, LABEL, MONO, QUIET_ACTION } from "./panelSty
 import { MarkdownContent, MarkdownModeSegment, type MarkdownMode } from "./TaskMarkdown";
 import { formatTaskTime } from "./taskTime";
 import type { Requirement, StepArtifacts } from "./workflowGraph";
+import { artifactElementId } from "./workflowShared";
 import { errorText } from "@/lib/errors";
 
 /** A value longer than this many lines, or characters, starts collapsed. */
@@ -188,7 +189,11 @@ function ArtifactItem({
     setError("");
   };
   return (
-    <li className="flex min-w-0 flex-col gap-1">
+    <li
+      id={artifactElementId(name)}
+      tabIndex={-1}
+      className="flex min-w-0 flex-col gap-1 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
       <div className="flex min-w-0 items-center gap-2">
         <span className={cn(MONO, "font-medium")}>{name}</span>
         <ArtifactByline artifact={artifact} />
