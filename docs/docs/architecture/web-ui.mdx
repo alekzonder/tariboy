@@ -1192,7 +1192,8 @@ Their internal modules separate form state, requests, and presentation:
   commit modules still own the single Save operation for the page.
 - `mailbox` is one two-pane mailbox for Inbox and the agent's Mailbox: `Mailbox` holds
   the box switch and the panes, `MailboxList`, `MailboxLetter` and
-  `MailboxCompose` render them, `MailboxTaskAnswer` is the answer form of a
+  `MailboxCompose` render them, `ArchiveAll` is the Inbox's bulk archive
+  button and its confirmation, `MailboxTaskAnswer` is the answer form of a
   task question, `mailboxModel` holds the pure readings, and
   `mailQueries` the query keys and the live refetch.
 - Tasks separates local view state, panel sizing, query composition, and write
@@ -2065,6 +2066,12 @@ unread. The letter shows From, To, Received and its state (open, answered,
 archived with its note, dead), a line naming the letter it replies to (read
 with `mail.show`), and the body as Markdown through the task pipeline, with no
 raw HTML. Sent and Archive load more pages with **Load more**.
+
+In the customer's Inbox with open letters the toolbar also shows **Archive
+all** (`ArchiveAll`). It asks for a confirmation, then calls
+`POST /api/mail/close-all`. The daemon closes every open letter of the
+customer in one transaction, also the ones past the loaded page, and the toast
+shows the number it closed. On an error the dialog stays open.
 
 Opening an unread Inbox letter marks it read. In the customer's mailbox a read
 notice, like a request, stays in the Inbox until **Reply** or **Archive**. In

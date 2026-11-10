@@ -1,5 +1,6 @@
 import type {
   MailClearResult,
+  MailCloseAllResult,
   MailCloseResult,
   MailList,
   MailReadResult,
@@ -28,6 +29,8 @@ export function mailApi(t: Transport) {
       t.post<MailReplyResult>(letterPath(id, "/reply"), input),
     close: (id: string, input: { note?: string; as?: string } = {}) =>
       t.post<MailCloseResult>(letterPath(id, "/close"), input),
+    closeAll: (input: { note?: string; as?: string } = {}) =>
+      t.post<MailCloseAllResult>("/api/mail/close-all", input),
     read: (ids: string[], as?: string) => t.post<MailReadResult>("/api/mail/read", { ids, as }),
     requeue: (id: string, as?: string) =>
       t.post<MailRequeueResult>(letterPath(id, "/requeue"), { as }),

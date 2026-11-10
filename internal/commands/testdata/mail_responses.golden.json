@@ -50,6 +50,9 @@
       "to": "user:customer"
     }
   },
+  "mail.close_all": {
+    "closed": 2
+  },
   "mail.ls archive as worker": {
     "as": "agent:worker",
     "box": "archive",
@@ -398,13 +401,13 @@
         "attempts": 0,
         "body": "now",
         "close_note": "",
-        "created_at": "2026-07-14T10:00:11.000000000Z",
+        "created_at": "2026-07-14T10:00:12.000000000Z",
         "data": {},
         "dead_at": "",
         "dead_reason": "",
         "deadline": "",
         "from": "user:customer",
-        "id": "m-20260714T100011Z-000010",
+        "id": "m-20260714T100012Z-000010",
         "in_reply_to": "",
         "instant": true,
         "instant_at": "",

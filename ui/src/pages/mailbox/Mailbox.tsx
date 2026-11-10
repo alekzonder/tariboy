@@ -9,6 +9,7 @@ import { useApiQuery } from "@/hooks/useApiQuery";
 import { DRAWER_QUERY, useMediaQuery } from "@/hooks/useMediaQuery";
 import type { Letter, MailBox } from "@/types";
 import { cn } from "@/lib/utils";
+import { ArchiveAll } from "./ArchiveAll";
 import { MailboxCompose, type ComposeTarget, type ComposeValues } from "./MailboxCompose";
 import { MailboxLetter } from "./MailboxLetter";
 import { MailboxList } from "./MailboxList";
@@ -191,6 +192,12 @@ export default function Mailbox({
         openCount={openCount}
         onCompose={() => setCompose({ mode: "compose" })}
       >
+        <ArchiveAll
+          shown={mode === "customer" && box === "inbox"}
+          count={openCount}
+          busy={actions.busy}
+          onConfirm={actions.archiveAll}
+        />
         {toolbar}
       </MailboxToolbar>
       <div className="flex min-h-0 flex-1 border-t">

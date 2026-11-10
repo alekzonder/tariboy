@@ -1836,6 +1836,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/mail/close-all": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Archive every open letter without a reply */
+    post: operations["mail.close_all"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/mail/read": {
     parameters: {
       query?: never;
@@ -4182,6 +4199,9 @@ export interface components {
     MailClearResult: {
       deleted: number;
     };
+    MailCloseAllResult: {
+      closed: number;
+    };
     MailCloseResult: {
       letter: components["schemas"]["Letter"];
     };
@@ -5508,6 +5528,7 @@ export type LoopOnTimeoutResult = components["schemas"]["LoopOnTimeoutResult"];
 export type LoopScheduleResult = components["schemas"]["LoopScheduleResult"];
 export type LoopTimeoutResult = components["schemas"]["LoopTimeoutResult"];
 export type MailClearResult = components["schemas"]["MailClearResult"];
+export type MailCloseAllResult = components["schemas"]["MailCloseAllResult"];
 export type MailCloseResult = components["schemas"]["MailCloseResult"];
 export type MailList = components["schemas"]["MailList"];
 export type MailReadResult = components["schemas"]["MailReadResult"];
@@ -11918,6 +11939,55 @@ export interface operations {
           "application/json": {
             ok: boolean;
             result: components["schemas"]["MailSendResult"];
+          };
+        };
+      };
+      /** @description Typed error */
+      default: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            error: {
+              code: string;
+              /** @description May include current_revision and current state for revision_conflict */
+              details?: Record<string, unknown>;
+              message: string;
+            };
+            ok: boolean;
+          };
+        };
+      };
+    };
+  };
+  "mail.close_all": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": {
+          /** @description principal to act as (default the customer) */
+          as?: string;
+          /** @description archive note */
+          note?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            ok: boolean;
+            result: components["schemas"]["MailCloseAllResult"];
           };
         };
       };

@@ -125,6 +125,59 @@ func (m *Mail) Close(as, id, note string) (Letter, error) {
 	return l, nil
 }
 
+// CloseAll archives every open letter of as without a reply, with note as
+// its close note, in one transaction, and returns how many it closed.
+func (m *Mail) CloseAll(as, note string) (int, error) {
+	tx, err := m.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	ids, err := openIDs(tx, as)
+	if err != nil {
+		return 0, err
+	}
+	now := formatNow(m.now())
+	var w written
+	for _, id := range ids {
+		l, err := getLetter(tx, id)
+		if err != nil {
+			return 0, err
+		}
+		l.AnsweredAt, l.CloseNote = now, note
+		if _, err := tx.Exec(`UPDATE mail SET answered_at = ?, close_note = ? WHERE id = ?`, now, note, id); err != nil {
+			return 0, err
+		}
+		if err := m.cancelDeadline(tx, id); err != nil {
+			return 0, err
+		}
+		w.audits = append(w.audits, letterAudit("mail_closed", l, map[string]any{"note": note}))
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	m.emit(w)
+	return len(ids), nil
+}
+
+// openIDs returns the ids of the open letters of as.
+func openIDs(tx *sql.Tx, as string) ([]string, error) {
+	rows, err := tx.Query(`SELECT id FROM mail WHERE recipient = ? AND `+openSQL, as)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // recipientLetter reads letter id for its recipient as.
 func recipientLetter(x dbtx, as, id string) (Letter, error) {
 	l, err := getLetter(x, id)
