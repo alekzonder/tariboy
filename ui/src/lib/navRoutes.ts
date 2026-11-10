@@ -1,7 +1,6 @@
-import { useSearchParams } from "react-router-dom";
-import { useDaemons, useOptionalDaemons } from "@/components/daemonContext";
+import { useOptionalDaemons } from "@/components/daemonContext";
 import { hasLocalDaemon } from "./desktop";
-import { hostToParam, paramToHost } from "./terminalsHost";
+import { hostToParam } from "./terminalsHost";
 
 /** The host-scoped pages of the sidebar. Each takes an optional `?host=`. */
 export type ScopedSection = "tasks" | "inbox" | "activity";
@@ -174,13 +173,4 @@ export function hostScopeTarget(pathname: string, search: string, hostId: string
 export function useMultiHost(): boolean {
   const daemons = useOptionalDaemons()?.daemons ?? [];
   return (hasLocalDaemon() ? 1 : 0) + daemons.length >= 2;
-}
-
-/** The host of a scoped page: `?host=` when the URL names one, otherwise the
- *  remembered active host. */
-export function useScopeHost(): string {
-  const [searchParams] = useSearchParams();
-  const { activeId } = useDaemons();
-  const param = searchParams.get("host");
-  return param !== null ? paramToHost(param) : activeId;
 }

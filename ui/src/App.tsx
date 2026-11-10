@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -36,10 +36,15 @@ export default function App() {
 
 function MainApp() {
   const location = useLocation();
-  const [titlebarSlot, setTitlebarSlot] = useState<HTMLElement | null>(null);
+  const [workspaceSlot, setWorkspaceSlot] = useState<HTMLElement | null>(null);
+  const [searchSlot, setSearchSlot] = useState<HTMLElement | null>(null);
+  const titlebarSlots = useMemo(
+    () => ({ workspace: workspaceSlot, search: searchSlot }),
+    [workspaceSlot, searchSlot],
+  );
   const withSidebar = sidebarRoute(location.pathname);
   return (
-    <TitlebarSlotContext.Provider value={titlebarSlot}>
+    <TitlebarSlotContext.Provider value={titlebarSlots}>
       {/* Topbar: 42px, no bottom border — the separation between chrome and the
           content island is made by the background, not by a line. */}
       <header
@@ -59,10 +64,12 @@ function MainApp() {
           )}
           {withSidebar && <SidebarToggle />}
           <span className="text-body font-semibold">Tariboy</span>
+          {/* The console pages portal the workspace switcher in here. */}
+          {withSidebar && <div ref={setWorkspaceSlot} className="flex min-w-0" />}
         </div>
         <div aria-hidden="true" className="h-full min-w-4 flex-1" />
         {/* The console pages portal the global search in here. */}
-        {withSidebar && <div ref={setTitlebarSlot} className="flex min-w-0" />}
+        {withSidebar && <div ref={setSearchSlot} className="flex min-w-0" />}
         <div className="flex items-center gap-0.5">
           <HelpMenu />
           <ThemeToggle
