@@ -59,8 +59,8 @@ export function AgentRow({
       data-slot="agent-row"
       aria-current={selected ? "page" : undefined}
       className={cn(
-        "my-px flex h-7.5 w-full items-center gap-2.25 rounded-md px-2.5 text-left text-body",
-        selected ? "bg-card shadow-[var(--raise)]" : "hover:bg-sidebar-accent",
+        "my-px flex h-7.5 w-full items-center gap-2.25 rounded-control px-2.5 text-left text-body",
+        selected ? "bg-card shadow-raise" : "hover:bg-sidebar-accent",
         className,
       )}
       {...props}

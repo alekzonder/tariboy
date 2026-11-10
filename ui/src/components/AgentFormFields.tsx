@@ -55,10 +55,10 @@ export function ImageCombobox({
       {open && (
         <div
           role="listbox"
-          className="absolute top-full left-0 z-50 mt-1 max-h-64 w-full overflow-auto rounded-lg border bg-popover p-1 shadow-md"
+          className="absolute top-full left-0 z-overlay mt-1 max-h-64 w-full overflow-auto rounded-card border bg-popover p-1 shadow-lift"
         >
           {filtered.length === 0 && (
-            <div className="px-2 py-2 text-sm text-muted-foreground">No images</div>
+            <div className="px-2 py-2 text-body text-muted-foreground">No images</div>
           )}
           {filtered.map((im) => {
             const ref = `${im.name}:${im.tag}`;
@@ -73,7 +73,7 @@ export function ImageCombobox({
                   onChange(ref);
                   setOpen(false);
                 }}
-                className="block w-full rounded px-2 py-1.5 text-left text-sm hover:bg-accent"
+                className="block w-full rounded-chip px-2 py-1.5 text-left text-body hover:bg-accent"
               >
                 {ref}
               </button>

@@ -10,7 +10,7 @@ export function FileToolbar({
 }) {
   return (
     <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1">
-      <span className="mr-auto text-xs font-medium text-muted-foreground">Files</span>
+      <span className="mr-auto text-ui font-medium text-muted-foreground">Files</span>
       {canCreate && (
         <>
           <Button

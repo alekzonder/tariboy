@@ -109,7 +109,7 @@ export default function AgentActivityTab() {
       />
       <ActivityTotals totals={report?.totals ?? null} variant="agent" />
       {error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-body text-destructive">
           {error}
         </p>
       )}

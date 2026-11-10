@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { MarkdownContent } from "./TaskMarkdown";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { PRIMARY_FILL } from "./panelStyles";
+import { PRIMARY_FILL } from "@/components/ui/recipes";
 import { formatTaskTime } from "./taskTime";
 import type { TaskComment } from "@/types";
 
@@ -38,17 +38,19 @@ export function TaskCommentList({
         <article key={comment.id} className="flex min-w-0 gap-2.25 py-1.75">
           <span
             aria-hidden="true"
-            className="mt-px grid size-5.5 shrink-0 place-items-center rounded-full bg-muted font-mono text-tiny text-muted-foreground"
+            className="mt-px grid size-5.5 shrink-0 place-items-center rounded-full bg-muted font-mono text-caption text-muted-foreground"
           >
             {initials(comment.author)}
           </span>
           <div className="flex min-w-0 flex-1 flex-col gap-0.75">
             <header className="flex min-w-0 items-center gap-2">
-              <strong className="shrink-0 font-mono text-meta font-medium">{comment.author}</strong>
+              <strong className="shrink-0 font-mono text-caption font-medium">
+                {comment.author}
+              </strong>
               {asking.has(comment.id) && (
                 <span
                   className={cn(
-                    "inline-flex h-4.25 shrink-0 items-center rounded-chip px-1.5 text-tiny font-medium",
+                    "inline-flex h-4.25 shrink-0 items-center rounded-chip px-1.5 text-caption font-medium",
                     PRIMARY_FILL,
                   )}
                 >
@@ -67,7 +69,7 @@ export function TaskCommentList({
                   type="button"
                   size="icon-xs"
                   variant="ghost"
-                  className="size-5 rounded-sm text-muted-foreground opacity-0 transition-opacity duration-120 ease-[ease] [article:focus-within_&]:opacity-100 [article:hover_&]:opacity-100"
+                  className="size-5 rounded-chip text-muted-foreground opacity-0 transition-opacity duration-120 ease-[ease] [article:focus-within_&]:opacity-100 [article:hover_&]:opacity-100"
                   aria-label="Copy comment Markdown"
                   title="Copy comment Markdown"
                   onClick={() => void copyComment(comment.body)}

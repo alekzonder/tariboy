@@ -44,7 +44,7 @@ const meta = {
   args: { save },
   decorators: [
     (Story) => (
-      <div className="max-w-[660px]">
+      <div className="max-w-165">
         <Story />
       </div>
     ),

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { Artifact, DeclaredArtifact } from "@/types";
 import { cn } from "@/lib/utils";
-import { COUNT, DANGER_FILL, EMPTY, LABEL, MONO, QUIET_ACTION } from "./panelStyles";
+import { COUNT, DANGER_FILL, EMPTY, LABEL, MONO, QUIET_ACTION } from "@/components/ui/recipes";
 import { MarkdownContent, MarkdownModeSegment, type MarkdownMode } from "./TaskMarkdown";
 import { formatTaskTime } from "./taskTime";
 import type { Requirement, StepArtifacts } from "./workflowGraph";
@@ -84,7 +84,7 @@ export default function WorkflowArtifacts({
     const group = (title: string, names: string[]) =>
       names.length > 0 && (
         <>
-          <span className="text-meta text-muted-foreground">{title}</span>
+          <span className="text-caption text-muted-foreground">{title}</span>
           <ul aria-label={title} className="flex min-w-0 flex-col gap-2.5">
             {missingFirst(names).map((name) => item(name, both(name)))}
           </ul>
@@ -311,7 +311,7 @@ function ArtifactEditor({
         value={draft}
         disabled={saving}
         onChange={(event) => onDraft(event.target.value)}
-        className="min-h-20 rounded-md border-0 bg-muted font-mono text-meta md:text-meta"
+        className="min-h-20 rounded-control border-0 bg-muted font-mono text-caption md:text-caption"
       />
       <div className="flex gap-1.5">
         <Button
@@ -341,7 +341,7 @@ function ArtifactEditor({
 function ErrorLine({ text }: { text: string }) {
   if (!text) return null;
   return (
-    <p role="alert" className="text-ui text-status-failed">
+    <p role="alert" className="text-ui text-destructive">
       {text}
     </p>
   );
@@ -372,11 +372,11 @@ function ArtifactValue({ value, markdown }: { value: string; markdown: boolean }
   return (
     <div className="flex min-w-0 flex-col items-start gap-0.5">
       {markdown ? (
-        <div className="w-full min-w-0 rounded-md bg-muted px-2.5 py-2">
+        <div className="w-full min-w-0 rounded-control bg-muted px-2.5 py-2">
           <MarkdownContent>{shown}</MarkdownContent>
         </div>
       ) : (
-        <pre className="w-full min-w-0 rounded-md bg-muted px-2.5 py-2 font-mono text-meta whitespace-pre-wrap break-words">
+        <pre className="w-full min-w-0 rounded-control bg-muted px-2.5 py-2 font-mono text-caption whitespace-pre-wrap break-words">
           {shown}
         </pre>
       )}

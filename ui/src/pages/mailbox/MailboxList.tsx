@@ -15,7 +15,7 @@ function LetterTags({ letter }: { letter: Letter }) {
       {/* The tint sits on an opaque background, so the text keeps 4.5:1 on a
           hovered or selected row too. */}
       {letter.instant && (
-        <span className="shrink-0 rounded-control bg-card bg-linear-to-r from-primary/8 to-primary/8 px-1.5 text-caption text-primary">
+        <span className="shrink-0 rounded-control bg-card bg-linear-to-r from-primary-soft to-primary-soft px-1.5 text-caption text-primary">
           instant
         </span>
       )}
@@ -30,7 +30,7 @@ function LetterTags({ letter }: { letter: Letter }) {
         </span>
       )}
       {letter.dead_at && (
-        <span className="rounded-control bg-destructive/12 px-1.5 text-caption text-destructive">
+        <span className="rounded-control bg-destructive-soft px-1.5 text-caption text-destructive">
           dead · {letter.dead_reason}
         </span>
       )}
@@ -51,7 +51,7 @@ export function MailboxList({
   onSelect: (letter: Letter) => void;
 }) {
   if (letters.length === 0) {
-    return <p className="px-4 py-3 text-sm text-muted-foreground">{EMPTY[box]}</p>;
+    return <p className="px-4 py-3 text-body text-muted-foreground">{EMPTY[box]}</p>;
   }
   return (
     <ul aria-label="Letters" className="divide-y">
@@ -87,7 +87,7 @@ export function MailboxList({
                 <span className="truncate">{letter.subject || "(no subject)"}</span>
                 <LetterTags letter={letter} />
               </span>
-              <span className="truncate text-meta text-muted-foreground">{letter.body}</span>
+              <span className="truncate text-caption text-muted-foreground">{letter.body}</span>
             </button>
           </li>
         );

@@ -13,15 +13,15 @@ export function HostOperationProgress({
       ? HOST_PROGRESS_STEPS.filter((step) => step.id === "connect" || step.id === "reconnect")
       : HOST_PROGRESS_STEPS;
   return (
-    <section className="min-w-0 space-y-2 rounded-lg border p-3">
-      <h3 className="text-sm font-medium">
+    <section className="min-w-0 space-y-2 rounded-card border p-3">
+      <h3 className="text-body font-medium">
         {operation.kind === "update"
           ? "Update Tariboy"
           : operation.kind === "connect"
             ? "Connect to existing Tariboy"
             : "Connect Tariboy"}
       </h3>
-      <ol className="space-y-1.5 text-sm">
+      <ol className="space-y-1.5 text-body">
         {progressSteps.map((step) => {
           const state = stepStates[step.id];
           const label =
@@ -59,7 +59,7 @@ export function HostOperationProgress({
       </ol>
 
       {operation.status === "succeeded" && (
-        <div className="rounded-md bg-emerald-500/10 p-2 text-sm text-emerald-700 dark:text-emerald-300">
+        <div className="rounded-control bg-success-soft p-2 text-body text-success">
           <p className="font-medium">
             {operation.kind === "update" ? "Update complete" : "Host connected"}
           </p>
@@ -70,7 +70,7 @@ export function HostOperationProgress({
       {operation.status === "failed" && operation.error && (
         <div
           role="alert"
-          className="min-w-0 rounded-md bg-destructive/10 p-2 text-sm text-destructive"
+          className="min-w-0 rounded-control bg-destructive-soft p-2 text-body text-destructive"
         >
           <p className="font-medium">
             {operation.kind === "update" ? "Update failed" : "Connection failed"}

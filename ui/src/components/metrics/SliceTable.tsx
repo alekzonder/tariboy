@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sortRows, type Column, type Sort } from "./sliceSort";
-import { CELL, STICKY } from "./tableClasses";
+import { CELL, STICKY_CELL } from "@/components/ui/recipes";
 
 /** A sortable table of slices in its own horizontal scroller. The first
  *  column, when `head` is given, is the row header and stays in place. */
@@ -36,14 +36,14 @@ export function SliceTable<R>({
         aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
         className={cn(
           "px-3 py-2 font-normal whitespace-nowrap",
-          first ? STICKY : "text-right",
+          first ? STICKY_CELL : "text-right",
           first && "bg-muted",
         )}
       >
         <button
           type="button"
           onClick={() => onSort(column.id)}
-          className="inline-flex items-center gap-1 rounded hover:text-foreground"
+          className="inline-flex items-center gap-1 rounded-chip hover:text-foreground"
         >
           <span title={column.hint}>{column.label}</span>
           {active && <Arrow aria-hidden="true" className="size-3" />}
@@ -52,16 +52,16 @@ export function SliceTable<R>({
     );
   };
   return (
-    <div className="overflow-x-auto rounded border">
-      <table aria-label={label} className="w-full text-sm">
-        <thead className="bg-muted text-left text-xs text-muted-foreground">
+    <div className="overflow-x-auto rounded-chip border">
+      <table aria-label={label} className="w-full text-body">
+        <thead className="bg-muted text-left text-ui text-muted-foreground">
           <tr>{all.map((column, i) => header(column, i === 0 && !!head))}</tr>
         </thead>
         <tbody>
           {sorted.map((row) => (
             <tr key={rowKey(row)} className="border-t">
               {head && (
-                <th scope="row" className={cn(CELL, STICKY, "text-left font-normal")}>
+                <th scope="row" className={cn(CELL, STICKY_CELL, "text-left font-normal")}>
                   {head.cell(row)}
                 </th>
               )}
@@ -97,13 +97,13 @@ export function SortBySelect<R>({
   onChange: (sort: Sort) => void;
 }) {
   return (
-    <div className="flex items-center gap-2 text-sm sm:hidden">
+    <div className="flex items-center gap-2 text-body sm:hidden">
       <label className="flex items-center gap-1">
         <span className="text-muted-foreground">Sort by</span>
         <select
           value={sort.id}
           onChange={(e) => onChange({ id: e.target.value, dir: sort.dir })}
-          className="h-7 rounded-control border bg-background px-2 text-body-sm"
+          className="h-7 rounded-control border bg-background px-2 text-body"
         >
           {columns.map((c) => (
             <option key={c.id} value={c.id}>
@@ -115,7 +115,7 @@ export function SortBySelect<R>({
       <button
         type="button"
         onClick={() => onChange({ id: sort.id, dir: sort.dir === "asc" ? "desc" : "asc" })}
-        className="h-7 rounded-control border px-2 text-body-sm"
+        className="h-7 rounded-control border px-2 text-body"
       >
         {sort.dir === "asc" ? "Low to high" : "High to low"}
       </button>

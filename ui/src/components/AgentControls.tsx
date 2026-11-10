@@ -265,17 +265,14 @@ function OverflowMenu({
           variant="ghost"
           size="icon-sm"
           aria-label="More agent actions"
-          className="size-7 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="size-7 rounded-control text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <MoreHorizontal className="size-3.5" />
         </Button>
       </DropdownMenuTrigger>
       {/* The handoff's menu: 12px radius, --lift, no ring — one raised
           surface, same family as the content island. */}
-      <DropdownMenuContent
-        align="end"
-        className="min-w-41 rounded-card p-1.25 shadow-[var(--lift)] ring-0"
-      >
+      <DropdownMenuContent align="end" className="min-w-41 rounded-card p-1.25 shadow-lift ring-0">
         {canRunOnce && (
           <DropdownMenuItem className={MENU_ITEM} disabled={props.disabled} onSelect={onRunOnce}>
             <Play aria-hidden="true" />
@@ -327,7 +324,7 @@ function OverflowMenu({
         </DropdownMenuItem>
         <DropdownMenuSeparator className="mx-0.75 my-1" />
         <DropdownMenuItem
-          className={`${MENU_ITEM} text-destructive focus:bg-destructive/10 focus:text-destructive`}
+          className={`${MENU_ITEM} text-destructive focus:bg-destructive-soft focus:text-destructive`}
           onSelect={onDelete}
         >
           <Trash2 aria-hidden="true" />

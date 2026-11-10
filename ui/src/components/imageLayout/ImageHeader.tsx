@@ -31,11 +31,11 @@ function ImageSourceInfo({
   return (
     <>
       {sourceCwd ? (
-        <span className="font-mono text-xs" title={sourceCwd}>
+        <span className="font-mono text-ui" title={sourceCwd}>
           {sourceCwd}
         </span>
       ) : (
-        <span className="text-xs text-muted-foreground">source provenance unavailable</span>
+        <span className="text-ui text-muted-foreground">source provenance unavailable</span>
       )}
       {sourceCwd &&
         provenance.source_available &&
@@ -98,18 +98,18 @@ export function ImageHeader({
   const bare = manifest?.bare ?? false;
   return (
     <header className="flex flex-wrap items-center gap-3 border-b px-4 py-2">
-      <span className="font-mono text-sm font-medium">{imageRef}</span>
+      <span className="font-mono text-body font-medium">{imageRef}</span>
       {manifest && (
-        <span className="text-sm">{manifest.image_version || "Version not specified"}</span>
+        <span className="text-body">{manifest.image_version || "Version not specified"}</span>
       )}
       {bare && <Badge variant="secondary">Terminal-only</Badge>}
       {manifest?.digest && (
-        <span className="font-mono text-xs text-muted-foreground">
+        <span className="font-mono text-ui text-muted-foreground">
           {manifest.digest.slice(0, 16)}
         </span>
       )}
       {manifest?.built_at && (
-        <span className="text-xs text-muted-foreground">built {manifest.built_at}</span>
+        <span className="text-ui text-muted-foreground">built {manifest.built_at}</span>
       )}
       <div className="ml-auto flex items-center gap-1">
         <Button size="sm" variant="outline" asChild>

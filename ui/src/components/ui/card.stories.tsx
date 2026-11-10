@@ -18,7 +18,7 @@ type Story = StoryObj;
 
 export const ScriptEditorCard: Story = {
   render: () => (
-    <Card className="max-w-[560px]">
+    <Card className="max-w-140">
       <CardHeader>
         <CardTitle>Global Agent Shell Script</CardTitle>
         <CardDescription>
@@ -26,7 +26,7 @@ export const ScriptEditorCard: Story = {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <pre className="m-0 whitespace-pre-wrap rounded-[10px] border border-border px-2.5 py-2 font-mono text-[13px] leading-5">
+        <pre className="m-0 whitespace-pre-wrap rounded-card border border-border px-2.5 py-2 font-mono text-body leading-5">
           {`export TARIBOY_PROFILE=team\nsource /srv/tariboy/env/shared.sh`}
         </pre>
       </CardContent>
@@ -40,7 +40,7 @@ export const ScriptEditorCard: Story = {
 
 export const WithAction: Story = {
   render: () => (
-    <Card size="sm" className="max-w-[420px]">
+    <Card size="sm" className="max-w-105">
       <CardHeader>
         <CardTitle>worker:v2</CardTitle>
         <CardDescription>Built 2026-09-11 09:47 · sha256:9ac71e3f52</CardDescription>
@@ -57,7 +57,7 @@ export const WithAction: Story = {
 
 export const ContentOnly: Story = {
   render: () => (
-    <Card className="max-w-[420px]">
+    <Card className="max-w-105">
       <CardContent>
         <div className="font-medium">No built images on this host.</div>
         <div className="text-muted-foreground">

@@ -74,7 +74,7 @@ export default function AgentConsoleTab({
           onDragOver={absentDrop.onDragOver}
           onDragLeave={absentDrop.onDragLeave}
           onDrop={absentDrop.onDrop}
-          className={`flex flex-1 flex-col items-center justify-center gap-2 rounded-md border text-sm text-muted-foreground${absentDrop.dragActive ? " ring-2 ring-primary" : ""}`}
+          className={`flex flex-1 flex-col items-center justify-center gap-2 rounded-control border text-body text-muted-foreground${absentDrop.dragActive ? " ring-2 ring-primary" : ""}`}
         >
           <SendFilesButton onUploaded={(paths) => toast.success(`uploaded: ${paths.join(", ")}`)} />
         </div>

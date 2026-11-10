@@ -25,7 +25,7 @@ import { CompareTable } from "./CompareTable";
 import { compareRows, smallSample } from "./compareModel";
 import { PageHeading } from "./PageHeading";
 
-const SELECT = "h-7 max-w-40 min-w-0 rounded-control border bg-background px-2 text-body-sm";
+const SELECT = "h-7 max-w-40 min-w-0 rounded-control border bg-background px-2 text-body";
 
 function VersionSelect({
   label,
@@ -44,7 +44,7 @@ function VersionSelect({
   const options = value && !versions.includes(value) ? [...versions, value] : versions;
   const errorId = `${label.replace(/\s/g, "-")}-error`;
   return (
-    <label className="flex shrink-0 items-center gap-1 text-sm">
+    <label className="flex shrink-0 items-center gap-1 text-body">
       <span className="text-muted-foreground">{label}</span>
       <select
         aria-label={label}
@@ -62,7 +62,7 @@ function VersionSelect({
         ))}
       </select>
       {error && (
-        <span id={errorId} role="alert" className="text-xs text-destructive">
+        <span id={errorId} role="alert" className="text-ui text-destructive">
           {error}
         </span>
       )}
@@ -73,7 +73,10 @@ function VersionSelect({
 function MixedTasks({ a, b }: { a?: MetricsSlice; b?: MetricsSlice }) {
   const [ma, mb] = [a?.tasks.mixed_tasks ?? 0, b?.tasks.mixed_tasks ?? 0];
   return (
-    <section aria-labelledby="metrics-mixed" className="space-y-1 rounded border p-3 text-sm">
+    <section
+      aria-labelledby="metrics-mixed"
+      className="space-y-1 rounded-chip border p-3 text-body"
+    >
       <h2 id="metrics-mixed" className="font-medium">
         Mixed tasks
       </h2>
@@ -99,13 +102,13 @@ function Comparison({ slices, a, b }: { slices: MetricsSlice[]; a: string; b: st
   const warning = smallSample(sliceA, sliceB);
   return (
     <>
-      <p className="text-xs text-muted-foreground">Change shows version B minus version A.</p>
+      <p className="text-ui text-muted-foreground">Change shows version B minus version A.</p>
       {missing.map((v) => (
-        <p key={v} className="text-sm">
+        <p key={v} className="text-body">
           Version {versionLabel(v)} has no data in this period.
         </p>
       ))}
-      {warning && <p className="text-sm">{warning}</p>}
+      {warning && <p className="text-body">{warning}</p>}
       <CompareTable rows={compareRows(sliceA, sliceB)} a={a} b={b} />
       <MixedTasks a={sliceA} b={sliceB} />
     </>
@@ -141,7 +144,7 @@ function CompareBody({
 }) {
   if (slices.length === 0) {
     return (
-      <div className="space-y-2 rounded border p-4 text-sm">
+      <div className="space-y-2 rounded-chip border p-4 text-body">
         <p>No runs of {name} in this period.</p>
         {shorterThanQuarter(window) && (
           <Button type="button" size="sm" variant="outline" onClick={onQuarter}>
@@ -151,7 +154,7 @@ function CompareBody({
       </div>
     );
   }
-  if (!pair.a || !pair.b) return <p className="text-sm">Choose a version to compare with.</p>;
+  if (!pair.a || !pair.b) return <p className="text-body">Choose a version to compare with.</p>;
   if (pair.a === pair.b) return null;
   return <Comparison slices={slices} a={pair.a} b={pair.b} />;
 }
@@ -242,7 +245,7 @@ function CompareScreen({
     <TabPage className="overflow-auto">
       <Link
         to={`/metrics?${periodParams(searchParams, window)}`}
-        className="text-sm text-primary hover:underline"
+        className="text-body text-primary hover:underline"
       >
         ← Metrics
       </Link>

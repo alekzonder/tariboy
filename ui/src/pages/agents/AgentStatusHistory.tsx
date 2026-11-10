@@ -24,13 +24,13 @@ export default function AgentStatusHistory({ since, until }: { since: string; un
   return (
     <div className="mx-auto w-full max-w-3xl space-y-2">
       {inPeriod.map((event, index) => (
-        <div key={`${event.ts}-${index}`} className="rounded-md border p-3 text-sm">
-          <div className="text-xs text-muted-foreground">{fmtDateTime(event.ts)}</div>
+        <div key={`${event.ts}-${index}`} className="rounded-control border p-3 text-body">
+          <div className="text-ui text-muted-foreground">{fmtDateTime(event.ts)}</div>
           <div>{event.message}</div>
         </div>
       ))}
       {inPeriod.length === 0 && (
-        <p className="text-sm text-muted-foreground">No status changes in this period.</p>
+        <p className="text-body text-muted-foreground">No status changes in this period.</p>
       )}
     </div>
   );

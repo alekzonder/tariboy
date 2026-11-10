@@ -10,7 +10,7 @@ type Story = StoryObj;
 
 export const GoalHelp: Story = {
   render: () => (
-    <div className="flex items-center gap-1 pt-14 text-sm">
+    <div className="flex items-center gap-1 pt-14 text-body">
       <span className="text-muted-foreground">Goal:</span>
       <span className="font-mono text-primary">TB-142</span>
       <Tooltip defaultOpen>
@@ -52,10 +52,10 @@ export const DestructiveAction: Story = {
 
 export const TruncatedDigest: Story = {
   render: () => (
-    <div className="flex w-[420px] justify-start">
+    <div className="flex w-105 justify-start">
       <Tooltip defaultOpen>
         <TooltipTrigger asChild>
-          <span className="cursor-default border-b border-dotted border-border font-mono text-[13px]">
+          <span className="cursor-default border-b border-dotted border-border font-mono text-body">
             sha256:9ac71e3f52…
           </span>
         </TooltipTrigger>

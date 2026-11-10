@@ -1,10 +1,11 @@
 import type { Queue, Task, TaskParent } from "@/types";
 import { parentQueueLabel } from "@/lib/taskTree";
 import { cn } from "@/lib/utils";
-import { MONO } from "./panelStyles";
+import { MONO } from "@/components/ui/recipes";
 import QueueMarker from "./QueueMarker";
 
-const FOCUS = "rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
+const FOCUS =
+  "rounded-chip focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
 const HIDDEN_TITLE = "You cannot open this task";
 
 /**
@@ -23,7 +24,7 @@ export function TaskParentLine({
   onOpen?: (key: string) => void;
 }) {
   if (!task.parent_key) return null;
-  const line = "flex min-w-0 items-center gap-1.5 text-meta text-muted-foreground";
+  const line = "flex min-w-0 items-center gap-1.5 text-caption text-muted-foreground";
   if (!parent || !onOpen) {
     return (
       <span title={HIDDEN_TITLE} className={line}>

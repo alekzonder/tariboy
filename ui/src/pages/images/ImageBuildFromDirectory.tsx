@@ -58,10 +58,10 @@ export default function ImageBuildFromDirectory() {
   };
 
   return (
-    <section className="space-y-3 rounded border p-4">
+    <section className="space-y-3 rounded-chip border p-4">
       <div>
         <h2 className="font-medium">Build from directory</h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-body text-muted-foreground">
           Uses the original directory containing Tariboyfile.yaml. Sources stay in place.
         </p>
       </div>
@@ -107,12 +107,12 @@ export default function ImageBuildFromDirectory() {
         </div>
       )}
       {diagnostics.map((item, index) => (
-        <p key={`${item.path}-${index}`} role="alert" className="text-sm text-destructive">
+        <p key={`${item.path}-${index}`} role="alert" className="text-body text-destructive">
           <span className="font-mono">{item.path}</span>: {item.message}
         </p>
       ))}
       {(validation?.warnings ?? []).map((item, index) => (
-        <p key={`warning-${item.path}-${index}`} className="text-sm text-amber-700">
+        <p key={`warning-${item.path}-${index}`} className="text-body text-warning">
           <span className="font-mono">{item.path}</span>: {item.message}
         </p>
       ))}

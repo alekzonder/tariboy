@@ -17,7 +17,7 @@ export function EnvironmentBlock({ draft, sources }: SectionProps) {
   return (
     <>
       {script.error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-body text-destructive">
           Shell script unavailable: {script.error}
         </p>
       )}
@@ -27,7 +27,7 @@ export function EnvironmentBlock({ draft, sources }: SectionProps) {
           page draft while typing, is sent in a POST body, never in a URL, and
           is dropped once the daemon acknowledges it. */}
       {secrets.error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-body text-destructive">
           Secrets unavailable: {secrets.error}
         </p>
       )}
@@ -41,7 +41,7 @@ export function EnvironmentBlock({ draft, sources }: SectionProps) {
                 {pending && <span>Will be removed</span>}
                 <button
                   type="button"
-                  className="ml-1 text-xs hover:text-destructive"
+                  className="ml-1 text-ui hover:text-destructive"
                   aria-label={pending ? `Keep ${key}` : `Remove ${key}`}
                   onClick={() => toggle(key)}
                 >
@@ -51,7 +51,7 @@ export function EnvironmentBlock({ draft, sources }: SectionProps) {
             );
           })}
           {secrets.value?.length === 0 && (
-            <span className="text-sm text-muted-foreground">
+            <span className="text-body text-muted-foreground">
               Add a secret key and value to make it available to the agent.
             </span>
           )}

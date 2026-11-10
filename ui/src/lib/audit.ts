@@ -32,9 +32,9 @@ export function tone(kind: string, data: string): Tone {
 
 export const TONE_BAR: Record<Tone, string> = {
   neutral: "border-l-transparent",
-  success: "border-l-green-500",
-  warn: "border-l-amber-500",
-  error: "border-l-red-500",
+  success: "border-l-success",
+  warn: "border-l-warning",
+  error: "border-l-destructive",
 };
 
 // decodeJSONStrings walks a value and replaces any string that is itself a JSON

@@ -45,12 +45,12 @@ export function WorkspaceList({
             aria-current={workspace.id === selectedId ? "true" : undefined}
             onClick={() => onPick(workspace.id)}
             className={cn(
-              "flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-body hover:bg-accent",
+              "flex h-8 w-full items-center gap-2 rounded-control px-2.5 text-left text-body hover:bg-accent",
               workspace.id === selectedId && "bg-accent font-medium",
             )}
           >
             <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
-            <span className="text-meta text-muted-foreground tabular-nums">
+            <span className="text-caption text-muted-foreground tabular-nums">
               {hostsIn(state, hosts, workspace.id).length}
             </span>
           </button>
@@ -66,7 +66,7 @@ export function WorkspaceList({
           }}
           placeholder="New workspace name"
           aria-label="New workspace name"
-          className="h-7 min-w-0 rounded-md border-0 bg-muted px-2.25 py-0 text-body-sm outline-none placeholder:text-muted-foreground md:text-body-sm dark:bg-muted"
+          className="h-7 min-w-0 rounded-control border-0 bg-muted px-2.25 py-0 text-body outline-none placeholder:text-muted-foreground md:text-body dark:bg-muted"
         />
         <Button size="sm" variant="secondary" onClick={create}>
           Create workspace
@@ -100,7 +100,7 @@ export function WorkspaceHostRow({
     selectedId !== DEFAULT_WORKSPACE_ID ||
     state.workspaces.some((w) => w.id !== DEFAULT_WORKSPACE_ID && w.hosts.includes(host.id));
   return (
-    <div className="grid gap-0.5 rounded-lg border px-2.5 py-2">
+    <div className="grid gap-0.5 rounded-card border px-2.5 py-2">
       <div className="flex h-6.5 items-center gap-2">
         <span
           aria-hidden="true"
@@ -138,7 +138,7 @@ export function WorkspaceHostRow({
         )}
       </div>
       {adding && (
-        <div className="flex flex-wrap items-center gap-1 rounded-md bg-muted px-1.75 py-1.5">
+        <div className="flex flex-wrap items-center gap-1 rounded-control bg-muted px-1.75 py-1.5">
           {targets.map((target) => (
             <button
               key={target.id}
@@ -150,7 +150,7 @@ export function WorkspaceHostRow({
                 addHostToWorkspace(host.id, target.id);
                 onAdded();
               }}
-              className="h-6 rounded-sm border bg-card px-2.25 text-ui hover:border-ring"
+              className="h-6 rounded-chip border bg-card px-2.25 text-ui hover:border-ring"
             >
               {target.name}
             </button>
@@ -177,7 +177,7 @@ export function WorkspaceDeleteBar({
     <div className="flex shrink-0 items-center gap-2 border-t px-4.5 py-2.5">
       {confirming ? (
         <>
-          <span className="min-w-0 flex-1 text-body-sm">
+          <span className="min-w-0 flex-1 text-body">
             Delete {name}? Hosts in no other workspace return to Default.
           </span>
           <Button size="sm" variant="secondary" onClick={() => onConfirming(false)}>

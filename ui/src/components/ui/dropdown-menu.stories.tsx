@@ -19,9 +19,9 @@ type Story = StoryObj;
 
 // The sidebar host row the "manage host" menu hangs off.
 const HostRow = ({ children }: { children?: ReactNode }) => (
-  <div className="flex w-[280px] items-center gap-2 rounded-md border border-border px-2 py-1">
-    <span className="text-[13px] font-medium">build-01</span>
-    <span className="text-xs text-muted-foreground">2 agents</span>
+  <div className="flex w-70 items-center gap-2 rounded-control border border-border px-2 py-1">
+    <span className="text-body font-medium">build-01</span>
+    <span className="text-ui text-muted-foreground">2 agents</span>
     <span className="ml-auto flex gap-1">{children}</span>
   </div>
 );
@@ -46,8 +46,8 @@ export const HostActions: Story = {
 
 export const CheckedItems: Story = {
   render: () => (
-    <div className="flex w-[280px] items-center gap-2">
-      <span className="text-[13px] text-muted-foreground">Appearance</span>
+    <div className="flex w-70 items-center gap-2">
+      <span className="text-body text-muted-foreground">Appearance</span>
       <span className="ml-auto">
         <DropdownMenu defaultOpen>
           <DropdownMenuTrigger asChild>
@@ -69,7 +69,7 @@ export const CheckedItems: Story = {
 
 export const LabelledSections: Story = {
   render: () => (
-    <div className="w-[280px]">
+    <div className="w-70">
       <DropdownMenu defaultOpen>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm">
@@ -109,7 +109,7 @@ export const LabelledSections: Story = {
 
 export const DisabledItems: Story = {
   render: () => (
-    <div className="w-[280px]">
+    <div className="w-70">
       <DropdownMenu defaultOpen>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm" aria-label="manage build-02">

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useApi } from "@/components/apiContext";
 import type { QueueSecretInfo } from "@/types";
-import { COUNT, EMPTY, LABEL, QUIET_ACTION } from "./panelStyles";
+import { COUNT, EMPTY, LABEL, QUIET_ACTION } from "@/components/ui/recipes";
 import KeyValueForm from "./KeyValueForm";
 import type { KeyHint } from "./queueSettingsModel";
 import { formatTaskTime } from "./taskTime";

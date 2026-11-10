@@ -64,7 +64,7 @@ function ImageField({ form, checklistShown }: { form: CreateAgentForm; checklist
         disabled={form.formDisabled}
         role={form.plainTerminal ? null : form.role}
       />
-      {loadingImages && <p className="text-xs text-muted-foreground">Loading built images…</p>}
+      {loadingImages && <p className="text-ui text-muted-foreground">Loading built images…</p>}
     </div>
   );
 }

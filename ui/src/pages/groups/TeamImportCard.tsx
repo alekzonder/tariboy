@@ -18,7 +18,7 @@ export function TeamImportCard({ teamImport }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Import team</CardTitle>
+        <CardTitle className="text-title">Import team</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         <Textarea
@@ -26,7 +26,7 @@ export function TeamImportCard({ teamImport }: Props) {
           value={yaml}
           onChange={(event) => setYaml(event.target.value)}
           placeholder="Paste tariboy-compose.yaml"
-          className="min-h-32 w-full rounded border bg-background p-2 font-mono text-xs"
+          className="min-h-32 w-full rounded-chip border bg-background p-2 font-mono text-ui"
         />
         <Button
           size="sm"
@@ -36,7 +36,7 @@ export function TeamImportCard({ teamImport }: Props) {
           Preview YAML
         </Button>
         <div>
-          <label className="text-sm font-medium" htmlFor="team-archive">
+          <label className="text-body font-medium" htmlFor="team-archive">
             Portable team archive (compose only; transfer images separately)
           </label>
           <Input

@@ -27,7 +27,7 @@ export function LazyBoundary({
 
 function LazyLoading() {
   return (
-    <div role="status" className="p-4 text-sm text-muted-foreground">
+    <div role="status" className="p-4 text-body text-muted-foreground">
       Loading…
     </div>
   );
@@ -49,7 +49,7 @@ class LoadErrorBoundary extends Component<BoundaryProps, { failed: boolean; rese
   render() {
     if (!this.state.failed) return this.props.children;
     return (
-      <div role="alert" className="flex flex-col items-start gap-2 p-4 text-sm">
+      <div role="alert" className="flex flex-col items-start gap-2 p-4 text-body">
         <p>This screen failed to load.</p>
         <p className="text-muted-foreground">Reloading discards unsaved input.</p>
         <Button type="button" size="sm" variant="outline" onClick={this.props.reload}>

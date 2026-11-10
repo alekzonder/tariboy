@@ -43,7 +43,7 @@ export function RetentionBlock({ draft, sources, name }: SectionProps) {
   return (
     <>
       {sources.retention.error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-body text-destructive">
           Retention policy unavailable: {sources.retention.error}
         </p>
       )}
@@ -61,7 +61,7 @@ export function RetentionBlock({ draft, sources, name }: SectionProps) {
         />
       </div>
       {policy && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-ui text-muted-foreground">
           Effective: {policy.keep_iterations} iterations · {policy.keep_days} days · max_bytes{" "}
           {policy.max_bytes} (0 = unlimited). Pruned iterations are archived with their database
           rows first.
@@ -89,7 +89,7 @@ export function RetentionBlock({ draft, sources, name }: SectionProps) {
         </Button>
       </ActionRow>
       {pruneError && (
-        <p role="alert" className="text-xs text-destructive">
+        <p role="alert" className="text-ui text-destructive">
           {pruneError}
         </p>
       )}

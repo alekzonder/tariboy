@@ -633,8 +633,11 @@ of all JavaScript, make the lazily loaded code smaller.
 #### Storybook
 
 Storybook shows a component in a theme and a width without the app and
-without a daemon. It builds the stories in `ui/src/**/*.stories.tsx`. Run it
-from `ui/`:
+without a daemon. It builds the stories in `ui/src/**/*.stories.tsx`. The
+sidebar starts with **Foundations** (`ui/src/foundations/`): the colors, the
+text scale, the radii, the shadows, the layers and the recipes of the
+[design system](/docs/architecture/web-ui#design-system), read from
+`ui/src/styles/tokens.css` and `ui/src/index.css`. Run it from `ui/`:
 
 ```bash
 cd ui
@@ -709,7 +712,8 @@ to the end, like `frontend-check`: `ui-typecheck` (`npx tsc -b --checkers 1`),
 `ui-fmt-check` (oxfmt), `ui-designer-tests` (one Vitest run with
 `TARIBOY_VITEST_MAX_WORKERS=2` of `viewLintPolicy.test.ts`,
 `storybookSafety.test.ts`, `storyNetwork.test.tsx`,
-`arbitraryPxPolicy.test.ts` and `textInputPolicy.test.ts`), `ui-dead-code`
+`tokenPolicy.test.ts`, `textInputPolicy.test.ts`, `theme.test.ts` and
+`utils.test.ts`), `ui-dead-code`
 (Knip) and `ui-storybook` (the Storybook build). Measured on the shared host on
 2026-11-05, Knip takes about 10 seconds and 0.4 GB of peak resident memory; the
 step stays in the target while it takes at most 90 seconds and 1.5 GB.

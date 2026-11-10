@@ -303,7 +303,7 @@ describe("task row status", () => {
     expect(pill.tagName).toBe("SPAN");
     expect(pill.dataset.tone).toBe("live");
     expect(pill.className).toBe(
-      "inline-flex w-fit shrink-0 items-center gap-1.5 whitespace-nowrap h-5 rounded-[6px] px-2 text-[11.5px] bg-status-running/13 text-status-running font-medium",
+      "inline-flex w-fit shrink-0 items-center gap-1.5 whitespace-nowrap h-5 rounded-chip px-2 text-caption bg-status-running-soft text-status-running font-medium",
     );
     expect(pill.parentElement!.className).toBe("shrink-0");
     expect(pill.parentElement!.children).toHaveLength(1);
@@ -374,7 +374,7 @@ describe("task row status", () => {
       name: "Problem: A check could not run: the script failed with exit 3 (1)",
     });
     expect(mark).toHaveAttribute("data-attention", "failed");
-    expect(mark).toHaveClass("text-status-failed");
+    expect(mark).toHaveClass("text-destructive");
     failed.unmount();
 
     const rejected = renderTask({

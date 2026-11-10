@@ -6,11 +6,11 @@ export default meta;
 
 type Story = StoryObj;
 
-const CARD = "overflow-hidden rounded-(--panel-radius) border border-border bg-card text-[13px]";
-const ROW = "flex h-[34px] items-center gap-2.5 px-3.5";
-const KEY = "w-14 font-mono text-[11.5px] text-muted-foreground";
+const CARD = "overflow-hidden rounded-panel border border-border bg-card text-body";
+const ROW = "flex h-8.5 items-center gap-2.5 px-3.5";
+const KEY = "w-14 font-mono text-caption text-muted-foreground";
 const TITLE = "min-w-0 flex-1 truncate";
-const MONO_LABEL = "font-mono text-[11px] text-muted-foreground";
+const MONO_LABEL = "font-mono text-caption text-muted-foreground";
 
 // ---- PriorityTag ----
 
@@ -47,7 +47,7 @@ export const FillRule: Story = {
           {group.ranks.map((rank) => (
             <PriorityTag key={rank} priority={rank} aria-label={`Priority ${rank}`} />
           ))}
-          <span className="text-[11.5px] text-muted-foreground">{group.note}</span>
+          <span className="text-caption text-muted-foreground">{group.note}</span>
         </div>
       ))}
     </div>
@@ -57,12 +57,12 @@ export const FillRule: Story = {
 // In place: the fixed-width priority column of the task table.
 export const InTaskTable: Story = {
   render: () => (
-    <div className={`${CARD} w-[420px]`}>
+    <div className={`${CARD} w-105`}>
       {PRIORITY_ROWS.map((row, i) => (
         <div key={row.key} className={`${ROW} ${i === 0 ? "" : "border-t border-border"}`}>
           <span className={KEY}>{row.key}</span>
           <span className={TITLE}>{row.title}</span>
-          <span className="w-[30px] shrink-0">
+          <span className="w-7.5 shrink-0">
             <PriorityTag priority={row.priority} aria-label={`Priority ${row.priority}`} />
           </span>
         </div>
@@ -90,14 +90,14 @@ const SIDEBAR_AGENTS = [
 
 export const StatusDotTones: Story = {
   render: () => (
-    <div className="grid gap-[11px]">
+    <div className="grid gap-2.75">
       {DOT_TONES.map((t) => (
         <div key={t.tone} className="flex items-center gap-3">
           <span className="grid w-3.5 place-items-center">
             <StatusDot tone={t.tone} />
           </span>
-          <span className={`w-[68px] ${MONO_LABEL}`}>{t.tone}</span>
-          <span className="text-xs">{t.meaning}</span>
+          <span className={`w-17 ${MONO_LABEL}`}>{t.tone}</span>
+          <span className="text-ui">{t.meaning}</span>
         </div>
       ))}
     </div>
@@ -107,13 +107,13 @@ export const StatusDotTones: Story = {
 // 7px in a sidebar row, 8px in the agent header — the only two sizes.
 export const StatusDotSizes: Story = {
   render: () => (
-    <div className="flex items-center gap-[22px]">
+    <div className="flex items-center gap-5.5">
       {([7, 8] as const).map((size) => (
         <div key={size} className="flex items-center gap-2">
           <span className="grid w-3.5 place-items-center">
             <StatusDot tone="live" size={size} />
           </span>
-          <span className="text-[11.5px] text-muted-foreground">{size}px</span>
+          <span className="text-caption text-muted-foreground">{size}px</span>
         </div>
       ))}
     </div>
@@ -123,11 +123,11 @@ export const StatusDotSizes: Story = {
 // In place: the leading marker of a sidebar agent row.
 export const InSidebar: Story = {
   render: () => (
-    <div className="w-60 rounded-(--panel-radius) border border-sidebar-border bg-sidebar p-1.5">
+    <div className="w-60 rounded-panel border border-sidebar-border bg-sidebar p-1.5">
       {SIDEBAR_AGENTS.map((agent) => (
         <div
           key={agent.name}
-          className="flex h-[30px] items-center gap-[9px] px-2.5 text-[13px] text-sidebar-foreground"
+          className="flex h-7.5 items-center gap-2.25 px-2.5 text-body text-sidebar-foreground"
         >
           <StatusDot tone={agent.tone} />
           <span className="font-medium">{agent.name}</span>
@@ -166,12 +166,12 @@ const PILL_ROWS = [
 
 export const Tones: Story = {
   render: () => (
-    <div className="grid gap-[9px]">
+    <div className="grid gap-2.25">
       {PILL_TONES.map((t) => (
         <div key={t.tone} className="flex items-center gap-3">
-          <span className={`w-[74px] ${MONO_LABEL}`}>{t.tone}</span>
+          <span className={`w-18.5 ${MONO_LABEL}`}>{t.tone}</span>
           <StatusPill tone={t.tone}>{t.label}</StatusPill>
-          <span className="text-[11.5px] text-muted-foreground">{t.meaning}</span>
+          <span className="text-caption text-muted-foreground">{t.meaning}</span>
         </div>
       ))}
     </div>
@@ -181,10 +181,10 @@ export const Tones: Story = {
 // quiet="chip" keeps the tone and only adds the neutral background.
 export const QuietAsChip: Story = {
   render: () => (
-    <div className="grid gap-[9px]">
+    <div className="grid gap-2.25">
       {(["quiet", "faint"] as const).map((tone) => (
         <div key={tone} className="flex items-center gap-3">
-          <span className={`w-[74px] ${MONO_LABEL}`}>{tone}</span>
+          <span className={`w-18.5 ${MONO_LABEL}`}>{tone}</span>
           <StatusPill tone={tone}>text</StatusPill>
           <StatusPill tone={tone} quiet="chip">
             chip
@@ -197,10 +197,10 @@ export const QuietAsChip: Story = {
 
 export const Sizes: Story = {
   render: () => (
-    <div className="grid gap-[9px]">
+    <div className="grid gap-2.25">
       {(["sm", "md"] as const).map((size) => (
         <div key={size} className="flex items-center gap-2.5">
-          <span className={`w-[74px] ${MONO_LABEL}`}>{size}</span>
+          <span className={`w-18.5 ${MONO_LABEL}`}>{size}</span>
           <StatusPill tone="live" size={size}>
             running
           </StatusPill>
@@ -219,12 +219,12 @@ export const Sizes: Story = {
 // In place: the status column of the task table.
 export const InTaskRow: Story = {
   render: () => (
-    <div className={`${CARD} w-[460px]`}>
+    <div className={`${CARD} w-115`}>
       {PILL_ROWS.map((row, i) => (
         <div key={row.key} className={`${ROW} ${i === 0 ? "" : "border-t border-border"}`}>
           <span className={KEY}>{row.key}</span>
           <span className={TITLE}>{row.title}</span>
-          <span className="w-[110px] shrink-0">
+          <span className="w-27.5 shrink-0">
             <StatusPill tone={row.tone}>{row.status}</StatusPill>
           </span>
         </div>

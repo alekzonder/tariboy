@@ -12,6 +12,22 @@ import "../src/index.css";
 // and withRoute sits inside withAppProviders, which then skips its own router.
 const preview: Preview = {
   decorators: [withQueryClient, withDaemon, withRoute, withAppProviders, withTheme],
+  // The sidebar reads from the tokens up to the pages. The other titles come
+  // from the file paths, so a story id does not change when this order does.
+  parameters: {
+    options: {
+      storySort: {
+        order: [
+          "Foundations",
+          ["Colors", "Typography", "Shape", "Recipes"],
+          "Components",
+          ["Ui", "*"],
+          "Pages",
+          "Mockups",
+        ],
+      },
+    },
+  },
   globalTypes: {
     theme: {
       description: "Color theme",

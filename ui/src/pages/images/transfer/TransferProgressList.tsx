@@ -17,7 +17,7 @@ function TransferProgressRow({
   onRetry,
 }: ProgressActions & { target: DestinationTarget; row: TransferRow }) {
   return (
-    <li className="text-sm">
+    <li className="text-body">
       <p>
         {target.label}: {transferStatusLabel(row.status)}
         {row.error ? ` — ${row.error}` : ""}

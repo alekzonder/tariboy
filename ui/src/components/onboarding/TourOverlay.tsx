@@ -52,13 +52,13 @@ export default function TourOverlay({ steps, whatsNew, onClose, onChangelog }: T
   const rect = view.rect;
   return (
     // Above menus (z-50) and dialogs (z-60): nothing else is usable during the tour.
-    <div className="fixed inset-0 z-70" data-testid="tour-overlay">
+    <div className="fixed inset-0 z-alert" data-testid="tour-overlay">
       {rect ? (
         <div
           aria-hidden="true"
           data-testid="tour-highlight"
           data-anchor={step.anchor}
-          className="pointer-events-none absolute rounded-md shadow-[0_0_0_9999px_rgb(0_0_0/0.55)] ring-2 ring-primary transition-all duration-200"
+          className="pointer-events-none absolute rounded-control shadow-[0_0_0_9999px_var(--scrim-strong)] ring-2 ring-primary transition-all duration-200"
           style={{
             top: rect.top - RING,
             left: rect.left - RING,
@@ -67,7 +67,7 @@ export default function TourOverlay({ steps, whatsNew, onClose, onChangelog }: T
           }}
         />
       ) : (
-        <div aria-hidden="true" className="absolute inset-0 bg-black/55" />
+        <div aria-hidden="true" className="absolute inset-0 bg-scrim-strong" />
       )}
       <TourCard
         step={step}
@@ -129,7 +129,7 @@ function TourCard({
       aria-labelledby={titleId}
       aria-describedby={bodyId}
       tabIndex={-1}
-      className="absolute w-80 max-w-[calc(100vw-1.5rem)] rounded-card border bg-popover p-4 text-popover-foreground shadow-lg outline-none transition-all duration-200"
+      className="absolute w-80 max-w-[calc(100vw-1.5rem)] rounded-card border bg-popover p-4 text-popover-foreground shadow-lift outline-none transition-all duration-200"
       style={{ top: place.top, left: place.left }}
     >
       <div className="mb-1 flex items-center gap-2 text-caption text-muted-foreground">
@@ -138,7 +138,7 @@ function TourCard({
         </span>
         {mark && <Badge>{mark}</Badge>}
       </div>
-      <h2 id={titleId} className="text-body-lg font-semibold">
+      <h2 id={titleId} className="text-body font-semibold">
         {step.title}
       </h2>
       <p id={bodyId} aria-live="polite" className="mt-1 text-body text-muted-foreground">

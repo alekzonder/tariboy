@@ -46,15 +46,15 @@ function TwoOptionsDemo() {
 function FilterBarDemo() {
   const [view, setView] = useState<StatusView>("active");
   return (
-    <div className="w-[560px] overflow-hidden rounded-(--panel-radius) border border-border bg-card">
-      <div className="flex flex-wrap items-center gap-1.5 px-4 pt-[11px] pb-[9px]">
-        <label className="flex h-7 w-[220px] shrink-0 items-center gap-[7px] rounded-[8px] bg-muted px-[9px] text-muted-foreground">
+    <div className="w-140 overflow-hidden rounded-panel border border-border bg-card">
+      <div className="flex flex-wrap items-center gap-1.5 px-4 pt-2.75 pb-2.25">
+        <label className="flex h-7 w-55 shrink-0 items-center gap-1.75 rounded-control bg-muted px-2.25 text-muted-foreground">
           <Search aria-hidden="true" className="size-3 shrink-0" />
-          <span className="min-w-0 flex-1 text-[12px]">Search tasks</span>
+          <span className="min-w-0 flex-1 text-ui">Search tasks</span>
         </label>
         <Segmented label="Task status" options={STATUS_OPTIONS} value={view} onChange={setView} />
       </div>
-      <div className="border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
+      <div className="border-t border-border px-4 py-2.5 text-ui text-muted-foreground">
         14 tasks
       </div>
     </div>
@@ -69,9 +69,7 @@ export const Selection: Story = {
     <div className="flex flex-col gap-2.5">
       {STATUS_OPTIONS.map((option) => (
         <div key={option.value} className="flex items-center gap-2.5">
-          <span className="w-[52px] font-mono text-[11px] text-muted-foreground">
-            {option.value}
-          </span>
+          <span className="w-13 font-mono text-caption text-muted-foreground">{option.value}</span>
           <Segmented
             label="Task status"
             options={STATUS_OPTIONS}

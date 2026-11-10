@@ -55,7 +55,7 @@ export function CodexApprovalCard() {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Codex</CardTitle>
+        <CardTitle className="text-title">Codex</CardTitle>
         <CardDescription>
           How Codex agents on this host handle command approvals. Applies from each agent&apos;s
           next iteration.
@@ -71,11 +71,11 @@ export function CodexApprovalCard() {
               onChange={(v) => void change(v)}
               className="w-fit"
             />
-            <p className="text-xs text-muted-foreground">{help[mode]}</p>
+            <p className="text-ui text-muted-foreground">{help[mode]}</p>
           </>
         )}
         {error && (
-          <p role="alert" className="text-xs text-destructive">
+          <p role="alert" className="text-ui text-destructive">
             {error}
           </p>
         )}

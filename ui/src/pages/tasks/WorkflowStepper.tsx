@@ -3,7 +3,7 @@ import { useState } from "react";
 import { StatusDot } from "@/components/ui/status";
 import type { StatusView, WorkflowView } from "@/types";
 import { cn } from "@/lib/utils";
-import { LABEL, MONO } from "./panelStyles";
+import { LABEL, MONO } from "@/components/ui/recipes";
 import { stepMarks, type StepMark } from "./workflowGraph";
 
 /**
@@ -82,7 +82,7 @@ function Step({ mark, open, onToggle }: { mark: StepMark; open: boolean; onToggl
           className="size-3 shrink-0 text-status-running [stroke-width:2]"
         />
       ) : status.terminal ? (
-        <span aria-hidden="true" className="size-1.75 shrink-0 rounded-hair bg-status-stopped" />
+        <span aria-hidden="true" className="size-1.75 shrink-0 rounded-mark bg-status-stopped" />
       ) : (
         <StatusDot tone={tone} />
       )}
@@ -122,7 +122,7 @@ function StepDetail({ status }: { status: StatusView }) {
   return (
     <div
       data-testid="step-detail"
-      className="flex min-w-0 flex-col gap-1.5 rounded-md bg-muted/50 px-2.5 py-2 text-ui"
+      className="flex min-w-0 flex-col gap-1.5 rounded-control bg-subtle px-2.5 py-2 text-ui"
     >
       <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-0.5">
         <span className={cn(MONO, "min-w-0 break-all font-medium")}>{status.id}</span>

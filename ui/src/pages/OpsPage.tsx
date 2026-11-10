@@ -12,10 +12,10 @@ export default function OpsPage() {
 
   return (
     <div className="space-y-4 p-6">
-      <h2 className="text-lg font-semibold">Backup and restore</h2>
+      <h2 className="text-heading font-semibold">Backup and restore</h2>
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Backup</CardTitle>
+          <CardTitle className="text-title">Backup</CardTitle>
         </CardHeader>
         <CardContent className="flex items-end gap-2">
           <Input
@@ -36,7 +36,7 @@ export default function OpsPage() {
       </Card>
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Restore</CardTitle>
+          <CardTitle className="text-title">Restore</CardTitle>
         </CardHeader>
         <CardContent className="flex items-end gap-2">
           <Input
@@ -55,7 +55,7 @@ export default function OpsPage() {
           </Button>
         </CardContent>
       </Card>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-ui text-muted-foreground">
         Paths are resolved on the host; backups land under backups/ in the host's base directory by
         default.
       </p>

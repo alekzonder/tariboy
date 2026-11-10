@@ -1,7 +1,7 @@
 import { useId, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FIELD } from "./panelStyles";
+import { FIELD } from "@/components/ui/recipes";
 import type { KeyHint } from "./queueSettingsModel";
 
 /**
@@ -44,7 +44,7 @@ function KeyHints({
               key={hint.name}
               type="button"
               title={hint.title}
-              className="h-5.5 rounded-control bg-muted px-2 font-mono text-meta text-foreground hover:bg-accent"
+              className="h-5.5 rounded-control bg-muted px-2 font-mono text-caption text-foreground hover:bg-accent"
               onClick={() => onPick(hint.name)}
             >
               {hint.name}

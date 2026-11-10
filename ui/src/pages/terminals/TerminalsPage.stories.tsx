@@ -11,7 +11,7 @@ import TerminalsPage from "./TerminalsPage";
 // the surface comes from useParams(). There is no daemon behind Storybook, so
 // the agent list and each surface show their empty or error state.
 const withFrame: Decorator = (Story) => (
-  <div className="h-[620px] overflow-hidden rounded-md border border-border bg-background">
+  <div className="h-155 overflow-hidden rounded-control border border-border bg-background">
     <Story />
   </div>
 );

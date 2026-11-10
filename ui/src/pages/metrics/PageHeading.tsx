@@ -14,8 +14,8 @@ export function PageHeading({
   return (
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div className="min-w-0">
-        <h1 className="text-xl font-semibold">{title}</h1>
-        <p className="text-sm break-words text-muted-foreground">{subtitle}</p>
+        <h1 className="text-heading font-semibold">{title}</h1>
+        <p className="text-body break-words text-muted-foreground">{subtitle}</p>
       </div>
       <RefreshControl {...refresh} />
     </div>

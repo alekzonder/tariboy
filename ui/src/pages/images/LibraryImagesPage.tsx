@@ -78,7 +78,7 @@ export default function LibraryImagesPage({ hostId }: { hostId: string }) {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-        <label className="flex shrink-0 items-center gap-1.5 text-body-sm whitespace-nowrap">
+        <label className="flex shrink-0 items-center gap-1.5 text-body whitespace-nowrap">
           <input
             type="checkbox"
             checked={showUnused}
@@ -90,11 +90,11 @@ export default function LibraryImagesPage({ hostId }: { hostId: string }) {
       </div>
       <div className="min-h-0 flex-1 overflow-auto px-4 pb-4">
         {error ? (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="text-body text-destructive">
             {error}
           </p>
         ) : images === null ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-body text-muted-foreground">Loading…</p>
         ) : (
           <ImageRowsTable
             rows={visible}
@@ -188,8 +188,8 @@ function ImageRowsTable({
   onShowUnused?: () => void;
 }) {
   return (
-    <table className="w-full text-sm">
-      <thead className="text-left text-xs text-muted-foreground">
+    <table className="w-full text-body">
+      <thead className="text-left text-ui text-muted-foreground">
         <tr>
           {COLUMNS.map((label) => (
             <th key={label} className="px-3 py-2 font-medium">

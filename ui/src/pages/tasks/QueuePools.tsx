@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiError, type AgentPool } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { EMPTY, FIELD, MONO } from "./panelStyles";
+import { EMPTY, FIELD, MONO } from "@/components/ui/recipes";
 import { errorText } from "@/lib/errors";
 import { idempotencyKey } from "@/lib/ids";
 
@@ -208,10 +208,8 @@ function PoolRow({
       role="group"
       aria-label={`Pool ${name}`}
       className={cn(
-        "grid gap-2 rounded-lg border p-3 sm:grid-cols-[180px_minmax(0,1fr)_auto] sm:items-start",
-        statuses &&
-          empty &&
-          "border-[color-mix(in_oklab,var(--status-failed)_35%,transparent)] bg-[color-mix(in_oklab,var(--status-failed)_5%,transparent)]",
+        "grid gap-2 rounded-card border p-3 sm:grid-cols-[180px_minmax(0,1fr)_auto] sm:items-start",
+        statuses && empty && "border-destructive-line bg-destructive-soft",
       )}
     >
       <PoolLabel name={name} statuses={statuses} empty={empty} />
@@ -221,14 +219,14 @@ function PoolRow({
             key={agent}
             className={cn(
               MONO,
-              "inline-flex items-center gap-0.5 rounded-sm bg-muted py-0.5 pr-0.5 pl-2",
+              "inline-flex items-center gap-0.5 rounded-chip bg-muted py-0.5 pr-0.5 pl-2",
             )}
           >
             {agent}
             <button
               type="button"
               aria-label={`Remove ${agent} from ${name}`}
-              className="grid size-5 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="grid size-5 place-items-center rounded-chip text-muted-foreground hover:bg-accent hover:text-foreground"
               onClick={() => setDraft((current) => current.filter((item) => item !== agent))}
             >
               <X className="size-3" />
@@ -366,7 +364,7 @@ function PoolLabel({
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
-      <strong className={cn(MONO, "text-body-sm font-medium")}>{name}</strong>
+      <strong className={cn(MONO, "text-body font-medium")}>{name}</strong>
       <span className="text-caption text-muted-foreground">
         {!statuses
           ? "not used by the workflow"
@@ -376,7 +374,7 @@ function PoolLabel({
       </span>
       {empty && (
         <span
-          className={cn("text-caption", statuses ? "text-status-failed" : "text-muted-foreground")}
+          className={cn("text-caption", statuses ? "text-destructive" : "text-muted-foreground")}
         >
           no agents
         </span>

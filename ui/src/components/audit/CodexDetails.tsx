@@ -17,7 +17,7 @@ export function CodexDetails({ codex }: { codex: CodexHarnessPresentation }) {
         </p>
       )}
       {codex.output !== undefined && (
-        <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded border p-2">
+        <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-chip border p-2">
           <span className="font-semibold">Output:</span>
           {"\n"}
           {codex.output}

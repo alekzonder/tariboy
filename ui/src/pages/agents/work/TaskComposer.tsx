@@ -184,7 +184,7 @@ function useComposerDraft(agent: AgentRow, refresh: () => void) {
 function ComposerDetails({ draft }: { draft: ReturnType<typeof useComposerDraft> }) {
   const prefixes = [...new Set([draft.queue, ...draft.queues.map((item) => item.prefix)])];
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 rounded-md bg-muted p-2.5 sm:grid-cols-2">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 rounded-control bg-muted p-2.5 sm:grid-cols-2">
       <SelectField label="Queue" value={draft.queue} onChange={draft.setQueue} mono>
         {prefixes.map((prefix) => (
           <option key={prefix} value={prefix}>

@@ -61,7 +61,7 @@ export function MarkdownModeSegment({
     <div
       role="group"
       aria-label={label}
-      className="flex shrink-0 gap-0.5 rounded-panel bg-muted p-0.5"
+      className="flex shrink-0 gap-0.5 rounded-control bg-muted p-0.5"
     >
       {(
         [
@@ -75,9 +75,9 @@ export function MarkdownModeSegment({
           aria-pressed={mode === value}
           disabled={disabled}
           onClick={() => onModeChange(value)}
-          className={`h-5.5 rounded-control px-2.25 text-meta disabled:opacity-50 ${
+          className={`h-5.5 rounded-control px-2.25 text-caption disabled:opacity-50 ${
             mode === value
-              ? "bg-card font-medium text-foreground shadow-[var(--raise)]"
+              ? "bg-card font-medium text-foreground shadow-raise"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >

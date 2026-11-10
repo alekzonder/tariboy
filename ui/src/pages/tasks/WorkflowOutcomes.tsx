@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { OutcomeView, WorkflowView } from "@/types";
 import { cn } from "@/lib/utils";
-import { DANGER_FILL, EMPTY, LABEL, MONO } from "./panelStyles";
+import { DANGER_FILL, EMPTY, LABEL, MONO } from "@/components/ui/recipes";
 import { useWorkflowAdvance } from "./useWorkflowAdvance";
 import { visibleNotice, type Notice } from "./workflowShared";
 
@@ -78,7 +78,7 @@ export default function WorkflowOutcomes({
           disabled={checking}
           maxLength={4096}
           onChange={(event) => setMessage(event.target.value)}
-          className="min-h-12 rounded-md border-0 bg-muted text-body-sm md:text-body-sm"
+          className="min-h-12 rounded-control border-0 bg-muted text-body md:text-body"
         />
       )}
       {(checking || pendingElsewhere) && (
@@ -121,7 +121,7 @@ function OutcomeRow({
           <span className={cn(MONO, "font-medium")}>{outcome.on}</span>
         )}
         {onAdvance && missing.size > 0 && (
-          <span className="text-meta text-status-failed">needs: {[...missing].join(", ")}</span>
+          <span className="text-caption text-destructive">needs: {[...missing].join(", ")}</span>
         )}
         <ArrowRight aria-hidden="true" className="size-3 text-muted-foreground" />
         <span className={cn(MONO, "min-w-0 break-all")}>{outcome.to}</span>
@@ -137,7 +137,7 @@ function RequiredArtifacts({ names, missing }: { names: string[]; missing: Set<s
   if (names.length === 0) return null;
   return (
     <>
-      <span className="text-meta text-muted-foreground">requires</span>
+      <span className="text-caption text-muted-foreground">requires</span>
       {names.map((name) =>
         missing.has(name) ? (
           <span
@@ -189,7 +189,7 @@ function Checks({ outcome }: { outcome: OutcomeView }) {
       {checks.map((script, index) => {
         const detail = outcome.check_details?.[index];
         return (
-          <li key={script} className="flex min-w-0 flex-wrap items-baseline gap-x-2 text-meta">
+          <li key={script} className="flex min-w-0 flex-wrap items-baseline gap-x-2 text-caption">
             <span className="text-muted-foreground">check</span>
             <span className={cn(MONO, "min-w-0 break-all text-muted-foreground")}>{script}</span>
             {detail?.description && (
@@ -226,14 +226,14 @@ export function OutcomeNotice({ notice, onRefresh }: { notice: Notice; onRefresh
   return (
     <div
       role="alert"
-      className={cn("flex min-w-0 flex-col gap-1 rounded-md px-2.5 py-2 text-ui", DANGER_FILL)}
+      className={cn("flex min-w-0 flex-col gap-1 rounded-control px-2.5 py-2 text-ui", DANGER_FILL)}
     >
       <span className="font-medium">
         {label}
         {notice.kind === "result" ? ` · ${notice.request.outcome}` : ""}
       </span>
       {text && (
-        <pre className="min-w-0 font-mono text-meta whitespace-pre-wrap break-words">{text}</pre>
+        <pre className="min-w-0 font-mono text-caption whitespace-pre-wrap break-words">{text}</pre>
       )}
     </div>
   );

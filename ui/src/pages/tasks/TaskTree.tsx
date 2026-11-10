@@ -29,7 +29,7 @@ function RootDrop({ children }: { children: React.ReactNode }) {
       data-testid="tasks-tree-root"
       className={cn(
         "min-h-[calc(100%-60px)] pb-20",
-        isOver && "shadow-[inset_0_0_0_2px_color-mix(in_oklch,var(--primary)_30%,transparent)]",
+        isOver && "ring-2 ring-primary-line ring-inset",
       )}
     >
       {children}

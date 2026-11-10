@@ -16,14 +16,14 @@ export default meta;
 type Story = StoryObj;
 
 const noop = () => {};
-const listClass = "static mt-1 w-full rounded-lg border bg-popover shadow-md";
+const listClass = "static mt-1 w-full rounded-card border bg-popover shadow-lift";
 
 export const PathAutocomplete: Story = {
   render: () => (
     <Command
       shouldFilter={false}
       value="0"
-      className="relative w-[360px] overflow-visible bg-transparent"
+      className="relative w-90 overflow-visible bg-transparent"
     >
       <CommandInput
         id="agent-cwd"
@@ -51,7 +51,7 @@ const agents = [
 
 export const AgentPalette: Story = {
   render: () => (
-    <Command value="builder" className="w-[380px] rounded-lg border shadow-md">
+    <Command value="builder" className="w-95 rounded-card border shadow-lift">
       <CommandInput placeholder="Search agents and actions…" />
       <CommandList>
         <CommandGroup heading="Agents">
@@ -59,7 +59,7 @@ export const AgentPalette: Story = {
             <CommandItem key={agent.name} value={agent.name}>
               <Bot className="size-4" />
               {agent.name}
-              <span className="ml-auto text-xs text-muted-foreground">{agent.image}</span>
+              <span className="ml-auto text-ui text-muted-foreground">{agent.image}</span>
             </CommandItem>
           ))}
         </CommandGroup>
@@ -81,7 +81,7 @@ export const AgentPalette: Story = {
 
 export const NoMatchingFolders: Story = {
   render: () => (
-    <Command shouldFilter={false} className="relative w-[360px] overflow-visible bg-transparent">
+    <Command shouldFilter={false} className="relative w-90 overflow-visible bg-transparent">
       <CommandInput id="agent-cwd-empty" value="/srv/tariboy/work/zzz" onValueChange={noop} />
       <CommandList className={listClass}>
         <CommandEmpty>No matching folders</CommandEmpty>
@@ -92,7 +92,7 @@ export const NoMatchingFolders: Story = {
 
 export const ImagePicker: Story = {
   render: () => (
-    <Command value="worker:v2" className="w-[340px] rounded-lg border shadow-md">
+    <Command value="worker:v2" className="w-85 rounded-card border shadow-lift">
       <CommandInput placeholder="Filter images…" />
       <CommandList>
         <CommandGroup heading="This daemon (local)">

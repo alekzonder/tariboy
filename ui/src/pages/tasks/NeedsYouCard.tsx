@@ -9,7 +9,7 @@ import { errorText } from "@/lib/errors";
 import { idempotencyKey } from "@/lib/ids";
 import { isWorkflowTask } from "@/lib/tasks";
 import { statusWords } from "@/pages/agents/work/workModel";
-import { EMPTY, MONO } from "./panelStyles";
+import { EMPTY, MONO } from "@/components/ui/recipes";
 import { MarkdownContent } from "./TaskMarkdown";
 import { refreshTasks, taskQueries, writeTask } from "./taskQueries";
 import { formatTaskTime } from "./taskTime";
@@ -19,6 +19,8 @@ import { CheckingStatus, OutcomeNotice } from "./WorkflowOutcomes";
 import WorkflowPauseBanner from "./WorkflowPauseBanner";
 import { requiredBy, stepArtifacts } from "./workflowGraph";
 import { visibleNotice, type Notice } from "./workflowShared";
+
+const ARTIFACT = "min-w-0 rounded-control bg-muted";
 
 /** The comment that asks the customer and is still unanswered. The
  *  workflow's own wait is the status, not a question. */
@@ -107,12 +109,12 @@ export default function NeedsYouCard({
             className="flex min-w-0 flex-1 items-baseline gap-2 text-left hover:underline"
           >
             <span className={MONO}>{task.key}</span>
-            <span className="min-w-0 truncate text-body-sm font-medium">{task.title}</span>
+            <span className="min-w-0 truncate text-body font-medium">{task.title}</span>
           </button>
         ) : (
           <>
             <span className={MONO}>{task.key}</span>
-            <span className="min-w-0 flex-1 truncate text-body-sm font-medium">{task.title}</span>
+            <span className="min-w-0 flex-1 truncate text-body font-medium">{task.title}</span>
           </>
         )}
         <span className="shrink-0 text-caption text-muted-foreground">
@@ -120,7 +122,7 @@ export default function NeedsYouCard({
         </span>
       </div>
       {question && (
-        <div className="text-body-sm">
+        <div className="text-body">
           <MarkdownContent>{question.body}</MarkdownContent>
         </div>
       )}
@@ -172,7 +174,7 @@ function WorkflowAsk({
   if (!decides(view)) return null;
   return (
     <>
-      <p className="text-body-sm">
+      <p className="text-body">
         {assignee ? assignee.replace(/^agent:/, "") : "The workflow"} waits for your decision in{" "}
         {view.status}.
       </p>
@@ -217,7 +219,7 @@ function CardFrame({
     <section
       ref={cardRef}
       aria-label="Needs you"
-      className="flex min-w-0 flex-col gap-2 rounded-md border border-primary/25 bg-card px-3 py-2.5"
+      className="flex min-w-0 flex-col gap-2 rounded-control border border-primary-line bg-card px-3 py-2.5"
     >
       {children}
     </section>
@@ -245,11 +247,11 @@ function ArtifactViewer({ view }: { view: WorkflowView }) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
       {artifacts.map((artifact, index) => (
-        <details key={artifact.name} open={index === 0} className="min-w-0 rounded-md bg-muted">
+        <details key={artifact.name} open={index === 0} className={ARTIFACT}>
           <summary className="cursor-pointer px-2.5 py-1.5 text-ui font-medium">
             {artifact.name}
           </summary>
-          <div className="max-h-96 overflow-auto px-3 pb-2.5 text-body-sm">
+          <div className="max-h-96 overflow-auto px-3 pb-2.5 text-body">
             <MarkdownContent>{artifact.value}</MarkdownContent>
           </div>
         </details>
@@ -291,7 +293,7 @@ function CardActions({
         disabled={busy}
         maxLength={4096}
         onChange={(event) => setMessage(event.target.value)}
-        className="min-h-12 rounded-md border-0 bg-muted text-body-sm md:text-body-sm"
+        className="min-h-12 rounded-control border-0 bg-muted text-body md:text-body"
       />
       <div className="flex flex-wrap gap-1.5">
         {view && <OutcomeButtons view={view} busy={busy} onAdvance={advance.advance} />}

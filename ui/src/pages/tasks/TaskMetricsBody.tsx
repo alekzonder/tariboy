@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useApi } from "@/components/apiContext";
 import { MetricsError } from "@/components/metrics/MetricsStatus";
 import { QualityBlock } from "@/components/metrics/QualityBlock";
-import { CELL, STICKY } from "@/components/metrics/tableClasses";
+import { CELL, STICKY_CELL } from "@/components/ui/recipes";
 import { Known, Unknown } from "@/components/metrics/Unknown";
 import type { useTaskMetrics } from "@/hooks/useTaskMetrics";
 import { ApiError, type Task, type TaskMetrics } from "@/lib/api";
@@ -25,7 +25,7 @@ import { TONE_DOT, flexibleStatusLabel, taskTone } from "@/lib/statusTone";
 import { isWorkflowTask, taskStatusLabel } from "@/lib/tasks";
 import { hostToParam } from "@/lib/terminalsHost";
 import { cn } from "@/lib/utils";
-import { EMPTY, LABEL } from "./panelStyles";
+import { EMPTY, LABEL } from "@/components/ui/recipes";
 
 const NO_WORKFLOW = "This task has no workflow, so it has no rework rounds.";
 
@@ -41,7 +41,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <>
       <dt className="text-ui text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 font-mono text-meta tabular-nums">{children}</dd>
+      <dd className="min-w-0 font-mono text-caption tabular-nums">{children}</dd>
     </>
   );
 }
@@ -114,7 +114,7 @@ function TimeByStatus({ task, metrics }: { task: Task; metrics: TaskMetrics }) {
         <p className={EMPTY}>No time in a status yet.</p>
       ) : (
         <>
-          <div aria-hidden="true" className="flex h-2 gap-0.5 overflow-hidden rounded">
+          <div aria-hidden="true" className="flex h-2 gap-0.5 overflow-hidden rounded-chip">
             {entries.map(([status, seconds]) => (
               <span
                 key={status}
@@ -131,8 +131,8 @@ function TimeByStatus({ task, metrics }: { task: Task; metrics: TaskMetrics }) {
                   className={cn("size-2 shrink-0 rounded-full", TONE_DOT[tone(status)])}
                 />
                 <span className="min-w-0 break-words">{label(status)}</span>
-                <span className="font-mono text-meta tabular-nums">{fmtDuration(seconds)}</span>
-                <span className="font-mono text-meta text-muted-foreground tabular-nums">
+                <span className="font-mono text-caption tabular-nums">{fmtDuration(seconds)}</span>
+                <span className="font-mono text-caption text-muted-foreground tabular-nums">
                   {Math.round((seconds / total) * 100)}%
                 </span>
                 {status === metrics.status && (
@@ -158,11 +158,11 @@ function Agents({ metrics }: { metrics: TaskMetrics }) {
       {metrics.agents.length === 0 ? (
         <p className={EMPTY}>No agent runs recorded.</p>
       ) : (
-        <div className="overflow-x-auto rounded border">
-          <table aria-label="Agents" className="w-full text-sm">
-            <thead className="bg-muted text-left text-xs text-muted-foreground">
+        <div className="overflow-x-auto rounded-chip border">
+          <table aria-label="Agents" className="w-full text-body">
+            <thead className="bg-muted text-left text-ui text-muted-foreground">
               <tr>
-                <th scope="col" className={cn(CELL, STICKY, "bg-muted font-normal")}>
+                <th scope="col" className={cn(CELL, STICKY_CELL, "bg-muted font-normal")}>
                   Agent
                 </th>
                 <th scope="col" className={cn(CELL, "text-right font-normal")}>
@@ -179,7 +179,7 @@ function Agents({ metrics }: { metrics: TaskMetrics }) {
             <tbody>
               {metrics.agents.map((row) => (
                 <tr key={row.agent} className="border-t">
-                  <th scope="row" className={cn(CELL, STICKY, "text-left font-normal")}>
+                  <th scope="row" className={cn(CELL, STICKY_CELL, "text-left font-normal")}>
                     {row.agent}
                   </th>
                   <td className={cn(CELL, "text-right font-mono")}>{row.usage.iterations}</td>
@@ -261,8 +261,8 @@ function Versions({ metrics }: { metrics: TaskMetrics }) {
                 {versionLabel(i.image_version)}
               </span>
             </span>
-            <span className="font-mono text-meta tabular-nums">{i.iterations} runs</span>
-            <span className="font-mono text-meta tabular-nums">{fmtMoney(i.cost_usd)}</span>
+            <span className="font-mono text-caption tabular-nums">{i.iterations} runs</span>
+            <span className="font-mono text-caption tabular-nums">{fmtMoney(i.cost_usd)}</span>
           </li>
         ))}
       </ul>

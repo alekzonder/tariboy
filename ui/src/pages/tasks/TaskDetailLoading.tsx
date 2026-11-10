@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { EMPTY } from "./panelStyles";
+import { EMPTY } from "@/components/ui/recipes";
 
 /**
  * The same sheet while its task is still being read, so a click opens the panel
@@ -33,7 +33,7 @@ export function TaskDetailLoading({
         className="task-detail-dialog bg-card ring-0"
         showCloseButton={false}
         aria-describedby={undefined}
-        overlayClassName="bg-[color-mix(in_oklab,var(--foreground)_7%,transparent)] supports-backdrop-filter:backdrop-blur-none"
+        overlayClassName="bg-scrim supports-backdrop-filter:backdrop-blur-none"
         style={{ "--tasks-detail-width": `${width}px` } as CSSProperties}
         onOpenAutoFocus={(event) => event.preventDefault()}
         onCloseAutoFocus={(event) => event.preventDefault()}
@@ -43,7 +43,7 @@ export function TaskDetailLoading({
           className="task-detail-panel relative min-h-0 min-w-0 overflow-auto bg-card"
           aria-busy={!error}
         >
-          <header className="sticky top-0 z-[3] flex items-start gap-2.5 bg-card px-3.5 pt-2.75 pb-2.5 shadow-[var(--raise)]">
+          <header className="sticky top-0 z-3 flex items-start gap-2.5 bg-card px-3.5 pt-2.75 pb-2.5 shadow-raise">
             <div className="flex min-w-0 flex-1 items-center gap-2.25">
               {/* Names the dialog without being the task heading, which marks a loaded task. */}
               <DialogTitle asChild>
@@ -57,14 +57,14 @@ export function TaskDetailLoading({
               size="icon"
               aria-label="Close task detail"
               onClick={onClose}
-              className="size-7 shrink-0 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="size-7 shrink-0 rounded-control text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               <X className="size-3.5" />
             </Button>
           </header>
           <div className="min-w-0 px-4 pt-3.5 pb-7">
             {error ? (
-              <p role="alert" className="text-status-failed">
+              <p role="alert" className="text-destructive">
                 {error}
               </p>
             ) : (

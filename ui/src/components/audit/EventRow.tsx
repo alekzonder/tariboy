@@ -48,8 +48,8 @@ export function EventRow({
         aria-expanded={open}
         aria-label={eventAriaLabel(e, d, codex, open)}
         className={cn(
-          "flex w-full items-start gap-2 border-b py-1 pl-2 text-left font-mono text-xs hover:bg-accent last:border-0",
-          boundary && "bg-muted/60 font-semibold",
+          "flex w-full items-start gap-2 border-b py-1 pl-2 text-left font-mono text-ui hover:bg-accent last:border-0",
+          boundary && "bg-subtle font-semibold",
         )}
       >
         <span className="shrink-0 text-muted-foreground">{hhmmss(e.at)}</span>
@@ -58,7 +58,7 @@ export function EventRow({
         <EventSummary d={d} codex={codex} />
       </button>
       {open && (
-        <div className="bg-background/60 p-2 text-xs">
+        <div className="bg-background/60 p-2 text-ui">
           {codex && <CodexDetails codex={codex} />}
           <details>
             <summary className="cursor-pointer">Raw event data</summary>

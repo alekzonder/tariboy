@@ -76,7 +76,7 @@ const meta = {
   parameters: { tariboy: { daemon: true } },
   decorators: [
     (Story) => (
-      <div className="flex h-[420px] flex-col">
+      <div className="flex h-105 flex-col">
         <Story />
       </div>
     ),

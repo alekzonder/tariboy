@@ -203,10 +203,10 @@ function ConsolePage({
         {/* The content island: --card on the --background chrome, one radius and
             one of the two allowed shadows. Everything the operator works with
             lives inside it. */}
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--panel-radius)] bg-card shadow-[var(--lift)]">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-panel bg-card shadow-lift">
           <div className={`flex min-h-0 flex-1 flex-col${serverView ? "" : " p-3"}`}>
             {hostError && (
-              <p role="alert" className="mb-2 text-sm text-destructive">
+              <p role="alert" className="mb-2 text-body text-destructive">
                 {hostError}
               </p>
             )}

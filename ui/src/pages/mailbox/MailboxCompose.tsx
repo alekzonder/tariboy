@@ -31,7 +31,7 @@ export interface ComposeValues {
 /** The daemon puts at most this many code points of an instant letter into
  *  the running iteration (`maxInstantBodyRunes`). */
 const INSTANT_LIMIT = 8000;
-const WARN = "text-amber-700 dark:text-amber-400";
+const WARN = "text-warning";
 const count = (value: number) => value.toLocaleString("en-US");
 
 function InstantSwitch({
@@ -53,7 +53,7 @@ function InstantSwitch({
         />
         Deliver to the current iteration
       </Label>
-      <p id={hint} className="text-meta text-muted-foreground">
+      <p id={hint} className="text-caption text-muted-foreground">
         The agent sees this letter after its current tool call. If no iteration is running, the
         letter starts one, like any other letter.
       </p>
@@ -68,10 +68,10 @@ function InstantCounter({ id, length }: { id: string; length: number }) {
   const over = length > INSTANT_LIMIT;
   return (
     <div className="-mt-2 flex flex-col gap-1">
-      <p id={id} className={cn("self-end text-meta", over ? WARN : "text-muted-foreground")}>
+      <p id={id} className={cn("self-end text-caption", over ? WARN : "text-muted-foreground")}>
         {count(length)} / {count(INSTANT_LIMIT)}
       </p>
-      <p data-testid="instant-limit" aria-live="polite" className={cn("text-meta", WARN)}>
+      <p data-testid="instant-limit" aria-live="polite" className={cn("text-caption", WARN)}>
         {over &&
           "Over 8,000 characters. The agent sees the first 8,000 in this iteration and reads the full letter with tmail show."}
       </p>
@@ -127,14 +127,14 @@ function LetterHeaderFields({
   return (
     <div className="flex flex-col gap-3">
       {fixedTo ? (
-        <p className="text-sm">To: {principalName(fixedTo)}</p>
+        <p className="text-body">To: {principalName(fixedTo)}</p>
       ) : (
         <Label className="flex flex-col items-start gap-1">
           To
           <select
             value={to}
             onChange={(event) => onTo(event.target.value)}
-            className="h-8 w-full rounded border bg-background px-2 text-sm"
+            className="h-8 w-full rounded-chip border bg-background px-2 text-body"
           >
             {recipients.map((principal) => (
               <option key={principal} value={principal}>

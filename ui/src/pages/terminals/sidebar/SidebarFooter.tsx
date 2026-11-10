@@ -44,7 +44,7 @@ export function SidebarFooter({
           aria-hidden="true"
           className={cn(
             "size-1.5 shrink-0 rounded-full",
-            healthy ? "bg-status-running" : "bg-status-failed",
+            healthy ? "bg-status-running" : "bg-destructive",
           )}
         />
         {update && (

@@ -7,7 +7,7 @@ import type { Task } from "@/types";
 import { fmtMoney } from "@/lib/metricsFormat";
 import { readKey, storageKeys, writeKey } from "@/lib/storage";
 import { cn } from "@/lib/utils";
-import { COUNT, LABEL, QUIET_ACTION } from "./panelStyles";
+import { COUNT, LABEL, QUIET_ACTION } from "@/components/ui/recipes";
 
 // The numbers, tables and states load with the first open, not with the task.
 const TaskMetricsBody = lazy(() => import("./TaskMetricsBody"));

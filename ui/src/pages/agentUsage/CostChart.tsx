@@ -14,7 +14,7 @@ export function CostChart({ series }: { series: UsageSeriesPoint[] }) {
 
   if (series.length === 0 || max === 0) {
     return (
-      <div className="flex h-35 items-center justify-center rounded border text-sm text-muted-foreground">
+      <div className="flex h-35 items-center justify-center rounded-chip border text-body text-muted-foreground">
         No cost in this window.
       </div>
     );
@@ -27,8 +27,8 @@ export function CostChart({ series }: { series: UsageSeriesPoint[] }) {
   const tickEvery = Math.max(1, Math.ceil(n / 6));
 
   return (
-    <div className="rounded border p-2">
-      <div className="mb-1 text-xs text-muted-foreground">Cost over time (max {fmtCost(max)})</div>
+    <div className="rounded-chip border p-2">
+      <div className="mb-1 text-ui text-muted-foreground">Cost over time (max {fmtCost(max)})</div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="cost over time">
         {series.map((p, i) => {
           const h = (p.cost_usd / max) * plotH;
@@ -44,7 +44,7 @@ export function CostChart({ series }: { series: UsageSeriesPoint[] }) {
                   x={pad.left + i * slot + slot / 2}
                   y={H - 6}
                   textAnchor="middle"
-                  className="fill-muted-foreground text-nano"
+                  className="fill-muted-foreground text-caption"
                 >
                   {fmtDateTime(p.bucket_start)}
                 </text>

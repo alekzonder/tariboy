@@ -7,9 +7,9 @@ export default meta;
 
 type Story = StoryObj;
 
-const FIELD = "grid w-[420px] gap-1.5";
-const HELP = "text-xs text-muted-foreground";
-const MONO = "font-mono text-xs";
+const FIELD = "grid w-105 gap-1.5";
+const HELP = "text-ui text-muted-foreground";
+const MONO = "font-mono text-ui";
 
 export const NotesField: Story = {
   render: () => (
@@ -50,7 +50,7 @@ export const Placeholder: Story = {
 
 export const States: Story = {
   render: () => (
-    <div className="grid w-[420px] gap-3">
+    <div className="grid w-105 gap-3">
       <div className="grid gap-1.5">
         <Label htmlFor="preview-ta-disabled">standing user prompt</Label>
         <Textarea

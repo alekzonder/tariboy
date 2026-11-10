@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type { AgentPool, CreateQueueInput, Queue, UpdateQueueInput } from "@/types";
 import { cn } from "@/lib/utils";
-import { EMPTY, LABEL, MONO } from "./panelStyles";
+import { EMPTY, LABEL, MONO } from "@/components/ui/recipes";
 import QueuePools from "./QueuePools";
 import QueueEnvironment from "./QueueEnvironment";
 import QueueSources from "./QueueSources";
@@ -125,11 +125,11 @@ function QueueTabs({
           <TabsTrigger
             key={value}
             value={value}
-            className="rounded-none px-3 py-2 text-body-sm data-[state=active]:font-semibold data-[state=active]:shadow-[inset_0_-2px_0_var(--primary)]"
+            className="rounded-none px-3 py-2 text-body data-[state=active]:font-semibold data-[state=active]:shadow-[inset_0_-2px_0_var(--primary)]"
           >
             {TAB_LABELS[value]}
             {value === "pools" && poolsEmpty && (
-              <span aria-label="needs agents" className="size-1.5 rounded-full bg-status-failed" />
+              <span aria-label="needs agents" className="size-1.5 rounded-full bg-destructive" />
             )}
           </TabsTrigger>
         ))}

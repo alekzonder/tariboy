@@ -62,7 +62,7 @@ export const Markers: Story = {
 export const InSidebar: Story = {
   render: () => (
     <>
-      <div className="flex items-center justify-between px-2.5 pt-0.5 pb-2 text-[11px] tracking-[.04em] text-muted-foreground uppercase">
+      <div className="flex items-center justify-between px-2.5 pt-0.5 pb-2 text-caption tracking-wider text-muted-foreground uppercase">
         <span>Agents</span>
         <span>4</span>
       </div>

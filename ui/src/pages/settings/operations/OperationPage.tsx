@@ -18,7 +18,7 @@ export default function OperationRoute() {
   const operationId = Number(id);
   if (!Number.isInteger(operationId) || operationId <= 0) {
     return (
-      <p role="alert" className="text-sm text-destructive">
+      <p role="alert" className="text-body text-destructive">
         Invalid operation id {id}.
       </p>
     );
@@ -63,22 +63,25 @@ function OperationPage({ id }: { id: number }) {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
-      <Link to={{ pathname: MAINTENANCE, search }} className="text-sm text-primary hover:underline">
+      <Link
+        to={{ pathname: MAINTENANCE, search }}
+        className="text-body text-primary hover:underline"
+      >
         ← Maintenance
       </Link>
       <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-xl font-semibold">{operation?.title || `Operation ${id}`}</h2>
+        <h2 className="text-heading font-semibold">{operation?.title || `Operation ${id}`}</h2>
         {operation && (
           <StatusPill tone={operationTone(operation.status)}>{operation.status}</StatusPill>
         )}
       </div>
       {error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-body text-destructive">
           {error}
         </p>
       )}
       {operation === null ? (
-        !error && <p className="text-sm text-muted-foreground">Loading operation…</p>
+        !error && <p className="text-body text-muted-foreground">Loading operation…</p>
       ) : (
         <>
           <OperationDetails operation={operation} />
@@ -129,16 +132,16 @@ function OperationLogView({
         </Button>
       </div>
       {error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-body text-destructive">
           {error}
         </p>
       )}
       {!available ? (
-        <p className="text-sm text-muted-foreground">Log unavailable</p>
+        <p className="text-body text-muted-foreground">Log unavailable</p>
       ) : (
         <pre
           aria-label="Operation log"
-          className="max-h-[60vh] overflow-auto rounded border bg-muted/30 p-3 font-mono text-xs whitespace-pre-wrap"
+          className="max-h-[60vh] overflow-auto rounded-chip border bg-subtle p-3 font-mono text-ui whitespace-pre-wrap"
         >
           {content || "(empty)"}
         </pre>

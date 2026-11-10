@@ -1,0 +1,149 @@
+/* Tariboy design tokens: every value of the visual language, in both themes.
+
+   The file has two layers.
+   1. Knobs: the hues and the tint strengths. Change the accent or the metal
+      here and every role below follows.
+   2. Roles: what a colour or a shadow is for. Components never read a knob;
+      they read a role through a Tailwind utility (`bg-card`, `text-warning`,
+      `shadow-lift`) that src/index.css maps onto it.
+
+   Sizes that are the same in both themes (text, radii, layers) are theme
+   variables of src/index.css, not custom properties here. */
+
+:root {
+  /* ---- 1. Knobs ---- */
+
+  /* Hue angles. Neutrals are achromatic chrome on --hue-metal (chroma at most
+     .008); blue is the single accent. */
+  --hue-metal: 250;
+  --hue-accent: 252;
+  --hue-danger: 22;
+  --hue-live: 168;
+  --hue-success: 155;
+  --hue-warning: 70;
+  --hue-queued: 300;
+
+  /* How strong a tint of a tone is: a soft fill, the same fill hovered or as a
+     focus ring, and a border. A tone is --primary, --destructive,
+     --status-running, --warning or --success. */
+  --tint-soft: 12%;
+  --tint-mid: 20%;
+  --tint-line: 40%;
+
+  /* ---- 2. Roles ---- */
+
+  /* The window. It carries one near-invisible gradient (about 3% lightness);
+     it reads as brushed metal, not as decoration. */
+  --background: linear-gradient(
+    175deg,
+    oklch(94.8% 0.004 var(--hue-metal)) 0%,
+    oklch(93.4% 0.005 var(--hue-metal)) 55%,
+    oklch(91.8% 0.006 var(--hue-metal)) 100%
+  );
+  /* The flat tone the gradient settles on. Anything that needs a colour rather
+     than an image (background-color, color-mix(), the bg-background utility)
+     uses this name; only the window itself paints --background. */
+  --background-base: oklch(93.4% 0.005 var(--hue-metal));
+  --foreground: oklch(20% 0.006 var(--hue-metal));
+
+  /* Surfaces. Content islands are plain white on the metal, separated by
+     --lift. */
+  --card: oklch(100% 0 0);
+  --card-foreground: var(--foreground);
+  --popover: oklch(100% 0 0);
+  --popover-foreground: var(--foreground);
+  --secondary: oklch(96.4% 0.003 var(--hue-metal));
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(97% 0.003 var(--hue-metal));
+  --muted-foreground: oklch(48% 0.008 var(--hue-metal));
+  --accent: oklch(95% 0.004 var(--hue-metal));
+  --accent-foreground: var(--foreground);
+  --sidebar: var(--background-base);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-accent: oklch(95% 0.004 var(--hue-metal));
+  --sidebar-border: var(--border);
+  /* The terminal is dark in both themes. */
+  --terminal: oklch(14% 0.004 286);
+  --terminal-foreground: oklch(71% 0.014 286);
+  /* What dims the page under a dialog, and under the onboarding tour. */
+  --scrim: oklch(0% 0 0 / 0.1);
+  --scrim-strong: oklch(0% 0 0 / 0.55);
+
+  /* Lines and focus. */
+  --border: oklch(88.5% 0.005 var(--hue-metal));
+  --input: oklch(88.5% 0.005 var(--hue-metal));
+  --ring: oklch(64% 0.12 var(--hue-accent));
+
+  /* Tones. One accent, one red, and the two notices. */
+  --primary: oklch(54% 0.125 var(--hue-accent));
+  --primary-foreground: oklch(99% 0.003 var(--hue-accent));
+  --destructive: oklch(56% 0.17 var(--hue-danger));
+  --warning: oklch(54% 0.125 var(--hue-warning));
+  --warning-foreground: oklch(99% 0.003 var(--hue-metal));
+  --success: oklch(54% 0.13 var(--hue-success));
+
+  /* Status: one lightness band, hue does the work. A failed status is
+     --destructive. */
+  --status-running: oklch(62% 0.15 var(--hue-live));
+  --status-queued: oklch(62% 0.1 var(--hue-queued));
+  --status-done: oklch(54% 0.125 var(--hue-accent));
+  --status-stopped: oklch(64% 0.012 var(--hue-metal));
+
+  /* Elevation has two levels. --raise is a selected row and the active segment
+     of a segmented control; --lift is the content island, a menu and a dialog. */
+  --raise: 0 1px 2px oklch(24% 0.03 255 / 0.1);
+  --lift: 0 1px 2px oklch(24% 0.03 255 / 0.05), 0 10px 28px -14px oklch(24% 0.03 255 / 0.22);
+}
+
+.dark {
+  --tint-soft: 18%;
+  --tint-mid: 28%;
+  --tint-line: 50%;
+
+  /* The same metal, turned down. --background carries no gradient here: on a
+     dark ground the sheen reads as banding rather than as metal. */
+  --background: oklch(19.5% 0.005 var(--hue-metal));
+  --background-base: oklch(19.5% 0.005 var(--hue-metal));
+  --foreground: oklch(95% 0.003 var(--hue-metal));
+
+  /* A role that points at another role is declared again here. The class can
+     sit on an element below <html> (a Storybook theme frame), and a custom
+     property is resolved on the element that declares it. */
+  --card: oklch(23.2% 0.006 var(--hue-metal));
+  --card-foreground: var(--foreground);
+  --popover: oklch(24.5% 0.006 var(--hue-metal));
+  --popover-foreground: var(--foreground);
+  --secondary: oklch(26% 0.006 var(--hue-metal));
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(26% 0.006 var(--hue-metal));
+  --muted-foreground: oklch(70% 0.008 var(--hue-metal));
+  --accent: oklch(28% 0.007 var(--hue-metal));
+  --accent-foreground: var(--foreground);
+  --sidebar: oklch(17.5% 0.005 var(--hue-metal));
+  --sidebar-foreground: var(--foreground);
+  --sidebar-accent: oklch(28% 0.007 var(--hue-metal));
+  --sidebar-border: var(--border);
+  --scrim: oklch(0% 0 0 / 0.3);
+  --scrim-strong: oklch(0% 0 0 / 0.65);
+
+  --border: oklch(31% 0.007 var(--hue-metal));
+  --input: oklch(31% 0.007 var(--hue-metal));
+  --ring: oklch(64% 0.12 var(--hue-accent));
+
+  --primary: oklch(74% 0.13 var(--hue-accent));
+  --primary-foreground: oklch(19% 0.012 var(--hue-accent));
+  --destructive: oklch(66% 0.17 var(--hue-danger));
+  --warning: oklch(78% 0.13 var(--hue-warning));
+  --warning-foreground: oklch(20% 0.006 var(--hue-metal));
+  --success: oklch(72% 0.14 var(--hue-success));
+
+  /* The light row's hue and chroma at the dark theme's lightness, so one
+     status reads as the same colour in both themes. */
+  --status-running: oklch(70% 0.15 var(--hue-live));
+  --status-queued: oklch(66% 0.1 var(--hue-queued));
+  --status-done: oklch(62% 0.11 var(--hue-accent));
+  --status-stopped: oklch(56% 0.01 var(--hue-metal));
+
+  --raise: 0 1px 2px oklch(0% 0 0 / 0.3);
+  --lift: 0 1px 2px oklch(0% 0 0 / 0.3), 0 12px 30px -14px oklch(0% 0 0 / 0.55);
+}

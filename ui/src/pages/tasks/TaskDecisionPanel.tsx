@@ -40,7 +40,7 @@ export function TaskDecisionPanel({
   };
   return (
     <>
-      <div className="sticky top-0 z-[3] max-h-[60vh] overflow-auto bg-card shadow-[var(--raise)]">
+      <div className="sticky top-0 z-3 max-h-[60vh] overflow-auto bg-card shadow-raise">
         {children}
         {query.error && (
           <div role="alert" className="px-4 pb-3 text-ui">
@@ -93,7 +93,7 @@ function Decision({
   return (
     <section
       aria-label="Workflow decision"
-      className="flex min-w-0 flex-col gap-2 px-4 pb-3 text-body-sm"
+      className="flex min-w-0 flex-col gap-2 px-4 pb-3 text-body"
     >
       <p>
         Status: {view.status} · Owner: {view.owner}
@@ -172,7 +172,7 @@ function DecisionActions({
           disabled={advance.checking}
           maxLength={4096}
           onChange={(event) => advance.setMessage(event.target.value)}
-          className="min-h-12 rounded-md border-0 bg-muted text-body-sm md:text-body-sm"
+          className="min-h-12 rounded-control border-0 bg-muted text-body md:text-body"
         />
       )}
       {hasOutcomes && (
@@ -251,7 +251,7 @@ function DecisionButtons({
             {outcome.on} → {outcome.to}
           </Button>
           {!!outcome.missing?.length && (
-            <span className="text-meta text-status-failed">
+            <span className="text-caption text-destructive">
               needs: {outcome.missing.join(", ")}
             </span>
           )}
@@ -275,10 +275,10 @@ function Materials({ view }: { view: WorkflowView }) {
             key={name}
             id={`decision-material-${name}`}
             aria-label={name}
-            className="min-w-0 rounded-md bg-muted"
+            className="min-w-0 rounded-control bg-muted"
           >
             <summary className="cursor-pointer px-2.5 py-1.5 text-ui font-medium">{name}</summary>
-            <div className="max-h-96 overflow-auto px-3 pb-2.5 text-body-sm">
+            <div className="max-h-96 overflow-auto px-3 pb-2.5 text-body">
               {artifact ? <MarkdownContent>{artifact.value}</MarkdownContent> : "No value yet"}
             </div>
           </details>

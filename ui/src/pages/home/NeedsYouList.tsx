@@ -32,10 +32,10 @@ export function NeedsYouList({
     });
   const failed = loaded && hosts.length > 0 && hosts.every((host) => host.error);
 
-  if (!loaded) return <p className="px-2 text-body-sm text-muted-foreground">Loading…</p>;
+  if (!loaded) return <p className="px-2 text-body text-muted-foreground">Loading…</p>;
   if (failed) {
     return (
-      <div role="alert" className="flex items-center gap-2 px-2 text-body-sm text-destructive">
+      <div role="alert" className="flex items-center gap-2 px-2 text-body text-destructive">
         Could not read what needs you: {hosts[0]?.error}
         <Button variant="outline" size="sm" onClick={reload}>
           Retry
@@ -44,7 +44,7 @@ export function NeedsYouList({
     );
   }
   if (rows.length === 0) {
-    return <p className="px-2 text-body-sm text-muted-foreground">Nothing needs you.</p>;
+    return <p className="px-2 text-body text-muted-foreground">Nothing needs you.</p>;
   }
   return (
     <>

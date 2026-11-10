@@ -59,7 +59,7 @@ export function IterationTagEditor({
         }}
       />
       {tagError && (
-        <span role="alert" className="text-xs text-destructive">
+        <span role="alert" className="text-ui text-destructive">
           {tagError}
         </span>
       )}

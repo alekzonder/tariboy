@@ -8,7 +8,7 @@ import TaskComments from "./TaskComments";
 import { WorkflowPanel } from "./WorkflowPanel";
 import { MarkdownContent, type MarkdownMode } from "./TaskMarkdown";
 import { Banner, Meta } from "./TaskDetailControls";
-import { LABEL, EMPTY } from "./panelStyles";
+import { LABEL, EMPTY } from "@/components/ui/recipes";
 import { TaskDetailFields, TaskDetailProperties } from "./TaskDetailFields";
 import { TaskRelationsSection } from "./TaskRelationsSection";
 import { TaskHistorySection } from "./TaskHistorySection";
@@ -144,7 +144,7 @@ export function TaskDetailBody({
           {/* No second title here: the sticky header already carries it, and
             it is the panel's only 600. */}
           <span className={LABEL}>Description</span>
-          <div className="rounded-md bg-muted px-3 py-2.75">
+          <div className="rounded-control bg-muted px-3 py-2.75">
             <MarkdownContent>{task.description}</MarkdownContent>
           </div>
           <p className={EMPTY}>Response access — comments only.</p>

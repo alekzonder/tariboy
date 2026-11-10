@@ -15,7 +15,7 @@ export function EnvironmentFields({
         value={draft.envText}
         onChange={(event) => updateDraft("envText", event.target.value)}
         disabled={formDisabled}
-        className="min-h-28 font-mono text-xs"
+        className="min-h-28 font-mono text-ui"
       />
     </Field>
   );

@@ -40,10 +40,10 @@ export default function BudgetsPage() {
 
   return (
     <div className="space-y-4 p-6">
-      <h2 className="text-lg font-semibold">Budgets</h2>
+      <h2 className="text-heading font-semibold">Budgets</h2>
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Set budget</CardTitle>
+          <CardTitle className="text-title">Set budget</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap items-end gap-2">
           <Input
@@ -67,7 +67,7 @@ export default function BudgetsPage() {
           <select
             value={mode}
             onChange={(e) => setMode(e.target.value)}
-            className="h-8 rounded border bg-background px-2 text-sm"
+            className="h-8 rounded-chip border bg-background px-2 text-body"
           >
             <option value="warn">warn</option>
             <option value="block">block</option>
@@ -77,9 +77,9 @@ export default function BudgetsPage() {
           </Button>
         </CardContent>
       </Card>
-      <div className="overflow-x-auto rounded border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+      <div className="overflow-x-auto rounded-chip border">
+        <table className="w-full text-body">
+          <thead className="bg-subtle text-left text-ui text-muted-foreground">
             <tr>
               <th className="px-3 py-2">Scope</th>
               <th className="px-3 py-2 text-right">Limit</th>

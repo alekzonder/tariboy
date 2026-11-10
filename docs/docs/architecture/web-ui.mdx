@@ -920,8 +920,8 @@ works as the Role card of an image page, with the text in a bordered box. Its
 empty line is `This workflow image has no ROLE.md.`
 
 Both Role views and the form use `MarkdownContent` with its `role` variant
-(`ui/src/components/role/`). The variant makes `h1` `text-lg`, `h2`
-`text-base`, and `h3` to `h6` `text-sm`. It shows the alt text of an image in
+(`ui/src/components/role/`). The variant makes `h1` `text-heading`, `h2`
+`text-title`, and `h3` to `h6` `text-body`. It shows the alt text of an image in
 italics and loads no image. A table keeps its words whole and scrolls inside
 its box. Raw HTML is never rendered, because `rehype-raw` is not loaded. Links
 open as in task Markdown.
@@ -1221,31 +1221,11 @@ is declared once:
   task status. `lib/tasks.ts` alone exports `taskStatusLabel(task)`, the label
   of any task.
 
-Styles are Tailwind utilities on the element. The `@theme` block of
-`ui/src/index.css` names the dense text sizes and the radii between the
-`--radius` steps:
-
-| Utility | Value |
-| --- | --- |
-| `text-nano`, `text-micro`, `text-tiny`, `text-caption`, `text-meta` | 9, 10, 10.5, 11, 11.5 px |
-| `text-ui`, `text-body-sm`, `text-body`, `text-body-lg`, `text-title` | 12, 12.5, 13, 14, 15 px |
-| `rounded-hair`, `rounded-xs`, `rounded-chip`, `rounded-sm`, `rounded-control` | 1.5, 2, 5, 6, 7 px |
-| `rounded-md`, `rounded-panel`, `rounded-lg`, `rounded-card`, `rounded-xl` | 8, 9, 10, 12, 14 px |
-
-The text sizes set only `font-size`, so the element keeps its line height.
-Sizes, spacing, and ring widths use the 4 px spacing scale: `h-6.5` is 26 px.
-`cn()` in `lib/utils.ts` tells tailwind-merge about the new names. Without
-that, tailwind-merge reads `text-ui` as a color and drops the color class next
-to it. When you add a text size or a radius to `@theme`, add it to `cn()` too.
-`ui/src/lib/utils.test.ts` fails when the two lists differ.
-
-`ui/src/test/arbitraryPxPolicy.test.ts` fails when production code under
-`ui/src` or `ui/store` uses a class of the form `utility-[Npx]`. Composite
-values, such as `grid-cols-[76px_minmax(0,1fr)]`, are allowed. The shadcn
-primitives under `ui/src/components/ui/` are not checked, so they stay the same
-as upstream. Story files are not checked: a story sizes its demo frame in
-pixels. An inline `style` is only for a value that the code calculates at
-run time, such as a column width or a CSS variable.
+Styles are Tailwind utilities on the element, and every utility names a token
+of the design system. [Design system](#design-system) lists the tokens, the
+scales and the test that keeps a class on them. An inline `style` is only for
+a value that the code calculates at run time, such as a column width or a CSS
+variable.
 
 Text fields use the shared controls: `Input`, `Textarea` and `CommandInput`
 under `ui/src/components/ui/`, `SearchInput` for a search field with an icon,
@@ -1262,6 +1242,135 @@ A CSS file is only for a rule that utilities cannot express clearly:
 pseudo-elements, a media query for one widget, or a rule that must override
 another component. `ui/src/pages/tasks/tasks.css` lists the rules it keeps
 and gives the reason for each at its top.
+
+## Design system
+
+The design system is three layers. Each layer has one place, and a change of a
+layer reaches every screen that uses it.
+
+| Layer | Where | What it holds |
+| --- | --- | --- |
+| Tokens | `ui/src/styles/tokens.css` | Every value in both themes: the hue and tint knobs, then the roles (`--card`, `--primary`, `--warning`, `--lift`) |
+| Scales and utility names | the `@theme` blocks of `ui/src/index.css` | The text, radius and layer scales, and the line that turns a role into a utility (`--color-card: var(--card)` gives `bg-card`) |
+| Primitives and recipes | `ui/src/components/ui/` | The shadcn/ui components with their `cva()` variants, and `recipes.ts`, the class lists that more than one screen repeats |
+
+The `@theme` blocks clear the Tailwind defaults (`--text-*: initial`, and the
+same for `--radius-*`, `--shadow-*` and `--color-*`). So the names below are
+the only ones that exist: `text-sm`, `rounded-md`, `shadow-md` and
+`bg-amber-500` produce no CSS. The stories under **Foundations** in Storybook
+show every token and recipe in both themes. They read the two style files, so
+a new token appears there without a second edit.
+
+### Scales
+
+| Scale | Utilities | Values |
+| --- | --- | --- |
+| Text | `text-caption`, `text-ui`, `text-body`, `text-title`, `text-heading`, `text-display` | 11/16, 12/16, 13/20, 16/24, 18/28, 24/32 px (size/line height) |
+| Radius | `rounded-mark`, `rounded-chip`, `rounded-control`, `rounded-card`, `rounded-panel`, `rounded-full` | 2, 6, 8, 12, 14 px |
+| Elevation | `shadow-none`, `shadow-raise`, `shadow-lift` | `--raise`, `--lift` |
+| Layers | `z-sticky`, `z-overlay`, `z-dialog`, `z-alert` | 10, 50, 60, 70 |
+| Control height | `Button` and `Input` sizes `xs`, `sm`, default | 24, 28, 32 px |
+
+- A text size sets its line height too. `text-body` is the default: `<body>`
+  has it, so text without a size class is 13 px. `text-caption` is meta,
+  section labels and chips. `text-ui` is dense controls and table cells.
+  `text-title` is the title of a card, a dialog or an agent. `text-heading` is
+  a page heading, and `text-display` is the one number a page is about.
+- A radius is named by what it rounds: a mark (a progress bar), a chip (a
+  pill, a tag), a control (a button, an input, a row, a menu item), a card (a
+  card, a menu, a bordered box) and the panel (the content island, a dialog).
+- Elevation has two levels, never three. `shadow-raise` is a selected row and
+  the active segment of a segmented control. `shadow-lift` is the content
+  island, a menu and a dialog. An inset line (`shadow-[inset_2px_0_0_var(--status-running)]`)
+  is a marker, not elevation, and stays an arbitrary value.
+- `z-0` to `z-9` order parts inside one component. Anything above the page
+  takes a named layer.
+- Sizes and spacing use the 4 px spacing scale: `h-6.5` is 26 px. Space
+  between things is `gap-1`, `gap-1.5`, `gap-2` and `gap-3`, and padding is
+  `p-2`, `p-3` and `p-4`.
+
+### Colors
+
+A class names a role, never a value. The roles:
+
+- Surfaces: `bg-background` (the window), `bg-card`, `bg-popover`, `bg-muted`,
+  `bg-subtle` (half of `--muted`: a hovered row, a quiet table header),
+  `bg-accent`, `bg-secondary`, `bg-sidebar`, `bg-terminal` (dark in both
+  themes), and `bg-scrim` and `bg-scrim-strong` under a dialog and the tour.
+- Text: `text-foreground`, `text-muted-foreground`, and the `-foreground`
+  partner of a filled surface (`text-primary-foreground`).
+- Lines and focus: `border-border`, `border-input`, `ring-ring/50`.
+- Tones: `primary` (the one accent), `destructive` (the one red),
+  `warning` and `success`. A status adds `status-running`, `status-queued`,
+  `status-done` and `status-stopped`. A failed status is `destructive`.
+- Tints. A tone is never mixed by hand. `primary`, `destructive`,
+  `status-running`, `warning` and `success` each have three tints: `-soft` is a
+  fill (`bg-destructive-soft`), `-mid` is that fill hovered or a focus ring
+  (`hover:bg-destructive-mid`, `ring-destructive-mid`), and `-line` is a border
+  (`border-destructive-line`). `--tint-soft`, `--tint-mid` and `--tint-line`
+  set their strength, and it is higher in the dark theme, so a tint needs no
+  `dark:` class. `hover:bg-primary-hover` is the hovered solid button.
+
+`--background` is a window-wide gradient. `background-color` and `color-mix()`
+drop a gradient value. In an inline `background-color` and in
+`color-mix(…, var(--background-base))`, use `--background-base`.
+`bg-background` resolves to it. Only the window itself paints `--background`.
+
+Status is a system, not a color choice. `status-running` is in progress.
+`destructive` is failed or out of budget. `primary` is waiting on the
+customer. A fill is only for what is alive and what needs a person:
+`text-status-running` with `bg-status-running-soft`, `text-destructive` with
+`bg-destructive-soft`, `text-primary` with `bg-primary-soft`. Open, done and
+cancelled get `text-muted-foreground` and no fill. `lib/statusTone.ts` holds
+the rule, and `StatusPill`, `StatusDot` and `PriorityTag` render it.
+
+### Recipes
+
+`ui/src/components/ui/recipes.ts` exports the class lists that more than one
+screen repeats: `LABEL` (a section label), `FIELD` and `FIELD_MONO` (a filled
+field), `MONO` (an identifier), `ROW` (a list row in a panel), `COUNT`,
+`QUIET_ACTION`, `EMPTY` (the one-line empty state), the banner fills
+`PRIMARY_FILL`, `DANGER_FILL`, `WARNING_FILL` and `SUCCESS_FILL`, `ISLAND`
+(the content island), and `CELL` and `STICKY_CELL` (a dense data table). A
+recipe is a string, not a component, because the same look sits on different
+elements and the caller adds its layout: `cn(LABEL, "ml-auto")`.
+`NativeSelect` in `native-select.tsx` is a native select with the field fill.
+
+### How to change the look
+
+| Goal | Change |
+| --- | --- |
+| Another accent, another red, a warmer or cooler metal | A `--hue-*` knob in `tokens.css` |
+| One color in one theme | Its role in `:root` or `.dark` of `tokens.css` |
+| Stronger or weaker fills of all tones | `--tint-soft`, `--tint-mid`, `--tint-line` |
+| A size or a radius on every screen | Its step in `@theme` of `index.css` |
+| The look of every button, input or pill | The `cva()` variants of the primitive |
+| The look of every section label, field or list row | Its recipe in `recipes.ts` |
+
+To add a token, declare the role in `:root` and in `.dark` of `tokens.css`,
+map it in `@theme inline` of `index.css`, and use the utility. To add a step
+to a scale, add it to `@theme` and to the list in `cn()` (`lib/utils.ts`):
+without the list, tailwind-merge reads `text-ui` as a color and drops the
+color class next to it. A new step also gets a line of use in the Foundations
+story of its scale.
+
+### What keeps it
+
+- `ui/src/test/tokenPolicy.test.ts` scans `ui/src` and `ui/store`. It fails on
+  a text size, a radius or a shadow outside the scales, on a Tailwind palette
+  color, on an arbitrary color in a class (`bg-[#…]`, `bg-[color-mix(…)]`), on
+  a tint written with an alpha (`bg-destructive/10`), on a single arbitrary
+  size (`h-[17px]`; a composite value such as
+  `grid-cols-[76px_minmax(0,1fr)]` is allowed), on a layer outside the scale,
+  and on a color literal in code. `useXtermTerminal.ts` is the one exception:
+  xterm.js takes its theme as color strings. Stories are checked for the names
+  that do not exist. They may size a demo frame in pixels.
+- `ui/src/theme.test.ts` fails when a role has no value in the dark theme,
+  when a role has no utility, when a neutral takes a warm hue, and when a
+  default Tailwind scale is not cleared.
+- `ui/src/lib/utils.test.ts` fails when `cn()` does not know a step of a
+  scale.
+- `make designer-check` runs the three.
 
 ## Designer workflow in Storybook
 
@@ -1282,49 +1391,19 @@ it never reaches a daemon.
   neutrals (hue 250, chroma at most .008), one blue accent, and Geist Variable.
   A design reads as a control surface for dense operator tooling (agent
   consoles, task trees, image and host tables), not as a marketing page.
-- Colors are always semantic tokens, never hex and never a Tailwind color
-  scale. So light and dark both work. `viewLintPolicy.test.ts` enforces it.
-  - Surfaces: `bg-background`, `bg-card`, `bg-popover`, `bg-muted`,
-    `bg-accent`, `bg-secondary`.
-  - Text: `text-foreground`, `text-muted-foreground`, `text-card-foreground`,
-    `text-primary-foreground`.
-  - Emphasis: `bg-primary` with `text-primary-foreground`.
-  - Danger: `text-destructive`, `bg-destructive/10`.
-  - Lines: `border border-border`, `border-t`, `border-b`, `border-input`.
-  - Focus: `ring-ring/50`, `focus-visible:border-ring`.
+- Colors, sizes, radii, shadows and layers are tokens of the
+  [design system](#design-system), never a value and never a Tailwind default
+  scale. So light and dark both work. `tokenPolicy.test.ts` enforces it.
+- Typography. Body is `text-body`. Secondary meta is `text-ui` or
+  `text-caption`. Titles are `text-title` and headings `text-heading`, with
+  `font-medium` or `font-semibold`. Task keys, image refs, digests, paths and
+  terminal output are `font-mono`. Identifiers, durations and timestamps are
+  `font-mono` with `tabular-nums`, so they line up down a column.
+- Controls. A size is a variant of the control: `Button` and `Input` are 32 px,
+  28 px at `sm` and 24 px at `xs`. Rows are 30 px (`h-7.5`), pills 17 and
+  20 px.
 - CSS custom properties are for inline styles and for what utilities do not
-  cover: `--background`, `--foreground`, `--card`, `--popover`, `--primary`,
-  `--secondary`, `--muted`, `--accent`, `--destructive`, `--border`,
-  `--input`, `--ring`, `--radius`, each with a `-foreground` partner where it
-  carries text, plus `--sidebar*` and `--chart-1` to `--chart-5`.
-- `--background` is a window-wide gradient. `background-color` and
-  `color-mix()` drop a gradient value. In an inline `background-color` and in
-  `color-mix(…, var(--background-base))`, use `--background-base`.
-  `bg-background` resolves to it. Only the window itself paints
-  `--background`.
-- Status is a system, not a color choice. `--status-running` is in progress.
-  `--status-failed` is failed or out of budget. `--primary` is waiting on the
-  customer. `--status-queued`, `--status-done` and `--status-stopped` are
-  quiet text. A fill is only for what is alive and what needs a person:
-  `text-status-running` with `bg-status-running/13`, `text-status-failed` with
-  `bg-status-failed/12`, `text-primary` with `bg-primary/12`. Open, done and
-  cancelled get `text-muted-foreground` and no fill.
-- Elevation has two levels, never three. `--raise` is for a selected row and
-  the active segment of a segmented control. `--lift` is for the content
-  island and menus. The island is `bg-card`, `rounded-[var(--panel-radius)]`
-  and `shadow-[var(--lift)]`, and it sits on a `--background` chrome without
-  borders.
-- Typography. Body is `text-sm`. Secondary meta is `text-xs`. Headings are
-  `text-base` or `text-lg` with `font-medium` or `font-semibold`. Task keys,
-  image refs, digests, paths and terminal output are `font-mono`. Identifiers,
-  durations and timestamps are `font-mono` with `tabular-nums`, so they line
-  up down a column.
-- Controls, spacing and radius. Buttons are `h-8` (`h-7` for sm, `h-6` for
-  xs). Inputs are `h-8`. Spacing is `gap-1`, `gap-2`, `gap-3`, `p-3` and
-  `p-4`. Radius comes from `--radius: 0.625rem` through `rounded-md`,
-  `rounded-lg` and `rounded-xl`. Console surfaces are denser: rows 30px,
-  buttons 24, 26 and 28px, pills 17, 19 and 20px, radii 5, 6, 7, 8, 9, 12 and
-  14px.
+  cover. An inline style with `var(--token)` is only for that.
 - Icons are `lucide-react`: 16px at the default control size, 14px at sm.
   Never use emoji.
 - Dark mode is the class `.dark` on an ancestor (`<html>` in the app).
@@ -1333,11 +1412,12 @@ it never reaches a daemon.
 - Content is realistic product content: agents `builder`, `reviewer`,
   `packager`, `docs-bot`; images `worker:v1`, `bare:latest`; hosts
   `This daemon (local)` and `build-01`; task keys such as `TB-142`.
-- Where the truth is. The tokens are in `ui/src/index.css`. The API of a
-  component is its props type in its source file.
+- Where the truth is. The tokens are in `ui/src/styles/tokens.css`, the
+  scales in `ui/src/index.css`, and the recipes in
+  `ui/src/components/ui/recipes.ts`. The API of a component is its props type
+  in its source file.
 - Storybook compiles `src/index.css` with Tailwind over the same `src`
-  sources, so every utility works in a story. An inline style with
-  `var(--token)` is only for what utilities do not cover.
+  sources, so every utility works in a story.
 
 An idiomatic example:
 
@@ -1351,7 +1431,7 @@ An idiomatic example:
     </CardAction>
   </CardHeader>
   <CardContent>
-    <div className="flex items-center justify-between gap-2 text-sm">
+    <div className="flex items-center justify-between gap-2 text-body">
       <span className="font-mono text-muted-foreground">builder</span>
       <div className="flex gap-2">
         <Button size="sm" variant="outline">
@@ -1369,8 +1449,9 @@ An idiomatic example:
 ### Work rules
 
 - Work only in the designer paths: the view files, the stories, the mockups
-  under `ui/src/mockups/`, the fixtures, `ui/src/index.css` and the primitives
-  in `ui/src/components/ui/`.
+  under `ui/src/mockups/`, the fixtures, `ui/src/index.css`,
+  `ui/src/styles/tokens.css` and the primitives and recipes in
+  `ui/src/components/ui/`.
 - Never import `@/lib/api` or `@tanstack/react-query`, and never call `fetch`,
   in view files, stories, mockups and fixtures. `npm run lint` enforces this.
   The other designer paths have no data access to forbid.
@@ -1415,7 +1496,8 @@ An idiomatic example:
      the files changed against `origin/main` (uncommitted files included),
      `ui-fmt-check` (oxfmt), one Vitest run of `viewLintPolicy.test.ts`,
      `storybookSafety.test.ts`, `storyNetwork.test.tsx`,
-     `arbitraryPxPolicy.test.ts` and `textInputPolicy.test.ts`, Knip
+     `tokenPolicy.test.ts`, `textInputPolicy.test.ts`, `theme.test.ts` and
+     `utils.test.ts`, Knip
      (`ui-dead-code`) and `build-storybook`. It fails if one step failed. It
      does not run `ui-api-types`, `ui-lint`, the rest of `ui-test`,
      `ui-branding`, `ui-bundle-budget` and `docs`: the developer's pull request
@@ -1437,7 +1519,7 @@ A developer change that breaks a story fixes the story in the same commit.
 
 | Paths | Designer | Developer |
 | --- | --- | --- |
-| `ui/src/index.css`, `ui/src/components/ui/*.tsx` | Owns colors, radii, density, shadows and the `cva()` variants | Changes only accessibility and behavior, after agreement with the designer |
+| `ui/src/index.css`, `ui/src/styles/tokens.css`, `ui/src/components/ui/*` | Owns colors, radii, density, shadows, the `cva()` variants and the recipes | Changes only accessibility and behavior, after agreement with the designer |
 | `ui/src/**/*.view.tsx` | Owns markup and styles. Proposes a new prop in `handoff.md` | Owns the props type. Connects the view to data in a container |
 | Other `ui/src/components/**/*.tsx` and `ui/src/pages/**/*.tsx` | Does not change them. Copies the markup into a local view part of a mockup | Owns data hooks, `@/lib/api`, react-query, router hooks, state and handlers |
 | `ui/src/mockups/<name>/` | Builds the mockup stories and the local view parts | Moves the change into the real component or page |
@@ -1527,8 +1609,8 @@ designer's request, and the interface texts in it are in English.
 10. `## Screenshots`: a table of the shots that show the change, with the
     columns Story id, Theme and Width. The PNG files are not in git. The
     developer repeats each shot with `npm run story:shot`.
-11. `## Tokens and styles`: new or changed tokens in `ui/src/index.css` and
-    changed `cva()` variants. List every affected story.
+11. `## Tokens and styles`: new or changed tokens in `ui/src/styles/tokens.css`
+    and `ui/src/index.css`, and changed `cva()` variants and recipes. List every affected story.
 12. `## Acceptance criteria`: numbered criteria that the developer and the
     reviewer check one by one.
 13. `## Open questions`: questions for the developer.
@@ -1584,7 +1666,7 @@ tests that pin them.
 - A component that takes its color from data needs that data, or the story
   shows the wrong color. `.agent-header` reads `--agent-hue`, and without it
   the strip is pink.
-- `Button variant="destructive"` is soft (`bg-destructive/10
+- `Button variant="destructive"` is soft (`bg-destructive-soft
   text-destructive`) on purpose.
 - Drive a state that has no prop through the DOM. `.click()` opens Radix
   Dialog, AlertDialog, Sheet and Collapsible. Radix `Select` needs a

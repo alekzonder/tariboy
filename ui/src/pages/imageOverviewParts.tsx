@@ -4,7 +4,7 @@ export function Row({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex gap-2">
       <span className="w-32 shrink-0 text-muted-foreground">{label}</span>
-      <span className="min-w-0 flex-1 break-words font-mono text-xs">{value}</span>
+      <span className="min-w-0 flex-1 break-words font-mono text-ui">{value}</span>
     </div>
   );
 }
@@ -13,7 +13,7 @@ export function Chips({ items }: { items: string[] }) {
   return (
     <div className="flex flex-wrap gap-1">
       {items.map((s) => (
-        <span key={s} className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+        <span key={s} className="rounded-chip bg-muted px-1.5 py-0.5 font-mono text-ui">
           {s}
         </span>
       ))}

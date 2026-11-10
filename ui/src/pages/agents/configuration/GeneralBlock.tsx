@@ -47,14 +47,14 @@ function ImageSelect({ draft, sources }: Pick<SectionProps, "draft" | "sources">
 function ImageDigest({ draft, digest }: Pick<SectionProps, "draft"> & { digest?: string }) {
   return (
     <ReadOnly draft={draft} fieldKey="image-digest">
-      <div className="flex min-h-9 flex-wrap items-center gap-2 text-sm">
+      <div className="flex min-h-9 flex-wrap items-center gap-2 text-body">
         {digest ? (
           <>
             <span
               data-testid="image-digest"
               aria-hidden="true"
               title={digest}
-              className="font-mono text-xs break-all"
+              className="font-mono text-ui break-all"
             >
               {shortDigest(digest)}
             </span>
@@ -75,12 +75,12 @@ export function GeneralBlock({ draft, sources, name, refresh }: SectionProps) {
   return (
     <>
       {imageError && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-body text-destructive">
           Image status unavailable: {imageError}
         </p>
       )}
       {inventoryError && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-body text-destructive">
           Image inventory unavailable: {inventoryError}
         </p>
       )}

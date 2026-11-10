@@ -87,7 +87,7 @@ function GroupMembers({ api, group: sel, refreshSelected }: Props) {
         <select
           aria-label="team lead"
           value={sel.lead}
-          className="h-8 rounded border bg-background px-2"
+          className="h-8 rounded-chip border bg-background px-2"
           onChange={(event) => setLead(event.target.value)}
         >
           <option value="">No lead</option>
@@ -101,7 +101,10 @@ function GroupMembers({ api, group: sel, refreshSelected }: Props) {
       <div className="space-y-1">
         members:
         {sel.members.map((member) => (
-          <div key={member} className="flex items-center justify-between rounded border px-2 py-1">
+          <div
+            key={member}
+            className="flex items-center justify-between rounded-chip border px-2 py-1"
+          >
             <span className="font-mono">{member}</span>
             <Button
               size="sm"
@@ -172,10 +175,10 @@ export function GroupDetailCard(props: Props) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-base font-mono">{sel.name}</CardTitle>
+        <CardTitle className="text-title font-mono">{sel.name}</CardTitle>
         <RemoveGroupDialog {...props} />
       </CardHeader>
-      <CardContent className="space-y-2 text-sm">
+      <CardContent className="space-y-2 text-body">
         <div className="flex gap-2">
           <Input
             aria-label="team name"
@@ -188,7 +191,7 @@ export function GroupDetailCard(props: Props) {
           </Button>
         </div>
         <GroupMembers {...props} />
-        <div className="text-xs text-muted-foreground">shared: {sel.shared_dir}</div>
+        <div className="text-ui text-muted-foreground">shared: {sel.shared_dir}</div>
         <div className="flex items-end gap-2 pt-2">
           <Input
             value={assignAgent}

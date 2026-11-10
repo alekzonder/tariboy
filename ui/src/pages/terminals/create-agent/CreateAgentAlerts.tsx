@@ -7,8 +7,8 @@ export function SourceAlert({ form }: { form: CreateAgentForm }) {
   return (
     <>
       {sourceState === "error" && (
-        <div role="alert" className="space-y-2 rounded border border-destructive p-3">
-          <p className="text-sm text-destructive">{sourceError}</p>
+        <div role="alert" className="space-y-2 rounded-chip border border-destructive p-3">
+          <p className="text-body text-destructive">{sourceError}</p>
           <Button size="sm" variant="outline" onClick={retrySource}>
             Retry source
           </Button>
@@ -25,13 +25,13 @@ export function StartAlerts({ form }: { form: CreateAgentForm }) {
   return (
     <>
       {submitError && !blocker && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-body text-destructive">
           {submitError}
         </p>
       )}
       {startError && (
-        <div role="alert" className="space-y-2 rounded border border-destructive p-3">
-          <p className="text-sm text-destructive">{startError}</p>
+        <div role="alert" className="space-y-2 rounded-chip border border-destructive p-3">
+          <p className="text-body text-destructive">{startError}</p>
           <Button
             disabled={busy || !targetIsCurrent || !targetIsUsable}
             size="sm"
@@ -65,7 +65,9 @@ export function CreateAgentFooter({
           <p
             id="create-agent-blocker"
             role={blocker.error ? "alert" : "status"}
-            className={blocker.error ? "text-sm text-destructive" : "text-sm text-muted-foreground"}
+            className={
+              blocker.error ? "text-body text-destructive" : "text-body text-muted-foreground"
+            }
           >
             {blocker.message}
           </p>

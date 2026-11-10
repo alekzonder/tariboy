@@ -20,14 +20,14 @@ function ConnectionNotice({
     return (
       <div
         role="status"
-        className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground"
+        className="absolute inset-0 flex items-center justify-center text-body text-muted-foreground"
       >
         Checking session…
       </div>
     );
   }
   if (status !== "open") {
-    return <p className="text-sm text-muted-foreground">Connection lost. Reconnecting…</p>;
+    return <p className="text-body text-muted-foreground">Connection lost. Reconnecting…</p>;
   }
   return null;
 }
@@ -129,10 +129,10 @@ export function TuiScreen({
         onDragLeave={liveDrop.onDragLeave}
         onDrop={liveDrop.onDrop}
         className={cn(
-          "overflow-hidden bg-zinc-950 p-2",
+          "overflow-hidden bg-terminal p-2",
           checking && "invisible",
-          workspaceSurface ? "border-0" : "rounded-md border",
-          fill ? "min-h-0 flex-1" : "h-[32rem]",
+          workspaceSurface ? "border-0" : "rounded-control border",
+          fill ? "min-h-0 flex-1" : "h-128",
           // Mirror the old capture affordance: ring the terminal when focused.
           focused && !workspaceSurface && "ring-2 ring-primary",
           liveDrop.dragActive && "ring-2 ring-primary",

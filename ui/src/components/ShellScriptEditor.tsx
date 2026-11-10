@@ -73,7 +73,7 @@ export function ShellScriptEditor({ title, description, load, save }: Props) {
   return (
     <Card aria-busy={!ready || saving}>
       <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
+        <CardTitle className="text-title">{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -90,7 +90,7 @@ export function ShellScriptEditor({ title, description, load, save }: Props) {
           className="min-h-40 font-mono"
         />
         {error ? (
-          <p id={`${id}-error`} role="alert" className="text-sm text-destructive">
+          <p id={`${id}-error`} role="alert" className="text-body text-destructive">
             {error}
           </p>
         ) : null}

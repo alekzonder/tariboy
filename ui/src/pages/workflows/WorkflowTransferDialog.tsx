@@ -85,7 +85,7 @@ function TargetList({
       <ul className="space-y-2" aria-label="Eligible transfer targets">
         {targets.map((target) => (
           <li key={target.id}>
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex items-center gap-2 text-body">
               <input
                 type="checkbox"
                 aria-label={`Transfer to ${target.label}`}
@@ -102,7 +102,7 @@ function TargetList({
         {targets
           .filter((target) => rows[target.id])
           .map((target) => (
-            <li key={target.id} className="text-sm">
+            <li key={target.id} className="text-body">
               {target.label}: {statusLabel(rows[target.id].status)}
               {rows[target.id].error ? ` — ${rows[target.id].error}` : ""}
             </li>
@@ -196,7 +196,7 @@ function TransferSession({ onOpenChange, name, tag, daemons, onComplete }: Omit<
           </DialogDescription>
         </DialogHeader>
         {targets.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body text-muted-foreground">
             No ready servers are available for transfer.
           </p>
         ) : (

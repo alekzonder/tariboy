@@ -1,6 +1,6 @@
 import type { AgentPool, WorkflowImageDefinition } from "@/types";
 import { cn } from "@/lib/utils";
-import { DANGER_FILL, MONO, PRIMARY_FILL } from "./panelStyles";
+import { DANGER_FILL, MONO, PRIMARY_FILL } from "@/components/ui/recipes";
 
 const CELL = "px-3 py-2 align-top";
 
@@ -16,9 +16,9 @@ export default function WorkflowStatusMap({
   onPool: (name: string) => void;
 }) {
   return (
-    <div className="overflow-x-auto rounded-lg border">
-      <table aria-label="Statuses" className="w-full text-body-sm">
-        <thead className="bg-muted/50 text-left text-meta text-muted-foreground">
+    <div className="overflow-x-auto rounded-card border">
+      <table aria-label="Statuses" className="w-full text-body">
+        <thead className="bg-subtle text-left text-caption text-muted-foreground">
           <tr>
             {["Status", "Owner", "Outcomes"].map((label) => (
               <th key={label} className={cn(CELL, "font-medium")}>
@@ -43,7 +43,7 @@ export default function WorkflowStatusMap({
                     .map((label) => (
                       <span
                         key={String(label)}
-                        className="ml-1.5 rounded bg-muted px-1 text-tiny text-muted-foreground"
+                        className="ml-1.5 rounded-chip bg-muted px-1 text-caption text-muted-foreground"
                       >
                         {label}
                       </span>
@@ -56,7 +56,7 @@ export default function WorkflowStatusMap({
                       data-empty={agents === 0}
                       aria-label={`Pool ${pool}, ${agents === 0 ? "no agents" : agents === 1 ? "1 agent" : `${agents} agents`}`}
                       className={cn(
-                        "rounded-sm px-2 py-0.5 hover:underline",
+                        "rounded-chip px-2 py-0.5 hover:underline",
                         MONO,
                         agents === 0 ? DANGER_FILL : PRIMARY_FILL,
                       )}

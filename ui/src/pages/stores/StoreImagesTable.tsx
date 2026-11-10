@@ -14,13 +14,13 @@ interface StoreImageRowProps {
 
 const TONES: Record<CatalogRow["tone"], string> = {
   muted: "text-muted-foreground",
-  update: "text-amber-700 dark:text-amber-400",
+  update: "text-warning",
   error: "text-destructive",
 };
 
 function StatusCell({ row, href }: { row: CatalogRow; href?: string }) {
   return (
-    <td className={`px-3 py-2 text-xs ${TONES[row.tone]}`}>
+    <td className={`px-3 py-2 text-ui ${TONES[row.tone]}`}>
       <span>{row.status}</span>
       {href && (
         <>
@@ -47,7 +47,7 @@ function StoreImageRow({ image, busy, build, buildErrors, operationHref }: Store
   return (
     <tr className="border-t">
       <td className="px-3 py-2 font-mono">{image.name}</td>
-      <td className="px-3 py-2 font-mono text-xs">{image.version || "—"}</td>
+      <td className="px-3 py-2 font-mono text-ui">{image.version || "—"}</td>
       <StatusCell
         row={row}
         href={row.operation === undefined ? undefined : operationHref(row.operation)}
@@ -77,8 +77,8 @@ export default function StoreImagesTable({
   ...row
 }: Omit<StoreImageRowProps, "image"> & { images: StoreImageView[] }) {
   return (
-    <table className="w-full text-sm">
-      <thead className="text-left text-xs text-muted-foreground">
+    <table className="w-full text-body">
+      <thead className="text-left text-ui text-muted-foreground">
         <tr>
           <th className="px-3 py-2 font-medium">Image</th>
           <th className="px-3 py-2 font-medium">Version</th>

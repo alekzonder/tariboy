@@ -166,13 +166,13 @@ function Bar({ tone, children }: { tone: "error" | "warn" | "info"; children: Re
     tone === "error"
       ? "bg-destructive text-destructive-foreground"
       : tone === "warn"
-        ? "bg-amber-500 text-black"
+        ? "bg-warning text-warning-foreground"
         : "bg-muted text-muted-foreground";
   return (
     // The tour does not start while a red bar is shown, so it looks for this mark.
     <div
       data-daemon-banner={tone === "error" ? "error" : undefined}
-      className={`flex items-center justify-center gap-3 px-4 py-1 text-center text-sm ${cls}`}
+      className={`flex items-center justify-center gap-3 px-4 py-1 text-center text-body ${cls}`}
     >
       {children}
     </div>

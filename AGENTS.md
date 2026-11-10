@@ -248,7 +248,7 @@ one owner. The full rules and the handoff format are in `docs/docs/architecture/
 
 | Paths | Designer | Developer |
 | --- | --- | --- |
-| `ui/src/index.css`, `ui/src/components/ui/*.tsx` | Owns colors, radii, density, shadows and the `cva()` variants | Changes only accessibility and behavior, after agreement with the designer |
+| `ui/src/index.css`, `ui/src/styles/tokens.css`, `ui/src/components/ui/*` | Owns colors, radii, density, shadows, the `cva()` variants and the recipes | Changes only accessibility and behavior, after agreement with the designer |
 | `ui/src/**/*.view.tsx` | Owns markup and styles. Proposes a new prop in `handoff.md` | Owns the props type. Connects the view to data in a container |
 | Other `ui/src/components/**/*.tsx` and `ui/src/pages/**/*.tsx` | Does not change them. Copies the markup into a local view part of a mockup | Owns data hooks, `@/lib/api`, react-query, router hooks, state and handlers |
 | `ui/src/mockups/<name>/` | Builds the mockup stories and its local view parts | Moves the change into the real component or page |

@@ -56,7 +56,7 @@ export default function AgentMetricsView() {
   return (
     <section aria-label="Agent metrics" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="min-w-0 text-sm text-muted-foreground">
+        <p className="min-w-0 text-body text-muted-foreground">
           Completed tasks of this agent in this period. Runs and cost count each task's whole life.{" "}
           <Link to={`/metrics?${metricsLink}`} className="text-primary hover:underline">
             Open in Metrics
@@ -77,7 +77,7 @@ export default function AgentMetricsView() {
       {report && data.error === null && (
         <div aria-busy={data.updating} className={cn("space-y-4", data.updating && "opacity-60")}>
           {empty ? (
-            <div className="space-y-2 rounded border p-4 text-sm">
+            <div className="space-y-2 rounded-chip border p-4 text-body">
               <p>No completed tasks of this agent in this period.</p>
               {(window.period === "today" || window.period === "week") && (
                 <Button type="button" size="sm" variant="outline" onClick={showMonth}>
@@ -89,13 +89,13 @@ export default function AgentMetricsView() {
             <>
               <MetricsCards slice={report.total} usage={false} />
               <QualityBlock quality={report.total.tasks.quality} />
-              <h2 className="text-sm font-medium">Images</h2>
+              <h2 className="text-body font-medium">Images</h2>
               <VersionGroups
                 kind="image"
                 slices={report.images}
                 compareHref={compareHref("image")}
               />
-              <h2 className="text-sm font-medium">Workflows</h2>
+              <h2 className="text-body font-medium">Workflows</h2>
               <VersionGroups
                 kind="workflow"
                 slices={report.workflows}

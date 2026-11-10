@@ -60,8 +60,8 @@ export function WorkflowVersions({
         </p>
       )}
       {tags && (
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs text-muted-foreground">
+        <table className="w-full text-body">
+          <thead className="text-left text-ui text-muted-foreground">
             <tr>
               {["Tag", "Version", "Built", "Bound to", ""].map((label) => (
                 <th key={label} className={`${CELL} font-medium`}>
@@ -78,7 +78,7 @@ export function WorkflowVersions({
                 <tr
                   key={ref}
                   aria-current={image.tag === tag ? "true" : undefined}
-                  className={image.tag === tag ? "border-t bg-muted/40" : "border-t"}
+                  className={image.tag === tag ? "border-t bg-subtle" : "border-t"}
                 >
                   <td className={CELL}>
                     <Link
@@ -89,10 +89,10 @@ export function WorkflowVersions({
                     </Link>
                   </td>
                   <td className={CELL}>{image.version}</td>
-                  <td className={`${CELL} text-xs text-muted-foreground`} title={image.built_at}>
+                  <td className={`${CELL} text-ui text-muted-foreground`} title={image.built_at}>
                     {relativeTime(image.built_at)}
                   </td>
-                  <td className={`${CELL} text-xs`}>
+                  <td className={`${CELL} text-ui`}>
                     <span title={bound.title}>{bound.text}</span>
                   </td>
                   <td className={`${CELL} text-right`}>

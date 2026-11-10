@@ -153,12 +153,12 @@ describe("TuiScreen", () => {
 
   it("uses flush pane chrome only for the Workspace surface", () => {
     const standalone = render(<TuiScreen controller={ctrl()} />);
-    expect(screen.getByTestId("tui-screen")).toHaveClass("rounded-md", "border");
+    expect(screen.getByTestId("tui-screen")).toHaveClass("rounded-control", "border");
     standalone.unmount();
 
     render(<TuiScreen controller={ctrl()} surface="workspace" />);
     expect(screen.getByTestId("tui-screen")).toHaveAttribute("data-terminal-surface", "workspace");
-    expect(screen.getByTestId("tui-screen")).not.toHaveClass("rounded-md", "border");
+    expect(screen.getByTestId("tui-screen")).not.toHaveClass("rounded-control", "border");
     expect(screen.getByTestId("terminal-toolbar")).toHaveClass("border-t");
   });
 

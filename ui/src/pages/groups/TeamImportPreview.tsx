@@ -40,7 +40,7 @@ function PreviewImages({ preview, onChange }: Omit<Props, "onConfirm">) {
 
 export function TeamImportPreview({ preview, onChange, onConfirm }: Props) {
   return (
-    <div className="space-y-2 rounded border p-3 text-sm">
+    <div className="space-y-2 rounded-chip border p-3 text-body">
       <div>
         Team: <strong>{preview.team}</strong>
       </div>
@@ -78,7 +78,7 @@ export function TeamImportPreview({ preview, onChange, onConfirm }: Props) {
         aria-label="Imported team compose YAML"
         value={preview.yaml}
         onChange={(event) => onChange({ ...preview, yaml: event.target.value })}
-        className="max-h-48 min-h-32 w-full overflow-auto rounded bg-muted p-2 font-mono text-xs"
+        className="max-h-48 min-h-32 w-full overflow-auto rounded-chip bg-muted p-2 font-mono text-ui"
       />
       <Button size="sm" aria-label="Confirm and import team" onClick={onConfirm}>
         Confirm and import team

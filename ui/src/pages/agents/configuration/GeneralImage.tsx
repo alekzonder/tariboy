@@ -17,7 +17,7 @@ export function PendingImage({ imageStatus }: { imageStatus: AgentImageStatus })
   const { pending } = imageStatus;
   if (!pending.ref && !pending.error) return null;
   return (
-    <div className="space-y-1 text-sm">
+    <div className="space-y-1 text-body">
       {pending.ref && (
         <div>
           Pending:{" "}
@@ -83,7 +83,7 @@ export function ImageActions({
         </Button>
       )}
       {copied && (
-        <span role="status" className="text-xs text-muted-foreground">
+        <span role="status" className="text-ui text-muted-foreground">
           Digest copied
         </span>
       )}

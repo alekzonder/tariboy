@@ -40,18 +40,18 @@ export function FullAuditLog({ name }: { name: string }) {
         setFilter={setFilter}
       />
       {filtering && (
-        <p className="shrink-0 text-xs text-muted-foreground">
+        <p className="shrink-0 text-ui text-muted-foreground">
           {filtered === null
             ? "Searching…"
             : `${rows.length} match${rows.length === 1 ? "" : "es"}${capped ? " (showing newest 500)" : ""}`}
         </p>
       )}
-      <ScrollArea ref={rootRef} className="min-h-0 flex-1 rounded border bg-muted/30 p-2">
+      <ScrollArea ref={rootRef} className="min-h-0 flex-1 rounded-chip border bg-subtle p-2">
         {collapseThinking(rows).map((r) => (
           <AuditRow key={r.key} row={r} open={open.has(r.key)} onToggle={toggle} />
         ))}
         {rows.length === 0 && (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body text-muted-foreground">
             {filtering && filtered !== null ? "No matching events." : "No events."}
           </p>
         )}

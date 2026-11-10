@@ -37,7 +37,7 @@ export function RoleFragment({ id, text }: { id: string; text: string }) {
         <p
           ref={ref}
           id={id}
-          className="line-clamp-2 min-w-0 flex-1 text-sm wrap-anywhere text-muted-foreground"
+          className="line-clamp-2 min-w-0 flex-1 text-body wrap-anywhere text-muted-foreground"
         >
           {fragment.text}
         </p>
@@ -47,7 +47,7 @@ export function RoleFragment({ id, text }: { id: string; text: string }) {
             aria-expanded={open}
             aria-controls={fullId}
             onClick={() => setOpen((value) => !value)}
-            className="h-8 shrink-0 rounded-control text-sm text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:-mt-1.5"
+            className="h-8 shrink-0 rounded-control text-body text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:-mt-1.5"
           >
             {open ? "Hide role" : "Show role"}
           </button>
@@ -56,7 +56,7 @@ export function RoleFragment({ id, text }: { id: string; text: string }) {
       <div
         id={fullId}
         hidden={!open}
-        className="max-h-60 overflow-auto rounded border p-3"
+        className="max-h-60 overflow-auto rounded-chip border p-3"
         // A scroll box the keyboard can reach.
         tabIndex={open ? 0 : undefined}
         role={open ? "region" : undefined}

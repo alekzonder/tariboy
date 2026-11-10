@@ -50,7 +50,7 @@ function FileBrowserInner(props: FileBrowserProps) {
   const canDelete = !readOnly && !!deleteFile;
 
   return (
-    <div className="flex h-full min-h-0 gap-0 overflow-hidden rounded border">
+    <div className="flex h-full min-h-0 gap-0 overflow-hidden rounded-chip border">
       <aside className="flex w-64 shrink-0 flex-col overflow-hidden border-r">
         <FileToolbar canCreate={canCreate} onNew={actions.openNew} />
         <FileTree

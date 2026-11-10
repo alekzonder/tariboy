@@ -38,7 +38,7 @@ export function ConfigSearch({
         )}
       </div>
       {empty && (
-        <p role="status" className="text-sm text-muted-foreground">
+        <p role="status" className="text-body text-muted-foreground">
           No settings match your search.
         </p>
       )}
@@ -90,7 +90,7 @@ export function SettingsSection({
       <div className={cn("flex items-center gap-2", level === 4 && "mb-3")}>
         <Heading
           id={`settings-section-${id}-title`}
-          className={level === 3 ? "text-sm font-semibold" : "text-sm font-medium"}
+          className={level === 3 ? "text-body font-semibold" : "text-body font-medium"}
         >
           {title}
         </Heading>
@@ -122,7 +122,7 @@ export function FieldFrame({
       <Label htmlFor={field.key} className={inline ? "cursor-pointer" : undefined}>
         {field.label}
       </Label>
-      {changed && <span className="text-xs font-medium text-primary">Changed</span>}
+      {changed && <span className="text-ui font-medium text-primary">Changed</span>}
     </div>
   );
   return (
@@ -139,12 +139,12 @@ export function FieldFrame({
         </>
       )}
       {error && (
-        <p id={`${field.key}-error`} role="alert" className="text-xs text-destructive">
+        <p id={`${field.key}-error`} role="alert" className="text-ui text-destructive">
           {error}
         </p>
       )}
       {field.helper && (
-        <p id={`${field.key}-help`} className="text-xs text-muted-foreground">
+        <p id={`${field.key}-help`} className="text-ui text-muted-foreground">
           {field.helper}
         </p>
       )}
@@ -211,16 +211,16 @@ export function ConfigSaveRow({ draft, groups }: { draft: ConfigDraft; groups: s
     <div
       role="region"
       aria-label="Save settings"
-      className="sticky top-0 z-10 -mx-4 -mt-4 border-b bg-card/95 px-4 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-card/80"
+      className="sticky top-0 z-sticky -mx-4 -mt-4 border-b bg-card/95 px-4 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-card/80"
     >
       <div className="flex flex-wrap items-center gap-3">
         <h2 className="font-semibold">Settings</h2>
         <div className="min-w-0 flex-1 space-y-0.5">
-          <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+          <p role="status" aria-live="polite" className="text-body text-muted-foreground">
             {status}
           </p>
           {draft.error && (
-            <p role="alert" className="text-xs text-destructive">
+            <p role="alert" className="text-ui text-destructive">
               {draft.error}
             </p>
           )}
@@ -260,7 +260,7 @@ export function ReadOnly({
 export function ActionRow({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-      <span className="text-xs text-muted-foreground">
+      <span className="text-ui text-muted-foreground">
         Actions apply immediately, not part of Save:
       </span>
       {children}

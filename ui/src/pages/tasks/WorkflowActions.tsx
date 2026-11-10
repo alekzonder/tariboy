@@ -90,7 +90,7 @@ export function ActionError({ errors }: { errors: unknown[] }) {
   const error = errors.find(Boolean);
   if (!error) return null;
   return (
-    <p role="alert" className="text-ui text-status-failed">
+    <p role="alert" className="text-ui text-destructive">
       {errorText(error)}
     </p>
   );

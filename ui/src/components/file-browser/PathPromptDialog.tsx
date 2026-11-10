@@ -39,7 +39,7 @@ export function PathPromptDialog({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <label className="flex flex-col gap-1 text-sm">
+        <label className="flex flex-col gap-1 text-body">
           <span className="text-muted-foreground">{label}</span>
           <Input
             autoFocus

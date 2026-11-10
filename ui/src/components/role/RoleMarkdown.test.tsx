@@ -18,12 +18,12 @@ describe("RoleMarkdown", () => {
     const classes = (container.firstElementChild as HTMLElement).className.split(" ");
     expect(classes).toEqual(
       expect.arrayContaining([
-        "[&_h1]:text-lg",
-        "[&_h2]:text-base",
-        "[&_:is(h3,h4,h5,h6)]:text-sm",
+        "[&_h1]:text-heading",
+        "[&_h2]:text-title",
+        "[&_:is(h3,h4,h5,h6)]:text-body",
       ]),
     );
-    expect(classes).not.toContain("[&_h1]:text-2xl");
+    expect(classes).not.toContain("[&_h1]:text-display");
     expect(screen.getByRole("heading", { level: 1, name: "Reviewer" })).toBeInTheDocument();
   });
 

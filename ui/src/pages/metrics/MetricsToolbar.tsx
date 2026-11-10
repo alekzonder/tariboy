@@ -14,7 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ActivityPeriodBar } from "@/pages/activity/ActivityParts";
 
-const SELECT = "h-7 max-w-48 min-w-0 rounded-control border bg-background px-2 text-body-sm";
+const SELECT = "h-7 max-w-48 min-w-0 rounded-control border bg-background px-2 text-body";
 
 type Option = { value: string; label: string };
 
@@ -215,7 +215,7 @@ export function MetricsToolbar({
         className={cn(
           open ? "flex" : "hidden",
           "items-center gap-2 xl:flex xl:shrink-0",
-          "max-xl:absolute max-xl:top-full max-xl:right-0 max-xl:z-20 max-xl:mt-1 max-xl:flex-col max-xl:items-stretch max-xl:rounded max-xl:border max-xl:bg-popover max-xl:p-2 max-xl:shadow-md",
+          "max-xl:absolute max-xl:top-full max-xl:right-0 max-xl:z-sticky max-xl:mt-1 max-xl:flex-col max-xl:items-stretch max-xl:rounded-chip max-xl:border max-xl:bg-popover max-xl:p-2 max-xl:shadow-lift",
         )}
       >
         <FilterSelects agents={agents} filters={filters} onFilters={onFilters} />
@@ -264,7 +264,7 @@ export function FilterChips({
             aria-label={`Remove filter ${label}`}
             onClick={() => onFilters({ [name]: "" })}
             className={cn(
-              "inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-xs hover:bg-accent",
+              "inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-ui hover:bg-accent",
               invalid && "border-destructive",
             )}
           >
@@ -274,7 +274,7 @@ export function FilterChips({
         );
       })}
       {invalid && (
-        <span role="alert" className="text-xs text-destructive">
+        <span role="alert" className="text-ui text-destructive">
           This filter is not valid. Use NAME or NAME:VERSION.
         </span>
       )}

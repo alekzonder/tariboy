@@ -11,7 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import type { Queue } from "@/types";
 import { cn } from "@/lib/utils";
-import { LABEL, MONO, SelectShell } from "./panelStyles";
+import { NativeSelect } from "@/components/ui/native-select";
+import { LABEL, MONO } from "@/components/ui/recipes";
 
 /**
  * Moving a task to another queue on the same server. A key belongs to its
@@ -89,7 +90,7 @@ export default function TaskRequeueDialog({
         </DialogHeader>
         <label className="flex min-w-0 flex-col gap-1.5">
           <span className={LABEL}>Target queue</span>
-          <SelectShell
+          <NativeSelect
             aria-label="Target queue"
             value={choice}
             disabled={busy}
@@ -101,10 +102,10 @@ export default function TaskRequeueDialog({
                 {item.prefix} · {item.name}
               </option>
             ))}
-          </SelectShell>
+          </NativeSelect>
         </label>
         {error && (
-          <p role="alert" className="text-body-sm text-destructive">
+          <p role="alert" className="text-body text-destructive">
             {error}
           </p>
         )}

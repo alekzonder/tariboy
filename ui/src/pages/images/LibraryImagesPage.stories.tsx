@@ -7,7 +7,7 @@ import LibraryImagesPage from "./LibraryImagesPage";
 // a <Link>, so it mounts at App.tsx's /library/images. There is no daemon
 // behind Storybook, so the page shows its error line in place of the table.
 const withFrame: Decorator = (Story) => (
-  <div className="h-[620px] overflow-hidden rounded-md border border-border bg-background">
+  <div className="h-155 overflow-hidden rounded-control border border-border bg-background">
     <Story />
   </div>
 );

@@ -64,10 +64,10 @@ export default function WorkflowBuildFromDirectory({ onBuilt }: { onBuilt: () =>
     });
 
   return (
-    <section className="space-y-3 rounded border p-4">
+    <section className="space-y-3 rounded-chip border p-4">
       <div>
         <h2 className="font-medium">Build from directory</h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-body text-muted-foreground">
           A Workflowfile.yaml, or the directory holding it, on this server. The name and version
           come from the file.
         </p>
@@ -87,7 +87,7 @@ export default function WorkflowBuildFromDirectory({ onBuilt }: { onBuilt: () =>
         </Button>
       </div>
       {errors.length > 0 && (
-        <ul role="alert" className="space-y-1 text-sm text-destructive">
+        <ul role="alert" className="space-y-1 text-body text-destructive">
           {errors.map((item, index) => (
             <li key={`${item.path}-${index}`}>
               <span className="font-mono">
@@ -99,14 +99,14 @@ export default function WorkflowBuildFromDirectory({ onBuilt }: { onBuilt: () =>
         </ul>
       )}
       {failure && (
-        <div role="alert" className="text-sm text-destructive">
+        <div role="alert" className="text-body text-destructive">
           <p>{failure.message}</p>
           {failure.hint && <p className="text-muted-foreground">{failure.hint}</p>}
         </div>
       )}
       {validation && (
         <div
-          className="space-y-1 rounded border bg-muted/20 p-3 text-sm"
+          className="space-y-1 rounded-chip border bg-subtle p-3 text-body"
           aria-label="Validated workflow"
         >
           <p>

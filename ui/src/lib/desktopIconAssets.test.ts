@@ -15,7 +15,7 @@ describe("desktop icon assets", () => {
     expect(existsSync(source)).toBe(true);
   });
 
-  it("ships the white dancer on a dark rounded tile at every generated size", async () => {
+  it("ships the white dancer on a dark rounded-chip tile at every generated size", async () => {
     const sizes = new Map([
       ["icon.png", 512],
       ["32x32.png", 32],

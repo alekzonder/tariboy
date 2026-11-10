@@ -36,7 +36,7 @@ function RawSnapshot() {
       .catch((error) => setSnapshot({ error: String(error) }));
   }, [api, name]);
   return (
-    <pre className="overflow-auto rounded-md border bg-muted/30 p-4 text-xs">
+    <pre className="overflow-auto rounded-control border bg-subtle p-4 text-ui">
       {JSON.stringify(snapshot, null, 2)}
     </pre>
   );
@@ -65,7 +65,7 @@ export default function AgentAdvancedTab({ base }: { base: string }) {
   return (
     <TabPage>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold">Diagnostics</h2>
+        <h2 className="text-heading font-semibold">Diagnostics</h2>
         <Button asChild size="sm" variant="outline">
           <Link to={`${base}/work`}>Back to Work</Link>
         </Button>

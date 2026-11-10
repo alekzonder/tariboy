@@ -30,7 +30,7 @@ export function ComboField({
 
   return (
     <div className="flex flex-col gap-1">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Label className="text-ui text-muted-foreground">{label}</Label>
       <div className="flex items-center gap-1">
         <Input
           value={draft}

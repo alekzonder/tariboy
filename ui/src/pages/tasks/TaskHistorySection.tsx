@@ -1,7 +1,7 @@
 import type { TaskEvent } from "@/types";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "./TaskDetailControls";
-import { EMPTY, QUIET_ACTION, ROW } from "./panelStyles";
+import { EMPTY, QUIET_ACTION, ROW } from "@/components/ui/recipes";
 import { formatTaskTime } from "./taskTime";
 
 export function TaskHistorySection({
@@ -40,7 +40,7 @@ export function TaskHistorySection({
             >
               {formatTaskTime(event.created_at)}
             </time>
-            <span className="shrink-0 font-mono text-meta font-medium">{event.kind}</span>
+            <span className="shrink-0 font-mono text-caption font-medium">{event.kind}</span>
             <span className="min-w-0 flex-1 truncate text-ui text-muted-foreground">
               {summarizePayload(event.payload)}
             </span>

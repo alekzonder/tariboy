@@ -11,7 +11,7 @@ type Story = StoryObj<typeof meta>;
 
 export const InAgentHeader: Story = {
   render: () => (
-    <span className="flex items-center gap-0.5 text-sm">
+    <span className="flex items-center gap-0.5 text-body">
       <span className="text-muted-foreground">Goal:</span>
       <span className="font-mono text-primary">TB-142</span>
       <GoalHelp />
@@ -21,7 +21,7 @@ export const InAgentHeader: Story = {
 
 export const NoCurrentGoal: Story = {
   render: () => (
-    <span className="flex items-center gap-0.5 text-sm">
+    <span className="flex items-center gap-0.5 text-body">
       <span className="text-muted-foreground">Goal:</span>
       <span className="text-muted-foreground">No current goal</span>
       <GoalHelp />

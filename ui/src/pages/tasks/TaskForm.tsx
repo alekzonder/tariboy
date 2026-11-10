@@ -33,12 +33,12 @@ export default function TaskForm({
 
   return (
     <form
-      className="task-inline-form mx-3.5 my-2.5 flex gap-1.5 rounded-panel border border-border bg-card p-2.5 shadow-[0_8px_30px_oklch(0_0_0/0.07)]"
+      className="task-inline-form mx-3.5 my-2.5 flex gap-1.5 rounded-control border border-border bg-card p-2.5 shadow-lift"
       onSubmit={(event) => void submit(event)}
     >
       {parentKey ? (
         // A child is made in its parent's queue; another queue is not offered.
-        <span className="shrink-0 self-center text-meta text-muted-foreground">
+        <span className="shrink-0 self-center text-caption text-muted-foreground">
           {`Queue: ${queue}`}
         </span>
       ) : (

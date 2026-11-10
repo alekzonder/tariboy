@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useApi } from "@/components/apiContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { DANGER_FILL } from "./panelStyles";
+import { DANGER_FILL } from "@/components/ui/recipes";
 import { useWorkflowConfirm } from "./WorkflowConfirm";
 import { errorText } from "@/lib/errors";
 
@@ -17,7 +17,7 @@ const REASONS: Record<string, string> = {
 };
 
 const BUTTON =
-  "h-6 shrink-0 rounded-control px-2.5 text-ui text-status-failed hover:bg-[color-mix(in_oklab,var(--status-failed)_10%,transparent)] hover:text-status-failed";
+  "h-6 shrink-0 rounded-control px-2.5 text-ui text-destructive hover:bg-destructive-soft hover:text-destructive";
 
 /**
  * The paused task asks the customer to decide: continue with the same holder,
@@ -54,10 +54,10 @@ export default function WorkflowPauseBanner({
       });
   };
   return (
-    <div className={cn("flex flex-col gap-2 rounded-md px-2.5 py-2", DANGER_FILL)}>
+    <div className={cn("flex flex-col gap-2 rounded-control px-2.5 py-2", DANGER_FILL)}>
       <div role="alert" className="flex items-start gap-2.25">
         <PauseCircle className="mt-0.5 size-3.5 shrink-0 [stroke-width:1.4]" />
-        <p className="min-w-0 flex-1 text-body-sm leading-[1.45] font-medium text-pretty">
+        <p className="min-w-0 flex-1 text-body leading-normal font-medium text-pretty">
           Paused: {REASONS[reason] ?? reason} The workflow waits for your decision.
         </p>
       </div>

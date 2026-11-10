@@ -3,7 +3,8 @@ import { MarkdownEditor, MarkdownModeSegment, type MarkdownMode } from "./TaskMa
 import { Button } from "@/components/ui/button";
 import { SendFilesButton } from "@/components/SendFilesButton";
 import { cn } from "@/lib/utils";
-import { LABEL, QUIET_ACTION, SelectShell } from "./panelStyles";
+import { NativeSelect } from "@/components/ui/native-select";
+import { LABEL, QUIET_ACTION } from "@/components/ui/recipes";
 
 /** The comment composer: who to ask, the Markdown body, attachments, and the
  *  two ways to post. The draft itself is owned by `TaskComments`. */
@@ -33,14 +34,14 @@ export function TaskCommentForm({
   const [mode, setMode] = useState<MarkdownMode>("rich");
   return (
     <form
-      className="grid grid-cols-[minmax(0,1fr)] gap-2 rounded-md bg-muted p-3"
+      className="grid grid-cols-[minmax(0,1fr)] gap-2 rounded-control bg-muted p-3"
       onSubmit={(event) => void onSubmit(event)}
     >
       <label className="flex min-w-0 items-center gap-2">
         <span className={LABEL}>Ask an agent</span>
-        <SelectShell
+        <NativeSelect
           aria-label="Ask an agent"
-          className="h-6 bg-card pl-2.5 text-meta md:text-meta"
+          className="h-6 bg-card pl-2.5 text-caption md:text-caption"
           value={askPrincipal}
           onChange={(event) => onAskPrincipalChange(event.target.value)}
         >
@@ -50,7 +51,7 @@ export function TaskCommentForm({
               {principal}
             </option>
           ))}
-        </SelectShell>
+        </NativeSelect>
       </label>
       <div>
         <div className="flex items-center gap-2 pb-1.75">

@@ -27,10 +27,10 @@ function TariboyStoreCard({
   store,
 }: Pick<StoreListProps, "actions"> & { store: OnboardingDefaultStore }) {
   return (
-    <section className="flex flex-wrap items-center justify-between gap-3 rounded border p-4">
+    <section className="flex flex-wrap items-center justify-between gap-3 rounded-chip border p-4">
       <div className="min-w-0 space-y-1">
         <h2 className="font-medium">Tariboy Store</h2>
-        <p className="break-all text-sm text-muted-foreground">
+        <p className="break-all text-body text-muted-foreground">
           Images and workflows published by Tariboy, registered as{" "}
           <span className="font-mono">{store.name}</span> from{" "}
           <span className="font-mono">{store.source}</span>.
@@ -49,7 +49,7 @@ function TariboyStoreCard({
 function AddStoreForm({ actions, storeName, setStoreName, source, setSource }: StoreListProps) {
   const { busy } = actions;
   return (
-    <details className="rounded border p-4">
+    <details className="rounded-chip border p-4">
       <summary className="cursor-pointer font-medium">Add another catalog</summary>
       <div className="mt-3 grid gap-3 md:grid-cols-[14rem_minmax(0,1fr)_auto]">
         <Input
@@ -106,12 +106,12 @@ export default function StoreList(props: StoreListProps) {
       {status && setupPending(status) && <GettingReady status={status} retry={onboarding.retry} />}
       {offered && <TariboyStoreCard actions={props.actions} store={offered} />}
       {loading && (
-        <p role="status" className="text-sm text-muted-foreground">
+        <p role="status" className="text-body text-muted-foreground">
           Loading Sources…
         </p>
       )}
       {!loading && stores.length === 0 && (
-        <p className="text-sm text-muted-foreground">No Stores registered on this host.</p>
+        <p className="text-body text-muted-foreground">No Stores registered on this host.</p>
       )}
       {stores.map((store) => (
         <StoreCard

@@ -16,14 +16,14 @@ function Card({ label, value, detail }: { label: string; value: ReactNode; detai
   return (
     <div
       data-card={label}
-      className="row-span-3 grid min-w-0 grid-rows-subgrid gap-y-1 rounded border p-3"
+      className="row-span-3 grid min-w-0 grid-rows-subgrid gap-y-1 rounded-chip border p-3"
     >
-      <div className="text-xs break-words text-muted-foreground">{label}</div>
-      <div data-value className="font-mono text-lg">
+      <div className="text-ui break-words text-muted-foreground">{label}</div>
+      <div data-value className="font-mono text-heading">
         {value}
       </div>
       {detail !== undefined && (
-        <div data-detail className="text-xs text-muted-foreground">
+        <div data-detail className="text-ui text-muted-foreground">
           {detail}
         </div>
       )}
@@ -44,10 +44,10 @@ function Group({
   return (
     <section aria-labelledby={id} className="space-y-2">
       <div>
-        <h2 id={id} className="text-sm font-medium">
+        <h2 id={id} className="text-body font-medium">
           {title}
         </h2>
-        <p className="text-xs text-muted-foreground">{caption}</p>
+        <p className="text-ui text-muted-foreground">{caption}</p>
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">{children}</div>
     </section>
@@ -134,7 +134,7 @@ export function MetricsCards({ slice, usage = true }: { slice: MetricsSlice; usa
         />
       </Group>
       {tasks.tasks_done === 0 && (
-        <p className="text-sm text-muted-foreground">No task was completed in this period.</p>
+        <p className="text-body text-muted-foreground">No task was completed in this period.</p>
       )}
       {usage && (
         <Group
@@ -162,7 +162,7 @@ export function MetricsCards({ slice, usage = true }: { slice: MetricsSlice; usa
           />
         </Group>
       )}
-      <p className="text-xs text-muted-foreground">
+      <p className="text-ui text-muted-foreground">
         — means the value is not known. It is not zero.
       </p>
     </div>

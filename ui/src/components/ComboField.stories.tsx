@@ -32,10 +32,10 @@ export const Unset: Story = {
 // Both fields as they sit at the right end of the agent Overview header strip.
 export const InOverviewHeader: Story = {
   render: () => (
-    <div className="flex w-[560px] items-end gap-3 rounded-lg border border-border p-3">
+    <div className="flex w-140 items-end gap-3 rounded-card border border-border p-3">
       <div className="mr-auto flex flex-col gap-0.5">
-        <span className="text-sm font-semibold">builder</span>
-        <span className="font-mono text-xs text-muted-foreground">claude · TB-142</span>
+        <span className="text-body font-semibold">builder</span>
+        <span className="font-mono text-ui text-muted-foreground">claude · TB-142</span>
       </div>
       <ComboField
         label="model"

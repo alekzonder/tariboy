@@ -200,7 +200,7 @@ export function AppSettings() {
         <Button asChild variant="ghost">
           <Link to="/">Back to workspace</Link>
         </Button>
-        <h1 className="text-2xl font-semibold">Application settings</h1>
+        <h1 className="text-display font-semibold">Application settings</h1>
         <HelpCard />
         <Card>
           <CardHeader>

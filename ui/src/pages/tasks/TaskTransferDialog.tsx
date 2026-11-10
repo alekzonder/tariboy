@@ -10,7 +10,8 @@ import {
 } from "@/components/ui/dialog";
 import { useOptionalDaemons } from "@/components/daemonContext";
 import { cn } from "@/lib/utils";
-import { LABEL, MONO, SelectShell } from "./panelStyles";
+import { NativeSelect } from "@/components/ui/native-select";
+import { LABEL, MONO } from "@/components/ui/recipes";
 
 /**
  * Moving a task to another server is the one task action that needs a second
@@ -72,13 +73,13 @@ export default function TaskTransferDialog({
           </DialogDescription>
         </DialogHeader>
         {targets.length === 0 ? (
-          <p className="text-body-sm text-muted-foreground">
+          <p className="text-body text-muted-foreground">
             No other server is registered. Add a host first.
           </p>
         ) : (
           <label className="flex min-w-0 flex-col gap-1.5">
             <span className={LABEL}>Target server</span>
-            <SelectShell
+            <NativeSelect
               aria-label="Target server"
               value={hostID}
               disabled={busy}
@@ -90,11 +91,11 @@ export default function TaskTransferDialog({
                   {host.label || host.id}
                 </option>
               ))}
-            </SelectShell>
+            </NativeSelect>
           </label>
         )}
         {error && (
-          <p role="alert" className="text-body-sm text-destructive">
+          <p role="alert" className="text-body text-destructive">
             {error}
           </p>
         )}

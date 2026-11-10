@@ -77,11 +77,11 @@ const agents = [
 
 export const InAgentList: Story = {
   render: () => (
-    <div className="grid max-w-[380px] gap-1.5 rounded-[10px] border border-border p-2.5 text-[13px]">
+    <div className="grid max-w-95 gap-1.5 rounded-card border border-border p-2.5 text-body">
       {agents.map((agent) => (
         <div key={agent.name} className="flex items-center gap-2">
           <span className="font-medium">{agent.name}</span>
-          <span className="text-xs text-muted-foreground">{agent.image}</span>
+          <span className="text-ui text-muted-foreground">{agent.image}</span>
           <span className="ml-auto">{agent.badge}</span>
         </div>
       ))}

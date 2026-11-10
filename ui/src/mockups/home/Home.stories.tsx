@@ -81,7 +81,7 @@ function HomeMockup({ compact, data }: { compact: boolean; data: PageData }) {
   return (
     <div className="flex h-screen px-2 pt-2 pb-2">
       {!compact && <Sidebar agents={data.sidebar} />}
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--panel-radius)] bg-card shadow-[var(--lift)]">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-panel bg-card shadow-lift">
         <div className="flex min-h-0 flex-1 flex-col p-3">
           <HomeView
             {...data.view}

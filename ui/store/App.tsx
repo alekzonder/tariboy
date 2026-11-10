@@ -39,7 +39,7 @@ export default function App() {
     void evaluate();
   }, [evaluate]);
 
-  if (gate === "loading") return <p className="p-6 text-sm text-muted-foreground">Loading…</p>;
+  if (gate === "loading") return <p className="p-6 text-body text-muted-foreground">Loading…</p>;
   if (gate === "login")
     return (
       <Login
@@ -57,7 +57,7 @@ export default function App() {
           tariboy-store
         </a>
         <div className="flex items-center gap-2">
-          {version && <span className="text-xs text-muted-foreground">v{version}</span>}
+          {version && <span className="text-ui text-muted-foreground">v{version}</span>}
           {hasToken() && (
             <Button
               variant="ghost"

@@ -26,7 +26,7 @@ function SearchInput({
     <label
       data-slot="search-input"
       className={cn(
-        "flex items-center gap-1.75 rounded-md bg-muted px-2.25 text-muted-foreground",
+        "flex items-center gap-1.75 rounded-control bg-muted px-2.25 text-muted-foreground",
         className,
       )}
     >

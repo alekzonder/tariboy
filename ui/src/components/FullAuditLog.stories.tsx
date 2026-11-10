@@ -31,7 +31,7 @@ function useType(selector: string, value: string) {
 }
 
 const Pane = ({ children }: { children: ReactNode }) => (
-  <div className="h-[380px] w-[760px]">{children}</div>
+  <div className="h-95 w-190">{children}</div>
 );
 
 function TypedLog({ name, selector, value }: { name: string; selector: string; value: string }) {

@@ -10,12 +10,12 @@ import { PathAutocomplete } from "./PathAutocomplete";
 // the input itself, its placeholder and the popover chrome are all real.
 
 const withField: Decorator = (Story) => (
-  <div className="flex w-[460px] flex-col gap-1.5">
+  <div className="flex w-115 flex-col gap-1.5">
     <Label htmlFor="cwd">cwd</Label>
     <Story />
     {/* Room for the absolutely-positioned dropdown, which overlays the form
         row in the product rather than pushing it down. */}
-    <div className="h-[140px]" />
+    <div className="h-35" />
   </div>
 );
 

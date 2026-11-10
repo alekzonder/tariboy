@@ -119,7 +119,7 @@ export default function AgentWorkTab({
               placeholder="Search completed tasks…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="h-8 min-w-0 flex-1 text-sm"
+              className="h-8 min-w-0 flex-1 text-body"
             />
             <Select
               value={showAll ? "all" : "week"}
@@ -137,7 +137,7 @@ export default function AgentWorkTab({
         }
       >
         {work.closedReady && sections.done.length === 0 && (
-          <p className="py-2 text-sm text-muted-foreground">
+          <p className="py-2 text-body text-muted-foreground">
             No completed tasks{search.trim() ? " match your search" : ""}{" "}
             {showAll ? "for All time" : "in the last 7 days"}.
           </p>

@@ -35,13 +35,13 @@ function useRightClick(dx = 90, dy = 18) {
   return ref;
 }
 
-const rowClass = "flex w-[260px] items-center gap-1.5 rounded-md border px-2 py-1.5 text-[13px]";
+const rowClass = "flex w-65 items-center gap-1.5 rounded-control border px-2 py-1.5 text-body";
 const plainRow = `${rowClass} border-transparent`;
-const hint = "ml-auto text-xs text-muted-foreground";
+const hint = "ml-auto text-ui text-muted-foreground";
 
 const Sidebar = ({ children }: { children?: ReactNode }) => (
-  <div className="grid w-[260px] gap-1.5">
-    <div className="text-xs text-muted-foreground">This daemon (local)</div>
+  <div className="grid w-65 gap-1.5">
+    <div className="text-ui text-muted-foreground">This daemon (local)</div>
     {children}
   </div>
 );
@@ -97,7 +97,7 @@ export const AgentRowActions: Story = {
 export const DisabledItems: Story = {
   render: () => (
     <Sidebar>
-      <div className="text-xs text-destructive">build-02 is unreachable</div>
+      <div className="text-ui text-destructive">build-02 is unreachable</div>
       <MenuRow name="docs-bot" note="bare:latest">
         <ContextMenuItem disabled>Clone</ContextMenuItem>
         <ContextMenuItem disabled>Rename</ContextMenuItem>

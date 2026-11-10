@@ -7,8 +7,8 @@ export default meta;
 
 type Story = StoryObj;
 
-const PANEL = "grid w-[400px] gap-2.5 rounded-[10px] border border-border p-3 text-[13px]";
-const MUTED = "text-xs text-muted-foreground";
+const PANEL = "grid w-100 gap-2.5 rounded-card border border-border p-3 text-body";
+const MUTED = "text-ui text-muted-foreground";
 
 export const SectionDivider: Story = {
   render: () => (
@@ -33,7 +33,7 @@ export const SectionDivider: Story = {
 
 export const VerticalInlineMeta: Story = {
   render: () => (
-    <div className="flex w-fit items-center gap-2.5 rounded-[10px] border border-border px-3 py-2 text-[13px]">
+    <div className="flex w-fit items-center gap-2.5 rounded-card border border-border px-3 py-2 text-body">
       <span className="font-medium">reviewer</span>
       <Separator orientation="vertical" className="h-4" />
       <span className={MUTED}>worker:v1</span>

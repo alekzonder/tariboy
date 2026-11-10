@@ -272,7 +272,7 @@ export function TerminalsEmptyState({
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
         <p>Host or agent unavailable.</p>
-        <p className="text-xs">
+        <p className="text-ui">
           The route was kept unchanged so it cannot silently target the local daemon.
         </p>
       </div>
@@ -321,8 +321,8 @@ function TeamWorkspace({
     <div className="space-y-4 p-3">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">{name}</h1>
-          <p className="text-sm text-muted-foreground">Team on {hostLabel}</p>
+          <h1 className="text-heading font-semibold">{name}</h1>
+          <p className="text-body text-muted-foreground">Team on {hostLabel}</p>
         </div>
         <Button variant="outline" onClick={onManage}>
           Manage team
@@ -335,10 +335,10 @@ function TeamWorkspace({
             type="button"
             aria-label={`Open team member ${member.name}`}
             onClick={() => onOpen(member.name)}
-            className="rounded-lg border p-3 text-left hover:bg-accent"
+            className="rounded-card border p-3 text-left hover:bg-accent"
           >
             <div className="font-medium">{member.name}</div>
-            <div className="text-xs text-muted-foreground">
+            <div className="text-ui text-muted-foreground">
               {member.image} · {member.state}
               {member.interactive === false ? " · non-tty" : ""}
             </div>
@@ -346,7 +346,7 @@ function TeamWorkspace({
         ))}
       </div>
       {members.length === 0 && (
-        <p className="text-sm text-muted-foreground">No members are currently assigned.</p>
+        <p className="text-body text-muted-foreground">No members are currently assigned.</p>
       )}
     </div>
   );

@@ -15,7 +15,7 @@ function goalRow(goal: boolean, selected: boolean) {
     // The tint gives way to the selection; the left stripe stays.
     className: cn(
       "shadow-[inset_2px_0_0_var(--status-running)]",
-      !selected && "bg-status-running/8 hover:bg-status-running/12",
+      !selected && "bg-status-running-soft hover:bg-status-running-soft",
     ),
   };
 }

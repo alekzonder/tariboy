@@ -19,14 +19,14 @@ function UserPromptEditor({ name }: { name: string }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">User prompt</CardTitle>
+        <CardTitle className="text-title">User prompt</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         <Textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={6}
-          className="font-mono text-xs"
+          className="font-mono text-ui"
         />
         <div className="flex gap-2">
           <Button
@@ -69,16 +69,16 @@ function PromptPreview({ name }: { name: string }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Prompt preview</CardTitle>
+        <CardTitle className="text-title">Prompt preview</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         {error ? (
-          <p className="text-xs text-muted-foreground">{error}</p>
+          <p className="text-ui text-muted-foreground">{error}</p>
         ) : (
           <>
-            <Textarea value={prompt} readOnly rows={12} className="font-mono text-xs" />
+            <Textarea value={prompt} readOnly rows={12} className="font-mono text-ui" />
             {layers.length > 0 && (
-              <ul className="text-xs text-muted-foreground">
+              <ul className="text-ui text-muted-foreground">
                 {layers.map((layer, index) => {
                   if ("name" in layer) {
                     return (

@@ -54,7 +54,7 @@ export function FolderField({
       <div className="flex flex-wrap items-baseline justify-between gap-x-3">
         <Label htmlFor="create-agent-cwd">Folder</Label>
         {missing && !draft.createCwd && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-ui text-muted-foreground">
             This folder does not exist.{" "}
             <button
               type="button"
@@ -66,7 +66,7 @@ export function FolderField({
           </p>
         )}
         {missing && draft.createCwd && (
-          <p className="text-xs text-muted-foreground">The folder will be created.</p>
+          <p className="text-ui text-muted-foreground">The folder will be created.</p>
         )}
       </div>
       {/* The folder is browsed on the host the agent is created on. */}

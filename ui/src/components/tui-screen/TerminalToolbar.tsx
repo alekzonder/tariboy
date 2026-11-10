@@ -89,7 +89,7 @@ export function TerminalToolbar({
         role="status"
         aria-live="polite"
         className={
-          copyModeRequested ? "flex min-w-0 flex-col text-xs text-muted-foreground" : "sr-only"
+          copyModeRequested ? "flex min-w-0 flex-col text-ui text-muted-foreground" : "sr-only"
         }
       >
         {copyModeRequested && (

@@ -17,13 +17,13 @@ export function AboutNumbers() {
   const id = useId();
   const Chevron = open ? ChevronDown : ChevronRight;
   return (
-    <div className="text-sm">
+    <div className="text-body">
       <button
         type="button"
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 rounded text-muted-foreground hover:text-foreground"
+        className="flex items-center gap-1 rounded-chip text-muted-foreground hover:text-foreground"
       >
         <Chevron aria-hidden="true" className="size-4" />
         About these numbers

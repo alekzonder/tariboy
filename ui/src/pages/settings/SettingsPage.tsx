@@ -40,7 +40,7 @@ export default function SettingsPage({
   const hostsPage = location.pathname === HOSTS;
   const link = ({ isActive }: { isActive: boolean }) =>
     cn(
-      "block rounded px-3 py-1.5 text-sm whitespace-nowrap hover:bg-accent max-lg:shrink-0 lg:py-2",
+      "block rounded-chip px-3 py-1.5 text-body whitespace-nowrap hover:bg-accent max-lg:shrink-0 lg:py-2",
       isActive && "bg-accent font-medium",
     );
   return (
@@ -50,7 +50,7 @@ export default function SettingsPage({
         ref={strip}
         className="w-52 shrink-0 overflow-y-auto border-r p-3 max-lg:scrollbar-none max-lg:flex max-lg:w-auto max-lg:items-center max-lg:gap-2 max-lg:overflow-x-auto max-lg:border-r-0 max-lg:border-b max-lg:py-1.5"
       >
-        <h1 className="mb-3 text-lg font-semibold max-lg:sr-only">Settings</h1>
+        <h1 className="mb-3 text-heading font-semibold max-lg:sr-only">Settings</h1>
         <nav
           aria-label="Settings"
           className="space-y-1 max-lg:flex max-lg:shrink-0 max-lg:gap-1 max-lg:space-y-0"

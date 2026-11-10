@@ -43,7 +43,7 @@ export function GroupWizard({ onCreated }: { onCreated?: () => void }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">New group (wizard)</CardTitle>
+        <CardTitle className="text-title">New group (wizard)</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <GroupWizardGroupSection
@@ -80,9 +80,9 @@ export function GroupWizard({ onCreated }: { onCreated?: () => void }) {
           </Button>
         </div>
 
-        {submit.formErr && <p className="text-sm text-destructive">{submit.formErr}</p>}
+        {submit.formErr && <p className="text-body text-destructive">{submit.formErr}</p>}
         {submit.groupErr && (
-          <p className="text-sm text-destructive">group create failed: {submit.groupErr}</p>
+          <p className="text-body text-destructive">group create failed: {submit.groupErr}</p>
         )}
 
         <div className="flex gap-2">
@@ -96,7 +96,7 @@ export function GroupWizard({ onCreated }: { onCreated?: () => void }) {
           )}
         </div>
         {submit.groupCreated && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-ui text-muted-foreground">
             group <span className="font-mono">{name.trim()}</span> created; agents joined via their
             group field.
           </p>

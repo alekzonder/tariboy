@@ -63,25 +63,25 @@ export default function OperationsPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-4">
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold">Operations log</h2>
-        <p className="text-sm text-muted-foreground">
+        <h2 className="text-heading font-semibold">Operations log</h2>
+        <p className="text-body text-muted-foreground">
           Image and workflow builds run in the background on this host. Open one to read its log.
         </p>
       </div>
       {error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-body text-destructive">
           {error}
         </p>
       )}
       {list === null ? (
-        !error && <p className="text-sm text-muted-foreground">Loading operations…</p>
+        !error && <p className="text-body text-muted-foreground">Loading operations…</p>
       ) : list.operations.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No operations</p>
+        <p className="text-body text-muted-foreground">No operations</p>
       ) : (
         <OperationsTable list={list} />
       )}
       {list !== null && list.total > 0 && (
-        <div className="flex items-center justify-end gap-2 text-sm">
+        <div className="flex items-center justify-end gap-2 text-body">
           <span className="text-muted-foreground">
             Page {page} of {pages}
           </span>
@@ -111,9 +111,9 @@ function OperationsTable({ list }: { list: OperationList }) {
   // The page host stays with the operation it opens.
   const { search } = useLocation();
   return (
-    <div className="overflow-x-auto rounded border">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+    <div className="overflow-x-auto rounded-chip border">
+      <table className="w-full text-body">
+        <thead className="bg-subtle text-left text-ui text-muted-foreground">
           <tr>
             {["Kind", "Title", "Status", "Started", "Duration"].map((label) => (
               <th key={label} className={CELL}>
@@ -137,10 +137,10 @@ function OperationsTable({ list }: { list: OperationList }) {
               <td className={CELL}>
                 <StatusPill tone={operationTone(operation.status)}>{operation.status}</StatusPill>
               </td>
-              <td className={`${CELL} text-xs whitespace-nowrap text-muted-foreground`}>
+              <td className={`${CELL} text-ui whitespace-nowrap text-muted-foreground`}>
                 {formatTime(operation.created_at)}
               </td>
-              <td className={`${CELL} text-xs whitespace-nowrap`}>
+              <td className={`${CELL} text-ui whitespace-nowrap`}>
                 {formatDuration(operation.created_at, operation.finished_at)}
               </td>
             </tr>

@@ -31,7 +31,7 @@ export function ImageDetailBody({
     <div className="flex-1 overflow-auto p-4">
       {state === "error" && (
         <div className="space-y-2">
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="text-body text-destructive">
             {error}
           </p>
           <Button variant="outline" onClick={onRefresh}>
@@ -58,7 +58,7 @@ export function ImageDetailBody({
         </ApiProvider>
       )}
       {state === "loaded" && footer && <div className="mt-6">{footer}</div>}
-      {state === "loading" && <p className="text-sm text-muted-foreground">Loading…</p>}
+      {state === "loading" && <p className="text-body text-muted-foreground">Loading…</p>}
     </div>
   );
 }

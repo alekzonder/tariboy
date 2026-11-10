@@ -38,7 +38,7 @@ export function AgentsTable({
   };
   return (
     <div className="space-y-2">
-      <p className="text-xs text-muted-foreground">
+      <p className="text-ui text-muted-foreground">
         A task with several agents counts for each of them. Total counts it once.
       </p>
       <SortBySelect columns={[head, ...COLUMNS]} sort={sort} onChange={setSort} />

@@ -41,7 +41,7 @@ export function TreeRow({
     <div>
       <div
         className={cn(
-          "group flex items-center gap-1 pr-1 text-sm hover:bg-accent",
+          "group flex items-center gap-1 pr-1 text-body hover:bg-accent",
           selected === path && "bg-accent font-medium",
         )}
       >
@@ -78,7 +78,7 @@ export function TreeRow({
             type="button"
             aria-label={`Rename ${entry.name}`}
             onClick={() => onRename(entry, path)}
-            className="shrink-0 rounded p-0.5 opacity-0 hover:bg-background focus-visible:opacity-100 group-hover:opacity-100"
+            className="shrink-0 rounded-chip p-0.5 opacity-0 hover:bg-background focus-visible:opacity-100 group-hover:opacity-100"
           >
             <Pencil className="size-3.5" />
           </button>
@@ -88,7 +88,7 @@ export function TreeRow({
             type="button"
             aria-label={`Delete ${entry.name}`}
             onClick={() => onDelete(entry, path)}
-            className="shrink-0 rounded p-0.5 opacity-0 hover:bg-background focus-visible:opacity-100 group-hover:opacity-100"
+            className="shrink-0 rounded-chip p-0.5 opacity-0 hover:bg-background focus-visible:opacity-100 group-hover:opacity-100"
           >
             <Trash2 className="size-3.5" />
           </button>
@@ -99,7 +99,7 @@ export function TreeRow({
           {dir.entries.length === 0 ? (
             <div
               style={{ paddingLeft: `${(depth + 1) * 0.75 + 0.5}rem` }}
-              className="py-0.5 text-xs text-muted-foreground"
+              className="py-0.5 text-ui text-muted-foreground"
             >
               empty
             </div>

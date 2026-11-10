@@ -7,7 +7,7 @@ function ChoiceDetail({ choice }: { choice: ImageChoice }) {
   const detail = choice.waiting
     ? choice.waiting
     : [choice.version, choice.source && `from ${choice.source}`].filter(Boolean).join(" · ");
-  return detail ? <span className="text-xs text-muted-foreground">{detail}</span> : null;
+  return detail ? <span className="text-ui text-muted-foreground">{detail}</span> : null;
 }
 
 /** One row per image name; typing filters by name. The value stays `name:tag`.
@@ -64,10 +64,10 @@ export function ImageSelect({
       {open && (
         <div
           role="listbox"
-          className="absolute top-full left-0 z-50 mt-1 max-h-64 w-full overflow-auto rounded-lg border bg-popover p-1 shadow-md"
+          className="absolute top-full left-0 z-overlay mt-1 max-h-64 w-full overflow-auto rounded-card border bg-popover p-1 shadow-lift"
         >
           {filtered.length === 0 && (
-            <div className="px-2 py-2 text-sm text-muted-foreground">No images</div>
+            <div className="px-2 py-2 text-body text-muted-foreground">No images</div>
           )}
           {filtered.map((choice) => (
             <button
@@ -81,7 +81,7 @@ export function ImageSelect({
                 onChange(choice.ref);
                 setOpen(false);
               }}
-              className="flex w-full items-baseline justify-between gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent"
+              className="flex w-full items-baseline justify-between gap-2 rounded-chip px-2 py-1.5 text-left text-body hover:bg-accent"
             >
               <span>{choice.label}</span>
               <ChoiceDetail choice={choice} />

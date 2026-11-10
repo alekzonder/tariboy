@@ -25,24 +25,24 @@ type Story = StoryObj;
 // and the images table row (BuiltImages) are where AlertDialog is actually
 // raised from, so the dimmed backdrop reads as a real screen.
 const AgentToolbar = ({ children }: { children?: ReactNode }) => (
-  <div className="grid w-[600px] gap-3">
+  <div className="grid w-150 gap-3">
     <div className="flex items-center gap-2">
-      <span className="text-sm font-medium">builder</span>
+      <span className="text-body font-medium">builder</span>
       <Badge variant="secondary">running</Badge>
-      <span className="text-xs text-muted-foreground">worker:v2 · This daemon (local)</span>
+      <span className="text-ui text-muted-foreground">worker:v2 · This daemon (local)</span>
       <span className="ml-auto flex gap-2">{children}</span>
     </div>
-    <div className="h-[150px] rounded-lg border border-border bg-muted" />
+    <div className="h-37.5 rounded-card border border-border bg-muted" />
   </div>
 );
 
 const ImagesTable = ({ children }: { children?: ReactNode }) => (
-  <div className="grid w-[600px] gap-2">
-    <div className="text-xs text-muted-foreground">Built images · This daemon (local)</div>
+  <div className="grid w-150 gap-2">
+    <div className="text-ui text-muted-foreground">Built images · This daemon (local)</div>
     {["worker:v2", "worker:v1", "bare:latest"].map((ref, i) => (
       <div
         key={ref}
-        className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-[13px]"
+        className="flex items-center gap-2 rounded-card border border-border px-2.5 py-2 text-body"
       >
         <span className="font-mono">{ref}</span>
         <span className="ml-auto flex gap-2">{i === 0 ? children : null}</span>

@@ -11,7 +11,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-const mono = "font-mono text-xs break-all";
+const mono = "font-mono text-ui break-all";
 
 /** What a finished build produced: one line per image, or the workflow image. */
 function OperationResult({ operation }: { operation: Operation }) {
@@ -57,7 +57,7 @@ export function OperationDetails({ operation }: { operation: Operation }) {
   const params = Object.entries(operation.params ?? {});
   const failed = operation.error_code || operation.error_message;
   return (
-    <dl className="grid grid-cols-[9rem_1fr] gap-x-4 gap-y-2 rounded border p-4 text-sm max-sm:grid-cols-1">
+    <dl className="grid grid-cols-[9rem_1fr] gap-x-4 gap-y-2 rounded-chip border p-4 text-body max-sm:grid-cols-1">
       <Field label="Kind">{kindLabel(operation.kind)}</Field>
       <Field label="Initiator">{operation.initiator || "—"}</Field>
       <Field label="Started">{formatTime(operation.created_at)}</Field>

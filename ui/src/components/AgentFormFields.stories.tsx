@@ -72,7 +72,7 @@ export const Invalid: Story = {
     <>
       <Label htmlFor="image-invalid">image *</Label>
       <ImageCombobox images={images} onChange={onChange} id="image-invalid" value="" invalid />
-      <p className="m-0 text-xs text-destructive">image is required</p>
+      <p className="m-0 text-ui text-destructive">image is required</p>
     </>
   ),
 };
@@ -83,7 +83,7 @@ function FocusOnMount({ children }: { children: React.ReactNode }) {
     ref.current?.querySelector("input")?.focus({ preventScroll: true });
   }, []);
   return (
-    <div ref={ref} className="flex flex-col gap-1.5 pb-[170px]">
+    <div ref={ref} className="flex flex-col gap-1.5 pb-42.5">
       {children}
     </div>
   );
@@ -111,7 +111,7 @@ export const OpenList: Story = {
 export const InGroupWizardRow: Story = {
   decorators: [
     (Story) => (
-      <div className="grid w-[460px] grid-cols-2 items-end gap-3">
+      <div className="grid w-115 grid-cols-2 items-end gap-3">
         <Story />
       </div>
     ),
@@ -120,7 +120,7 @@ export const InGroupWizardRow: Story = {
     <>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="wiz-name">name</Label>
-        <div className="flex h-8 items-center rounded-md border border-input px-3 font-mono text-[13px]">
+        <div className="flex h-8 items-center rounded-control border border-input px-3 font-mono text-body">
           packager
         </div>
       </div>

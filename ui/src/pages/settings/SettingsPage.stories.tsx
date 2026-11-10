@@ -11,7 +11,7 @@ import { AgentDefaultsSettings, MaintenanceSettings } from "./settingsSections";
 // a catch-all route; the layout is mounted at /settings like in the app. There
 // is no daemon behind Storybook, so the bodies show their own load failures.
 const withFrame: Decorator = (Story) => (
-  <div className="h-[620px] overflow-hidden rounded-md border border-border bg-background">
+  <div className="h-155 overflow-hidden rounded-control border border-border bg-background">
     <Story />
   </div>
 );

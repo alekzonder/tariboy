@@ -48,9 +48,9 @@ function Change({ row }: { row: CompareRow }) {
 export function CompareTable({ rows, a, b }: { rows: CompareRow[]; a: string; b: string }) {
   return (
     <>
-      <div className="hidden overflow-x-auto rounded border sm:block">
-        <table aria-label="Version comparison" className="w-full text-sm">
-          <thead className="bg-muted text-left text-xs text-muted-foreground">
+      <div className="hidden overflow-x-auto rounded-chip border sm:block">
+        <table aria-label="Version comparison" className="w-full text-body">
+          <thead className="bg-muted text-left text-ui text-muted-foreground">
             <tr>
               <th scope="col" className="px-3 py-2 font-normal">
                 Metric
@@ -90,7 +90,7 @@ export function CompareTable({ rows, a, b }: { rows: CompareRow[]; a: string; b:
       </div>
       <ul aria-label="Version comparison list" className="space-y-2 sm:hidden">
         {rows.map((row) => (
-          <li key={row.id} className="rounded border p-2 text-sm">
+          <li key={row.id} className="rounded-chip border p-2 text-body">
             <div className="font-medium">{row.label}</div>
             <div className="text-muted-foreground">
               A {versionLabel(a)}: <Value row={row} side="a" /> · B {versionLabel(b)}:{" "}

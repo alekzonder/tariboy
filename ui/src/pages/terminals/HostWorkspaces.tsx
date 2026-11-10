@@ -66,13 +66,13 @@ export function WorkspaceSwitcher({
       <DropdownMenuContent
         align="start"
         sideOffset={5}
-        className="w-65 rounded-card p-1.25 shadow-[var(--lift)] ring-0"
+        className="w-65 rounded-card p-1.25 shadow-lift ring-0"
         onCloseAutoFocus={(event) => {
           if (managing.current) event.preventDefault();
           managing.current = false;
         }}
       >
-        <DropdownMenuLabel className="px-2.25 pt-1.5 pb-1 text-caption font-semibold tracking-[.06em] uppercase">
+        <DropdownMenuLabel className="px-2.25 pt-1.5 pb-1 text-caption font-semibold tracking-wider uppercase">
           Workspaces
         </DropdownMenuLabel>
         {state.workspaces.map((workspace) => (
@@ -87,7 +87,7 @@ export function WorkspaceSwitcher({
             }}
           >
             <span className="min-w-0 flex-1 truncate font-medium">{workspace.name}</span>
-            <span className="text-meta text-muted-foreground tabular-nums">
+            <span className="text-caption text-muted-foreground tabular-nums">
               {hostCount(hostsIn(state, hosts, workspace.id).length)}
             </span>
             {workspace.id === state.active ? (
@@ -159,7 +159,7 @@ function ManagerBody({
 
   return (
     <DialogContent
-      className="flex h-[min(500px,calc(100vh-32px))] w-[min(720px,calc(100vw-32px))] max-w-none flex-col gap-0 overflow-hidden rounded-xl p-0 shadow-[var(--lift)] ring-0 sm:max-w-none"
+      className="flex h-[min(500px,calc(100vh-32px))] w-[min(720px,calc(100vw-32px))] max-w-none flex-col gap-0 overflow-hidden rounded-panel p-0 shadow-lift ring-0 sm:max-w-none"
       onOpenAutoFocus={(event) => {
         if (!focusNew) return;
         event.preventDefault();
@@ -167,7 +167,7 @@ function ManagerBody({
       }}
     >
       <div className="flex shrink-0 items-center gap-2 border-b py-3 pr-12 pl-4.5">
-        <DialogTitle className="text-body-lg font-semibold">Manage workspaces</DialogTitle>
+        <DialogTitle className="text-body font-semibold">Manage workspaces</DialogTitle>
         <DialogDescription className="text-ui text-muted-foreground">
           New hosts join the current workspace.
         </DialogDescription>
@@ -183,11 +183,11 @@ function ManagerBody({
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="grid min-h-0 flex-1 content-start gap-4 overflow-auto px-4.5 py-4">
             <div className="grid gap-1.5">
-              <span className="text-meta font-medium text-muted-foreground">Name</span>
+              <span className="text-caption font-medium text-muted-foreground">Name</span>
               {isDefault ? (
                 <div className="flex h-7.5 items-center gap-2">
                   <span className="text-body font-medium">Default</span>
-                  <span className="inline-flex h-4.5 items-center rounded-chip bg-primary/12 px-1.5 text-tiny font-medium text-primary">
+                  <span className="inline-flex h-4.5 items-center rounded-chip bg-primary-soft px-1.5 text-caption font-medium text-primary">
                     built-in
                   </span>
                   <span className="text-ui text-muted-foreground">
@@ -199,9 +199,9 @@ function ManagerBody({
               )}
             </div>
             <div className="grid gap-1">
-              <span className="text-meta font-medium text-muted-foreground">Hosts</span>
+              <span className="text-caption font-medium text-muted-foreground">Hosts</span>
               {members.length === 0 && (
-                <div className="rounded-lg border border-dashed p-3.5 text-body-sm text-muted-foreground">
+                <div className="rounded-card border border-dashed p-3.5 text-body text-muted-foreground">
                   No hosts yet. Open another workspace and add a host here.
                 </div>
               )}
@@ -247,7 +247,7 @@ function NameInput({ id, name }: { id: string; name: string }) {
         renameWorkspace(id, event.target.value);
       }}
       onBlur={() => setDraft(name)}
-      className="h-7.5 max-w-80 rounded-md bg-card text-body"
+      className="h-7.5 max-w-80 rounded-control bg-card text-body"
     />
   );
 }

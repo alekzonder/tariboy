@@ -42,7 +42,7 @@ function RemoveStoreDialog({ name, actions }: Omit<CardParts, "data">) {
           </AlertDialogDescription>
         </AlertDialogHeader>
         {removeError && (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="text-body text-destructive">
             {removeError}
           </p>
         )}
@@ -110,7 +110,7 @@ function CardHeader({ name, basePath, linked, source, data, actions }: CardParts
           )}
         </h2>
         {shownSource && (
-          <p className="truncate text-xs text-muted-foreground" title={detail?.path}>
+          <p className="truncate text-ui text-muted-foreground" title={detail?.path}>
             {shownSource}
             {detail && ` · ${images} ${images === 1 ? "image" : "images"}`}
           </p>
@@ -118,7 +118,7 @@ function CardHeader({ name, basePath, linked, source, data, actions }: CardParts
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {actions.busy === "refresh" && (
-          <span className="text-xs text-muted-foreground">Refreshing…</span>
+          <span className="text-ui text-muted-foreground">Refreshing…</span>
         )}
         <StoreMenu name={name} data={data} actions={actions} />
       </div>
@@ -130,15 +130,15 @@ function AutomaticBuilds({ data, actions }: Omit<CardParts, "name">) {
   const { busy } = actions;
   const images = data.detail?.images ?? [];
   return (
-    <details className="rounded border px-3 py-2">
-      <summary className="cursor-pointer text-sm font-medium">Automatic builds</summary>
+    <details className="rounded-chip border px-3 py-2">
+      <summary className="cursor-pointer text-body font-medium">Automatic builds</summary>
       <div className="mt-3 space-y-3">
-        <p className="text-xs text-muted-foreground">
+        <p className="text-ui text-muted-foreground">
           Automatic builds refresh this Store every interval in minutes and rebuild the checked
           images that need an update, publishing image_version and latest. An interval of 0 disables
           them.
         </p>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 text-body">
           Interval, minutes
           <Input
             aria-label="Automatic build interval"
@@ -152,7 +152,7 @@ function AutomaticBuilds({ data, actions }: Omit<CardParts, "name">) {
             onChange={(event) => data.setAutoInterval(event.target.value)}
           />
         </label>
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-body">
           {images.map((image) => (
             <label key={image.name} className="flex items-center gap-1.5 font-mono">
               <input
@@ -204,10 +204,10 @@ export default function StoreCard(props: CardProps) {
   const actions = useStoreActions(name, basePath, data, onRemoved);
   const { detail } = data;
   return (
-    <section aria-label={`Store ${name}`} className="space-y-3 rounded border p-4">
+    <section aria-label={`Store ${name}`} className="space-y-3 rounded-chip border p-4">
       <CardHeader {...props} data={data} actions={actions} />
       {data.loading && (
-        <p role="status" className="text-sm text-muted-foreground">
+        <p role="status" className="text-body text-muted-foreground">
           Loading Store…
         </p>
       )}
@@ -222,7 +222,7 @@ export default function StoreCard(props: CardProps) {
           />
           {(detail.workflows?.length ?? 0) > 0 && (
             <div className="space-y-2">
-              <h3 className="text-sm font-medium">Workflows</h3>
+              <h3 className="text-body font-medium">Workflows</h3>
               <StoreWorkflowsTable
                 workflows={detail.workflows}
                 workflowImages={data.workflowImages}
@@ -235,12 +235,12 @@ export default function StoreCard(props: CardProps) {
         </>
       )}
       {data.error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-body text-destructive">
           {data.error}
         </p>
       )}
       {actions.status && (
-        <p role="status" className="text-sm text-muted-foreground">
+        <p role="status" className="text-body text-muted-foreground">
           {actions.status}
         </p>
       )}

@@ -8,7 +8,7 @@ import { MarkdownEditor, MarkdownModeSegment, type MarkdownMode } from "./TaskMa
 import { SelectField } from "./TaskDetailControls";
 import { useTaskBudget } from "@/hooks/useTaskBudget";
 import { fmtMoney } from "@/lib/metricsFormat";
-import { COUNT, FIELD, FIELD_MONO, LABEL, QUIET_ACTION } from "./panelStyles";
+import { COUNT, FIELD, FIELD_MONO, LABEL, QUIET_ACTION } from "@/components/ui/recipes";
 import WorkflowAssignee from "./WorkflowAssignee";
 import type { TaskDetailProps } from "./TaskDetailTypes";
 import type { useTaskDetailDraft } from "./useTaskDetailDraft";
@@ -194,7 +194,7 @@ function TaskBudgetField({
       {budget && (
         <span
           id={spentId}
-          className={cn(COUNT, budget.exhausted && "text-status-failed opacity-100")}
+          className={cn(COUNT, budget.exhausted && "text-destructive opacity-100")}
         >
           Spent {fmtMoney(budget.spent_usd)}
           {budget.budget_usd > 0 && ` of ${fmtMoney(budget.budget_usd)}`}

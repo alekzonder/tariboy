@@ -40,7 +40,7 @@ const MESSAGES = [
 
 export const PluginLogs: Story = {
   render: () => (
-    <ScrollArea className="h-[180px] w-[440px] rounded border bg-muted/30 p-2">
+    <ScrollArea className="h-45 w-110 rounded-chip border bg-subtle p-2">
       <pre className="m-0 font-mono text-xs/[18px] whitespace-pre-wrap">{LOG_LINES.join("\n")}</pre>
     </ScrollArea>
   ),
@@ -48,7 +48,7 @@ export const PluginLogs: Story = {
 
 export const BuiltImageList: Story = {
   render: () => (
-    <ScrollArea className="h-[180px] w-[380px] rounded border">
+    <ScrollArea className="h-45 w-95 rounded-chip border">
       <div className="grid">
         {IMAGES.map((image) => (
           <div
@@ -56,8 +56,8 @@ export const BuiltImageList: Story = {
             className="flex items-center justify-between gap-3 border-b border-border px-3 py-2.5"
           >
             <div className="grid min-w-0 gap-0.5">
-              <span className="font-mono text-[13px]">{image.ref}</span>
-              <span className="text-xs text-muted-foreground">Built {image.built}</span>
+              <span className="font-mono text-body">{image.ref}</span>
+              <span className="text-ui text-muted-foreground">Built {image.built}</span>
             </div>
             <Badge variant={image.state === "Active" ? "default" : "secondary"}>
               {image.state}
@@ -71,11 +71,11 @@ export const BuiltImageList: Story = {
 
 export const ChannelTranscript: Story = {
   render: () => (
-    <ScrollArea className="h-[180px] w-[400px] rounded border bg-muted/30 p-2">
-      <div className="grid gap-2.5 text-[13px]">
+    <ScrollArea className="h-45 w-100 rounded-chip border bg-subtle p-2">
+      <div className="grid gap-2.5 text-body">
         {MESSAGES.map(([who, text], i) => (
           <div key={i} className="grid gap-0.5">
-            <span className="font-mono text-xs text-muted-foreground">{who}</span>
+            <span className="font-mono text-ui text-muted-foreground">{who}</span>
             <span>{text}</span>
           </div>
         ))}

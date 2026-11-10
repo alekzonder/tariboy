@@ -35,7 +35,7 @@ function ThreadLine({ id, as }: { id: string; as: string }) {
   });
   const subject = parent.data?.letter.subject;
   return (
-    <p className="text-meta text-muted-foreground">
+    <p className="text-caption text-muted-foreground">
       In reply to {subject ? `“${subject}”` : "an earlier letter"}
     </p>
   );
@@ -75,7 +75,7 @@ function DeliveryField({ letter }: { letter: Letter }) {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex gap-2 text-meta">
+    <div className="flex gap-2 text-caption">
       <dt className="w-16 shrink-0 text-muted-foreground">{label}</dt>
       <dd className="min-w-0 break-words">{children}</dd>
     </div>

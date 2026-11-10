@@ -30,7 +30,7 @@ export function HostScopeSelect({ hosts, hostId }: { hosts: HostAgents[]; hostId
       <SelectTrigger
         aria-label="Host"
         size="sm"
-        className="w-auto max-w-48 shrink-0 gap-1.5 text-body-sm"
+        className="w-auto max-w-48 shrink-0 gap-1.5 text-body"
       >
         <SelectValue />
       </SelectTrigger>

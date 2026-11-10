@@ -37,11 +37,11 @@ describe("AuditRow", () => {
       />,
     );
     expect(screen.getByRole("button").className).toContain("font-semibold");
-    expect(screen.getByRole("button").className).toContain("bg-muted/60");
+    expect(screen.getByRole("button").className).toContain("bg-subtle");
     rerender(
       <AuditRow row={eventRow(ev({ kind: "harness_output" }))} open={false} onToggle={() => {}} />,
     );
-    expect(screen.getByRole("button").className).not.toContain("bg-muted/60");
+    expect(screen.getByRole("button").className).not.toContain("bg-subtle");
   });
 
   it("shows pretty JSON only when open and toggles with the row key", async () => {

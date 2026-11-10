@@ -47,7 +47,7 @@ function versionColumn(
               to={rowCompare(version)}
               aria-label="Compare with another version"
               title="Compare with another version"
-              className="rounded px-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="rounded-chip px-1 text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               <span aria-hidden="true">⇄</span>
             </Link>
@@ -81,7 +81,7 @@ export function VersionGroups({
   return (
     <div className="space-y-4">
       {kind === "workflow" && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-ui text-muted-foreground">
           A task counts for a version only when all its visits used that version.
         </p>
       )}
@@ -91,7 +91,7 @@ export function VersionGroups({
         onChange={setSort}
       />
       {names.length === 0 && (
-        <p className="rounded border px-3 py-4 text-center text-sm text-muted-foreground">
+        <p className="rounded-chip border px-3 py-4 text-center text-body text-muted-foreground">
           No {plural} in this period.
         </p>
       )}
@@ -104,13 +104,13 @@ export function VersionGroups({
         return (
           <section key={name} className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 title={groupHint(kind, name)} className="text-sm font-medium">
+              <h3 title={groupHint(kind, name)} className="text-body font-medium">
                 {label}
               </h3>
               {comparable && versions.length > 1 && (
                 <Link
                   to={compareHref(name, pair.a, pair.b)}
-                  className="text-xs text-primary hover:underline"
+                  className="text-ui text-primary hover:underline"
                 >
                   Compare versions
                 </Link>
