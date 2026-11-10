@@ -1,3 +1,20 @@
+## [0.112.0] - 2026-11-10
+
+### Added
+
+- The titlebar shows the workspace switcher after the product name when there are two or more workspaces. Its menu lists each workspace with its host count, then New workspace… and Manage workspaces…. Below 640 CSS pixels the titlebar shows only the menu icon. Settings → Hosts keeps only Manage workspaces….
+
+### Changed
+
+- One iteration works one task. Before the runner builds the prompt, it selects the iteration task: the Goal when the Goal has open letters or no letter is open, else the task of the first open letter. The task of a letter is `task_key` in its `data`. A letter without `task_key` is about no task, also when its subject names a key. The prompt shows only the letters of the iteration task. Letters of other tasks stay open, keep their attempts and get an iteration of their own. The AI proxy attributes the iteration to the iteration task and its root. A letter task that the agent may not take as a Goal is read with the rights of the customer.
+- Tasks, Inbox, Activity, Metrics, Library and Settings take their host from the current workspace. Without `?host=`, a page shows the remembered host when the workspace holds it, else the first host of the workspace in sidebar order. Home, Tasks and Inbox of an empty workspace show its empty state. A link with `?host=`, such as a desktop notification, still opens its host.
+
+### Fixed
+
+- A workspace pick did not change the open page, so Tasks, Inbox and the other one-host pages kept a host of the previous workspace. Now, when the page's host is outside the picked workspace, the page drops its query and shows a host of the workspace. The page of an agent or a team outside the workspace closes, and Home opens.
+
+[0.112.0]: https://github.com/alekzonder/tariboy/compare/v0.111.0...v0.112.0
+
 ## [0.111.0] - 2026-11-07
 
 ### Added
