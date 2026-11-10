@@ -1,6 +1,8 @@
+Implemented in #368
+
 # Handoff: TaskDrawer
 
-Реализовано в этой же ветке (`designer/task-drawer-ux`), pull request ещё не открыт. Отличия реализации от макета — в разделе «Implementation notes» в конце.
+Отличия реализации от макета — в разделе «Implementation notes» в конце.
 
 2026-11-10 · без задачи TARIDESIGN (запрос в чате) · `mockups-taskdrawer--agent-works`, `mockups-taskdrawer--blocks-closed`, `mockups-taskdrawer--blocks-open`, `mockups-taskdrawer--needs-you`, `mockups-taskdrawer--paused`, `mockups-taskdrawer--check-rejected`, `mockups-taskdrawer--step-open`, `mockups-taskdrawer--editing-description`, `mockups-taskdrawer--plain-task`, `mockups-taskdrawer--width-360`, `mockups-taskdrawer--width-390`, `mockups-taskdrawer--width-820`, `mockups-taskdrawer--width-1024`, `mockups-taskdrawer--width-1180`
 
