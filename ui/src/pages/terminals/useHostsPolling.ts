@@ -1,11 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
 import { usePolling } from "@/hooks/usePolling";
 import { fetchAllAgents, type HostAgents } from "@/lib/aggregate";
-import { routeHost, withLastSuccessful } from "./terminalsHosts";
+import { withLastSuccessful } from "./terminalsHosts";
 
 /** Every host's agents, polled, with the last good snapshot of each host kept
  *  so a host that stops answering does not empty its sidebar section. */
-export function useHostsPolling(hostId: string | undefined) {
+export function useHostsPolling() {
   const [lastSuccessfulHostsById, setLastSuccessfulHostsById] = useState<Map<string, HostAgents>>(
     () => new Map(),
   );
@@ -25,10 +25,6 @@ export function useHostsPolling(hostId: string | undefined) {
   const [agentStatesLive, setAgentStatesLive] = useState(false);
   const { data, refresh } = usePolling(fetchHosts, agentStatesLive ? 15000 : 3000);
   const hosts = useMemo(() => data ?? [], [data]);
-  const { liveSelectedHost, selectedHost } = useMemo(
-    () => routeHost(hostId, hosts, lastSuccessfulHostsById),
-    [hostId, hosts, lastSuccessfulHostsById],
-  );
   const sidebarHosts = useMemo(
     () => withLastSuccessful(hosts, lastSuccessfulHostsById),
     [hosts, lastSuccessfulHostsById],
@@ -38,8 +34,7 @@ export function useHostsPolling(hostId: string | undefined) {
     refresh,
     agentStatesLive,
     setAgentStatesLive,
-    liveSelectedHost,
-    selectedHost,
+    lastSuccessfulHostsById,
     sidebarHosts,
   };
 }

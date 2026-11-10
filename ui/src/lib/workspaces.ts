@@ -132,6 +132,18 @@ export function hostsIn<T extends { id: string }>(
   return hosts.filter((host) => inWorkspace(value, host.id, id));
 }
 
+/** The host a page without `?host=` shows: the remembered host while the
+ *  current workspace holds it, otherwise the first of `hostIds` in the
+ *  workspace. An empty workspace has none. */
+export function workspaceScopeHost(
+  value: WorkspacesState,
+  hostIds: string[],
+  rememberedId: string,
+): string | undefined {
+  if (inWorkspace(value, rememberedId, value.active)) return rememberedId;
+  return hostIds.find((id) => inWorkspace(value, id, value.active));
+}
+
 /** Returns the new workspace id, or undefined for a blank name. */
 export function createWorkspace(name: string): string | undefined {
   const trimmed = name.trim();

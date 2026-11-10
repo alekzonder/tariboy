@@ -4,9 +4,7 @@ import { HostStatus } from "@/components/HostStatus";
 import { hostUpdateAvailable, removeDaemon, type DaemonMeta } from "@/lib/daemons";
 import { hostConnect, hostUpdate } from "@/lib/desktop";
 import { TOUR_ANCHORS } from "@/lib/onboarding/tour";
-import { useWorkspaces } from "@/lib/workspaces";
 import { useHostsContext } from "@/pages/settings/hostsContext";
-import { WorkspaceSwitcher } from "@/pages/terminals/HostWorkspaces";
 import { ServerDialog } from "@/pages/terminals/ServerDialog";
 import { Button } from "@/components/ui/button";
 
@@ -136,22 +134,14 @@ export default function DaemonsPage() {
   );
 }
 
-/** The host workspaces: a selector only when two or more exist, and the
- *  manager that creates, renames and fills them. */
+/** The manager that creates, renames and fills the host workspaces. The
+ *  titlebar holds the selector. */
 function HostWorkspacesBar() {
   const context = useHostsContext();
-  const workspaces = useWorkspaces();
   if (!context) return null;
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="text-sm text-muted-foreground">Host workspaces</span>
-      {workspaces.workspaces.length > 1 && (
-        <WorkspaceSwitcher
-          hosts={context.workspaceHosts}
-          onSelect={() => undefined}
-          onManage={context.onManageWorkspaces}
-        />
-      )}
       <Button variant="outline" size="sm" onClick={() => context.onManageWorkspaces(false)}>
         Manage workspaces…
       </Button>

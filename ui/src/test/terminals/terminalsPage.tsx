@@ -110,17 +110,24 @@ export function setupTerminalsPage({
   agentGetOn.mockResolvedValue(cloneProjection);
 }
 
+const titlebarSlots: HTMLElement[] = [];
+
 export function cleanupTerminalsPage() {
+  for (const slot of titlebarSlots.splice(0)) slot.remove();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 }
 
 export function renderAt(path: string, attention: ReadonlyMap<string, number> = new Map()) {
-  // Stands in for the App titlebar slot the workspace switcher portals into.
-  const slot = document.body.appendChild(document.createElement("div"));
+  // Stand in for the App titlebar slots the workspace switcher and the search
+  // portal into.
+  const workspace = document.body.appendChild(document.createElement("div"));
+  workspace.dataset.testid = "titlebar-workspace-slot";
+  const search = document.body.appendChild(document.createElement("div"));
+  titlebarSlots.push(workspace, search);
   return render(
-    <TitlebarSlotContext.Provider value={slot}>
+    <TitlebarSlotContext.Provider value={{ workspace, search }}>
       <DaemonProvider>
         <CustomerQuestionNotificationsContext.Provider
           value={{ attention, refreshHost: async () => {} }}

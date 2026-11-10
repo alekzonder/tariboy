@@ -92,18 +92,15 @@ describe("DaemonsPage host actions", () => {
     expect(screen.queryByRole("button", { name: /Update all/ })).toBeNull();
   });
 
-  it("opens the workspace manager and shows the selector only with two workspaces", async () => {
+  it("opens the workspace manager and has no workspace selector of its own", async () => {
     const onManageWorkspaces = vi.fn();
-    const { unmount } = renderPage({ workspaceHosts: [], onManageWorkspaces });
+    createWorkspace("Lab");
+    renderPage({ onManageWorkspaces });
 
     await userEvent.click(screen.getByRole("button", { name: "Manage workspaces…" }));
     expect(onManageWorkspaces).toHaveBeenCalledWith(false);
+    // The titlebar holds the selector.
     expect(screen.queryByRole("button", { name: /^Workspace:/ })).toBeNull();
-    unmount();
-
-    createWorkspace("Lab");
-    renderPage({ workspaceHosts: [], onManageWorkspaces });
-    expect(screen.getByRole("button", { name: /^Workspace:/ })).toBeInTheDocument();
   });
 
   it("says host, not daemon or server, when it asks to remove a host", async () => {

@@ -1,8 +1,7 @@
-import { lazy, Suspense, useContext, useMemo, useState } from "react";
+import { lazy, Suspense, useContext, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { paramToHost } from "@/lib/terminalsHost";
-import { legacyServerRedirect, useScopeHost } from "@/lib/navRoutes";
+import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { legacyServerRedirect } from "@/lib/navRoutes";
 import { needsYouCounts, type HostNeeds } from "@/lib/needsYou";
 import { ServerDialog } from "./ServerDialog";
 import { useDaemons } from "@/components/daemonContext";
@@ -21,11 +20,13 @@ import {
   agentPath,
   buildCreateHosts,
   buildWorkspaceHosts,
+  routeHost,
   type CreateHost,
 } from "./terminalsHosts";
 import { useHostsPolling } from "./useHostsPolling";
 import { useServerActions, type ServerDialogState } from "./useServerActions";
 import { useSidebarReorder } from "./useSidebarReorder";
+import { useWorkspaceRoute } from "./useWorkspaceRoute";
 
 export type ServerView =
   | "mail"
@@ -46,7 +47,11 @@ export type ServerView =
 const CreateAgentDialog = lazy(() =>
   import("./CreateAgentDialog").then((m) => ({ default: m.CreateAgentDialog })),
 );
-// The manager is opened from the footer menu only.
+// The switcher shows only with two or more workspaces, and the manager opens
+// on request: both stay out of the entry chunk.
+const WorkspaceSwitcher = lazy(() =>
+  import("./HostWorkspaces").then((m) => ({ default: m.WorkspaceSwitcher })),
+);
 const WorkspaceManager = lazy(() =>
   import("./HostWorkspaces").then((m) => ({ default: m.WorkspaceManager })),
 );
@@ -74,8 +79,9 @@ function createFromQuery(searchParams: URLSearchParams): CreateDialogState | nul
 }
 
 /** The console: the sidebar and the content island. `scoped` pages (Tasks,
- *  Inbox, Activity, Library) take their host from `?host=` or the active host. An old
- *  URL first moves to where its page lives now. */
+ *  Inbox, Activity, Library) take their host from `?host=` or the current
+ *  workspace (see useWorkspaceRoute). An old URL first moves to where its page
+ *  lives now. */
 export default function TerminalsPage(props: { serverView?: ServerView; scoped?: boolean }) {
   const location = useLocation();
   const target = legacyServerRedirect(location.pathname, location.search);
@@ -115,21 +121,16 @@ function ConsolePage({
   serverView?: ServerView;
   scoped?: boolean;
 }) {
-  const { hostId: hostParam } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const scopeHost = useScopeHost();
-  const hostId = scoped ? scopeHost : hostParam !== undefined ? paramToHost(hostParam) : undefined;
-  const polling = useHostsPolling(hostId);
-  const { hosts, refresh, liveSelectedHost, selectedHost, sidebarHosts } = polling;
+  const polling = useHostsPolling();
+  const { hosts, refresh, sidebarHosts } = polling;
   const [createFor, setCreateFor] = useState(() => createFromQuery(searchParams));
   const [serverDialog, setServerDialog] = useState<ServerDialogState | null>(null);
   const [query, setQuery] = useState("");
-  const { daemons, activeId } = useDaemons();
+  const { daemons } = useDaemons();
   const workspaces = useWorkspaces();
-  const titlebarSlot = useContext(TitlebarSlotContext);
-  const sidebar = useSharedSidebarState();
   const [workspaceManager, setWorkspaceManager] = useState<WorkspaceManagerState | null>(null);
   const [hostError, setHostError] = useState("");
   const { orderedSidebarHosts, reorderSidebar } = useSidebarReorder(
@@ -137,11 +138,24 @@ function ConsolePage({
     refresh,
     setHostError,
   );
-  const server = useServerActions({ hostId, refresh, setHostError, setServerDialog });
   const createHosts = useMemo(
     () => buildCreateHosts(hosts, daemons, hasLocalDaemon()),
     [daemons, hosts],
   );
+  const workspaceHostIds = useMemo(
+    () => [...orderedSidebarHosts.map((entry) => entry.host.id), ...createHosts.map((h) => h.id)],
+    [createHosts, orderedSidebarHosts],
+  );
+  const { hostId, pageHostId, followWorkspace } = useWorkspaceRoute({
+    scoped,
+    settings: serverView === "settings",
+    workspaceHostIds,
+  });
+  const { liveSelectedHost, selectedHost } = useMemo(
+    () => routeHost(hostId, hosts, polling.lastSuccessfulHostsById),
+    [hostId, hosts, polling.lastSuccessfulHostsById],
+  );
+  const server = useServerActions({ hostId, refresh, setHostError, setServerDialog });
   const workspaceHosts = useMemo(
     () => buildWorkspaceHosts(createHosts, hosts, daemons),
     [createHosts, daemons, hosts],
@@ -156,7 +170,6 @@ function ConsolePage({
     [orderedSidebarHosts],
   );
   const needs = useNeedsYou(needsHosts, polling.agentStatesLive ? 15000 : 3000);
-  const pageHostId = hostId ?? activeId;
 
   const manageWorkspaces = (focusNew: boolean) =>
     setWorkspaceManager({ id: workspaces.active, focusNew });
@@ -206,7 +219,7 @@ function ConsolePage({
                   selectedHost={selectedHost}
                   routeUnavailable={Boolean(liveSelectedHost?.error)}
                   refresh={refresh}
-                  hostsContext={{ workspaceHosts, onManageWorkspaces: manageWorkspaces }}
+                  hostsContext={{ onManageWorkspaces: manageWorkspaces }}
                   onCreate={setCreateFor}
                   fallback={
                     <TerminalsEmptyState
@@ -225,12 +238,12 @@ function ConsolePage({
             </section>
           </div>
         </main>
-        {titlebarSlot &&
-          !sidebar.compact &&
-          createPortal(
-            <GlobalSearch hosts={orderedSidebarHosts} query={query} onQuery={setQuery} />,
-            titlebarSlot,
-          )}
+        <TitlebarControls
+          workspaceHosts={workspaceHosts}
+          onSelectWorkspace={followWorkspace}
+          onManageWorkspaces={manageWorkspaces}
+          search={<GlobalSearch hosts={orderedSidebarHosts} query={query} onQuery={setQuery} />}
+        />
         <TerminalsDialogs
           createFor={createFor}
           setCreateFor={setCreateFor}
@@ -245,6 +258,41 @@ function ConsolePage({
         />
       </div>
     </NeedsYouContext.Provider>
+  );
+}
+
+/** The console's controls in the app titlebar: the workspace switcher with two
+ *  or more workspaces, and the search on a screen that is not compact. */
+function TitlebarControls({
+  workspaceHosts,
+  onSelectWorkspace,
+  onManageWorkspaces,
+  search,
+}: {
+  workspaceHosts: WorkspaceHost[];
+  onSelectWorkspace: (id: string) => void;
+  onManageWorkspaces: (focusNew: boolean) => void;
+  search: ReactNode;
+}) {
+  const titlebar = useContext(TitlebarSlotContext);
+  const sidebar = useSharedSidebarState();
+  const workspaces = useWorkspaces();
+  return (
+    <>
+      {titlebar.workspace &&
+        workspaces.workspaces.length > 1 &&
+        createPortal(
+          <Suspense fallback={null}>
+            <WorkspaceSwitcher
+              hosts={workspaceHosts}
+              onSelect={onSelectWorkspace}
+              onManage={onManageWorkspaces}
+            />
+          </Suspense>,
+          titlebar.workspace,
+        )}
+      {titlebar.search && !sidebar.compact && createPortal(search, titlebar.search)}
+    </>
   );
 }
 

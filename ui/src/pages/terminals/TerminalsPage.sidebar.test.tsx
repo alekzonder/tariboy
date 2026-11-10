@@ -10,7 +10,12 @@ import type {
   ImageSummary,
 } from "@/types";
 import { type Daemon } from "@/lib/daemons";
-import { addHostToWorkspace, createWorkspace, selectWorkspace } from "@/lib/workspaces";
+import {
+  DEFAULT_WORKSPACE_ID,
+  addHostToWorkspace,
+  createWorkspace,
+  selectWorkspace,
+} from "@/lib/workspaces";
 import userEvent from "@testing-library/user-event";
 import { cleanupTerminalsPage, setupTerminalsPage, renderAt } from "@/test/terminals/terminalsPage";
 import { agentRow } from "@/test/fixtures/apiFixtures";
@@ -111,7 +116,7 @@ describe("host workspaces", () => {
     ]);
   });
 
-  it("filters the sidebar to the workspace picked on Settings → Hosts", async () => {
+  it("filters the sidebar to the workspace picked in the titlebar", async () => {
     addHostToWorkspace("d1", createWorkspace("Production")!);
     renderAt("/settings/hosts");
     expect(await screen.findByRole("button", { name: "Open a1" })).toBeInTheDocument();
@@ -125,6 +130,73 @@ describe("host workspaces", () => {
     expect(await screen.findByRole("button", { name: "Open b1" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open a1" })).toBeNull();
     expect(screen.getByTestId("location").textContent).toBe("/settings/hosts");
+  });
+
+  it("offers the workspace switch in the titlebar, not on Settings → Hosts", async () => {
+    addHostToWorkspace("d1", createWorkspace("Production")!);
+    renderAt("/settings/hosts");
+    await screen.findByRole("button", { name: "Open a1" });
+    const titlebar = screen.getByTestId("titlebar-workspace-slot");
+    expect(within(titlebar).getByRole("button", { name: "Workspace: Default" })).toBeVisible();
+    expect(screen.getAllByRole("button", { name: /^Workspace:/ })).toHaveLength(1);
+  });
+
+  it("opens Home when the open agent's host is outside the picked workspace", async () => {
+    addHostToWorkspace("d1", createWorkspace("Production")!);
+    renderAt("/agents/local/a1/console");
+    await screen.findByRole("button", { name: "Open a1" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Workspace: Default" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: /Production/ }));
+
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/"));
+    expect(await screen.findByRole("button", { name: "Open b1" })).toBeInTheDocument();
+  });
+
+  it("keeps the page and drops a host outside the picked workspace from its URL", async () => {
+    addHostToWorkspace("d1", createWorkspace("Production")!);
+    renderAt("/inbox?host=local&letter=l1");
+    await screen.findByRole("button", { name: "Open a1" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Workspace: Default" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: /Production/ }));
+
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/inbox"));
+  });
+
+  it("keeps the URL when the page's host is in the picked workspace too", async () => {
+    const production = createWorkspace("Production")!;
+    addHostToWorkspace("d1", production);
+    // The local daemon is in both workspaces.
+    addHostToWorkspace("", production);
+    addHostToWorkspace("", DEFAULT_WORKSPACE_ID);
+    renderAt("/inbox?host=local&letter=l1");
+    await screen.findByRole("button", { name: "Open a1" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Workspace: Default" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: /Production/ }));
+
+    expect(await screen.findByRole("button", { name: "Open b1" })).toBeInTheDocument();
+    expect(screen.getByTestId("location").textContent).toBe("/inbox?host=local&letter=l1");
+  });
+
+  it("shows a page without ?host= on a host of the current workspace", async () => {
+    vi.mocked(fetchAllAgents).mockResolvedValue([
+      { host: { id: "", label: "This daemon (local)" }, agents: [] },
+      { host: { id: "d1", label: "prod" }, agents: [] },
+      { host: { id: "d2", label: "stage" }, agents: [] },
+    ]);
+    const production = createWorkspace("Production")!;
+    addHostToWorkspace("d1", production);
+    addHostToWorkspace("d2", production);
+    selectWorkspace(production);
+    // The remembered host is the local daemon, which Production does not hold.
+    renderAt("/tasks");
+
+    expect(await screen.findByRole("button", { name: "Open host prod" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 
   it("opens Settings → Hosts from the footer line", async () => {

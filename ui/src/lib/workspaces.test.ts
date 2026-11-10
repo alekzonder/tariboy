@@ -13,6 +13,7 @@ import {
   resetWorkspacesForTest,
   selectWorkspace,
   useWorkspaces,
+  workspaceScopeHost,
 } from "./workspaces";
 
 beforeEach(() => {
@@ -209,5 +210,30 @@ describe("workspaces", () => {
       { id: "w1", name: "Lab", hosts: [] },
     ]);
     expect(result.current.active).toBe("w1");
+  });
+});
+
+describe("workspaceScopeHost", () => {
+  it("keeps the remembered host while the current workspace holds it", () => {
+    const { result } = renderHook(() => useWorkspaces());
+    expect(workspaceScopeHost(result.current, ["", "d1"], "d1")).toBe("d1");
+  });
+
+  it("takes the workspace's first host when the remembered one is outside it", () => {
+    const production = createWorkspace("Production")!;
+    addHostToWorkspace("d1", production);
+    addHostToWorkspace("d2", production);
+    selectWorkspace(production);
+    const { result } = renderHook(() => useWorkspaces());
+    expect(workspaceScopeHost(result.current, ["", "d2", "d1"], "")).toBe("d2");
+
+    act(() => selectWorkspace(DEFAULT_WORKSPACE_ID));
+    expect(workspaceScopeHost(result.current, ["d1", "", "d2"], "d1")).toBe("");
+  });
+
+  it("has no host in an empty workspace", () => {
+    selectWorkspace(createWorkspace("Lab")!);
+    const { result } = renderHook(() => useWorkspaces());
+    expect(workspaceScopeHost(result.current, ["", "d1"], "")).toBeUndefined();
   });
 });

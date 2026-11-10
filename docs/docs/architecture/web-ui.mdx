@@ -182,10 +182,11 @@ validates a value: an unsupported model still fails at the harness.
 
 ## Shell and sidebar
 
-The titlebar has the sidebar toggle, the product name, one search field, the
-**?** (Help) menu, and the theme toggle. It has no settings gear, no
-workspace dropdown, and no view switch. The content island shows only the open
-object's own tabs: there is no server bar above it.
+The titlebar has the sidebar toggle, the product name, the workspace dropdown
+when there are two or more [host workspaces](#host-workspaces), one search
+field, the **?** (Help) menu, and the theme toggle. It has no settings gear and
+no view switch. The content island shows only the open object's own tabs: there
+is no server bar above it.
 
 The search field filters the agent list in the sidebar as you type. It also
 opens a result list with matching agents and matching tasks of every host in
@@ -305,7 +306,10 @@ archive uploads and downloads.
 `/tasks`, `/inbox`, `/activity`, `/metrics`, `/metrics/compare`, the Library
 pages, and the Settings pages other than Hosts show one host. They take an optional
 `?host=<id>` (`local` is the local daemon). Without it, the page shows the
-remembered active host. A `?host=` that names another host selects it through
+remembered active host while the current workspace holds it, otherwise the
+first host of the workspace in sidebar order (`useWorkspaceRoute`). In an
+empty workspace such a page shows the workspace's empty state instead; Settings
+stays open so the workspace can be filled. A `?host=` that names another host selects it through
 the route host boundary, which shows **Connecting to host…** or **Host
 unavailable.** while it does. With two or more hosts in the workspace, the
 page has a host selector, and a pick replaces `?host=`. In Tasks and Library,
@@ -2426,13 +2430,22 @@ key and title. The drawer uses
 
 A workspace is a named, independent list of registered hosts in one app
 window. Settings → Hosts has a **Manage workspaces…** button. When there are
-two or more workspaces, it also has a selector that lists them with a check on
-the current one, followed by **New workspace…** and **Manage workspaces…**.
+two or more workspaces, the titlebar shows the current one after the product
+name; its menu lists them with their host counts and a check on the current
+one, followed by **New workspace…** and **Manage workspaces…**. Below 640 CSS
+pixels the titlebar shows the menu's icon only.
 Choosing a workspace narrows the agent list, the hosts line, the search, the
-Tasks and Inbox counts, and Home to that workspace's hosts, so an empty
-workspace shows no agents. Settings → Hosts stays open after the pick. Home
-of an empty workspace shows `<name> has no agents yet` with a **Manage
-workspaces** button. Polling continues for
+Tasks and Inbox counts, Home, and the host of Tasks, Inbox, Activity, Metrics,
+Library and Settings to that workspace's hosts, so an empty
+workspace shows no agents. The page stays open after the pick. When its
+`?host=` names a host outside the picked workspace, the page drops its query,
+which also named a task or a letter of that host, and shows a host of the
+workspace. An agent or a team on a host outside the picked workspace closes
+and Home opens. Home, Tasks and Inbox
+of an empty workspace show `<name> has no agents yet` with a **Manage
+workspaces** button. A link that names its host, such as a desktop
+notification, still opens that host when the current workspace does not hold
+it. Polling continues for
 every host, so the manager can show each host as ready or offline, and agents
 on hosts outside the current workspace keep running: a workspace filters the
 window, it does not isolate hosts. Agents and tasks live on their daemon, so a

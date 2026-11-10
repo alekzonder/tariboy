@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { fetchAllAgents } from "@/lib/aggregate";
 import App from "./App";
 import { UI_VERSION } from "@/lib/onboarding/version";
+import { createWorkspace, resetWorkspacesForTest } from "@/lib/workspaces";
 import { metricsReport } from "@/test/fixtures/apiFixtures";
 
 vi.mock("@/lib/aggregate", () => ({
@@ -32,6 +33,7 @@ function renderAt(path: string) {
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
+  resetWorkspacesForTest();
   // The tour starts on a first run; only its own test wants it.
   localStorage.setItem("onboarding:state:v1", UI_VERSION);
   vi.mocked(fetchAllAgents).mockResolvedValue([
@@ -88,7 +90,7 @@ describe("product routing", () => {
     expect(within(titlebar).getByRole("button", { name: "Toggle theme" })).toBeInTheDocument();
   });
 
-  it("has no gear, no view switch and no workspace dropdown in the titlebar", () => {
+  it("has no gear, no view switch and, with one workspace, no workspace dropdown in the titlebar", () => {
     renderAt("/agents/local/builder/console");
 
     const titlebar = screen.getByTestId("app-titlebar");
@@ -99,6 +101,18 @@ describe("product routing", () => {
     expect(
       within(titlebar).getByRole("combobox", { name: "Search agents and tasks" }),
     ).toBeVisible();
+  });
+
+  it("shows the workspace dropdown after the product name with two workspaces", async () => {
+    createWorkspace("Lab");
+    renderAt("/");
+
+    const titlebar = screen.getByTestId("app-titlebar");
+    const dropdown = await within(titlebar).findByRole("button", { name: "Workspace: Default" });
+    expect(
+      within(titlebar).getByText("Tariboy").compareDocumentPosition(dropdown) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("opens the former All tasks view as Tasks", async () => {
