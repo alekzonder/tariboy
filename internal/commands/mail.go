@@ -124,6 +124,15 @@ func mailCommands() []registry.Command {
 				}
 				return mail.MailCloseResult{Letter: l}, nil
 			})),
+		registry.WithResult[mail.MailCloseAllResult](mailCommand("mail.close_all", "Archive every open letter without a reply", "POST", "/api/mail/close-all",
+			[]registry.Arg{{Name: "note", Flag: "note", Type: registry.String, Help: "archive note"}},
+			func(m *mail.Mail, as string, p registry.Request) (any, error) {
+				n, err := m.CloseAll(as, p.String("note"))
+				if err != nil {
+					return nil, err
+				}
+				return mail.MailCloseAllResult{Closed: n}, nil
+			})),
 		registry.WithResult[mail.MailReadResult](mailCommand("mail.read", "Mark letters read; a read notice to an agent closes", "POST", "/api/mail/read",
 			[]registry.Arg{{Name: "ids", Flag: "id", Type: registry.String, Repeatable: true, Required: true, Help: "letter ids"}},
 			func(m *mail.Mail, as string, p registry.Request) (any, error) {

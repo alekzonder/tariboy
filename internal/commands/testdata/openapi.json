@@ -3950,6 +3950,18 @@
         ],
         "type": "object"
       },
+      "MailCloseAllResult": {
+        "additionalProperties": false,
+        "properties": {
+          "closed": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "closed"
+        ],
+        "type": "object"
+      },
       "MailCloseResult": {
         "additionalProperties": false,
         "properties": {
@@ -21027,6 +21039,94 @@
           }
         },
         "summary": "Send a letter: a request unless notice is set"
+      }
+    },
+    "/api/mail/close-all": {
+      "post": {
+        "operationId": "mail.close_all",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "as": {
+                    "description": "principal to act as (default the customer)",
+                    "type": "string"
+                  },
+                  "note": {
+                    "description": "archive note",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/MailCloseAllResult"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "description": "May include current_revision and current state for revision_conflict",
+                          "type": "object"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Typed error"
+          }
+        },
+        "summary": "Archive every open letter without a reply"
       }
     },
     "/api/mail/read": {

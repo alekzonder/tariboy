@@ -36,6 +36,11 @@ type MailCloseResult struct {
 	Letter Letter `json:"letter"`
 }
 
+// MailCloseAllResult counts the open letters archived at once (mail.close_all).
+type MailCloseAllResult struct {
+	Closed int `json:"closed"`
+}
+
 // MailReadResult counts the notices a read closed and the letters read for
 // the first time (mail.read).
 type MailReadResult struct {

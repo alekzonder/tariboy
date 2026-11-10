@@ -18,11 +18,15 @@ export function useMailboxActions(as: string, refresh: () => Promise<void>) {
   const [busy, setBusy] = useState(false);
   const actAs = as || undefined;
 
-  const run = async (done: string, action: string, write: () => Promise<unknown>) => {
+  const run = async <T>(
+    done: string | ((result: T) => string),
+    action: string,
+    write: () => Promise<T>,
+  ) => {
     setBusy(true);
     try {
-      await write();
-      toast.success(done);
+      const result = await write();
+      toast.success(typeof done === "string" ? done : done(result));
       return true;
     } catch (error) {
       toast.error(`${action} failed: ${message(error)}`);
@@ -55,6 +59,12 @@ export function useMailboxActions(as: string, refresh: () => Promise<void>) {
       ),
     archive: (letter: Letter) =>
       run("archived", "archive", () => api.mail.close(letter.id, { as: actAs })),
+    archiveAll: () =>
+      run(
+        ({ closed }) => `archived ${closed} letter${closed === 1 ? "" : "s"}`,
+        "archive all",
+        () => api.mail.closeAll({ as: actAs }),
+      ),
     requeue: (letter: Letter) =>
       run("requeued", "requeue", () => api.mail.requeue(letter.id, actAs)),
     // Reading is quiet: a failure leaves the letter unread for the next open.

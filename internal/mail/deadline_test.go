@@ -42,6 +42,45 @@ func TestDeadlineSchedulesAndReplyCancels(t *testing.T) {
 	}
 }
 
+func TestCloseAllArchivesOnlyOpenLettersOfRecipient(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	sched := schedule.NewStore(f.st, func() time.Time { return *f.now })
+	f.m.SetDeadlines(schedule.Deadlines{Store: sched})
+	req := f.sendOne(t, mail.Letter{From: "agent:alice", To: "user:customer", Body: "?", NeedsReply: true, Deadline: "5m"})
+	notice := f.sendOne(t, mail.Letter{From: "agent:alice", To: "user:customer", Body: "fyi"})
+	done := f.sendOne(t, mail.Letter{From: "agent:alice", To: "user:customer", Body: "old"})
+	if _, err := f.m.Close("user:customer", done.ID, "earlier"); err != nil {
+		t.Fatal(err)
+	}
+	other := f.sendOne(t, mail.Letter{From: "user:customer", To: "agent:bob", Body: "keep"})
+
+	n, err := f.m.CloseAll("user:customer", "bulk")
+	if err != nil || n != 2 {
+		t.Fatalf("close all = %d, %v; want 2", n, err)
+	}
+	for _, id := range []string{req.ID, notice.ID} {
+		if got := f.show(t, "user:customer", id); got.AnsweredAt == "" || got.CloseNote != "bulk" {
+			t.Fatalf("letter = %+v; want closed with note bulk", got)
+		}
+	}
+	if got := f.show(t, "user:customer", done.ID); got.CloseNote != "earlier" {
+		t.Fatalf("closed letter changed: %+v", got)
+	}
+	if got := f.show(t, "agent:bob", other.ID); got.AnsweredAt != "" {
+		t.Fatalf("letter of another recipient closed: %+v", got)
+	}
+	if list, _ := sched.List("alice"); len(list) != 0 {
+		t.Fatalf("close all left %d deadline schedules", len(list))
+	}
+	if f.rec.auditKinds("mail_closed") != 3 {
+		t.Fatalf("audits = %v; want 3 mail_closed", f.rec.audits)
+	}
+	if n, err := f.m.CloseAll("user:customer", ""); err != nil || n != 0 {
+		t.Fatalf("close all on an empty inbox = %d, %v; want 0", n, err)
+	}
+}
+
 func TestRequeueRespectsCapAndDeadline(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
 import { act, fireEvent, render, screen, waitFor, within } from "@/test/queryRender";
+import { toast } from "sonner";
 import { fakeApi } from "@/test/api";
 import { letter } from "@/test/fixtures/mailFixtures";
 import type { CommentResult, Letter, MailBox, MailListQuery, TaskDetail } from "@/types";
@@ -43,6 +44,7 @@ const mail = {
   })),
   read: vi.fn(async () => ({ read: 1, closed_notices: 0 })),
   close: vi.fn(),
+  closeAll: vi.fn(async () => ({ closed: 1 })),
   reply: vi.fn(),
   requeue: vi.fn(),
   send: vi.fn(async () => ({ letters: [] })),
@@ -253,6 +255,67 @@ describe("Mailbox", () => {
     expect(await screen.findByText("archived · task-comment:9")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Send answer" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Which DB\?/ })).toBeNull();
+  });
+
+  describe("Archive all", () => {
+    const button = () => screen.queryByRole("button", { name: "Archive all" });
+
+    it("archives every open letter of the customer after a confirmation", async () => {
+      renderMailbox();
+      await userEvent.click(await screen.findByRole("button", { name: "Archive all" }));
+      const dialog = screen.getByRole("dialog");
+      expect(dialog).toHaveTextContent("Archive all 1 open letters in your inbox?");
+      await userEvent.click(within(dialog).getByRole("button", { name: "Archive all" }));
+
+      expect(mail.closeAll).toHaveBeenCalledWith({ as: undefined });
+      await waitFor(() => expect(toast.success).toHaveBeenCalledWith("archived 1 letter"));
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    });
+
+    it("archives nothing on Cancel", async () => {
+      renderMailbox();
+      await userEvent.click(await screen.findByRole("button", { name: "Archive all" }));
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(mail.closeAll).not.toHaveBeenCalled();
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("keeps the dialog open when the daemon refuses", async () => {
+      mail.closeAll.mockRejectedValueOnce(new Error("boom"));
+      renderMailbox();
+      await userEvent.click(await screen.findByRole("button", { name: "Archive all" }));
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", { name: "Archive all" }),
+      );
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith("archive all failed: Error: boom"),
+      );
+      expect(screen.getByRole("dialog")).toBeVisible();
+    });
+
+    it("shows only in the customer's Inbox with open letters", async () => {
+      renderMailbox();
+      expect(await screen.findByRole("button", { name: "Archive all" })).toBeVisible();
+      await userEvent.click(screen.getByRole("radio", { name: "Sent" }));
+      expect(button()).toBeNull();
+      await userEvent.click(screen.getByRole("radio", { name: "Archive" }));
+      expect(button()).toBeNull();
+    });
+
+    it("hides with an empty Inbox and in an agent's mailbox", async () => {
+      boxes.inbox = [];
+      const view = renderMailbox();
+      await screen.findByRole("radio", { name: "Inbox" });
+      expect(button()).toBeNull();
+      view.unmount();
+
+      boxes.inbox = [letter({ id: "req", subject: "Need input" })];
+      renderMailbox({ as: "agent:dev", mode: "agent" });
+      await screen.findByRole("radio", { name: "Inbox 1" });
+      expect(button()).toBeNull();
+    });
   });
 
   it("opens the task of a question over the mailbox and keeps the letter", async () => {
