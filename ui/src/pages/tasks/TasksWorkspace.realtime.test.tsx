@@ -124,9 +124,7 @@ describe("TasksWorkspace", () => {
     render(<TasksWorkspace initialTaskKey="ASK-7" />);
 
     expect(await screen.findByRole("heading", { name: "ASK-7" })).toBeInTheDocument();
-    expect(await screen.findByRole("textbox", { name: "Description" })).toHaveTextContent(
-      "Customer needs a date",
-    );
+    expect(document.querySelector(".task-description")).toHaveTextContent("Customer needs a date");
   });
 
   it("keeps a closed deep-linked task closed when the host target is re-created", async () => {
@@ -210,8 +208,8 @@ describe("TasksWorkspace", () => {
     view.rerender(<TasksWorkspace initialTaskKey="ASK-8" />);
 
     expect(await screen.findByRole("heading", { name: "ASK-8" })).toBeInTheDocument();
-    expect(await screen.findByRole("textbox", { name: "Description" })).toHaveTextContent(
-      "Second answer needed",
+    await waitFor(() =>
+      expect(document.querySelector(".task-description")).toHaveTextContent("Second answer needed"),
     );
   });
 

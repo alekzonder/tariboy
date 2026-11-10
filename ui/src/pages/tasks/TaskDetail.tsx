@@ -3,7 +3,9 @@ import { isWorkflowTask } from "@/lib/tasks";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import type { MarkdownMode } from "./TaskMarkdown";
 import { TaskDetailHeader } from "./TaskDetailHeader";
-import { TaskDecisionPanel } from "./TaskDecisionPanel";
+import { taskEventSequence } from "@/lib/taskDetail";
+import { TaskDetailSticky } from "./TaskDetailSticky";
+import { useWorkflowPanel } from "./useWorkflowPanel";
 import { TaskDetailBody } from "./TaskDetailBody";
 import { TaskDetailDialogs, TaskDetailDraftAlerts } from "./TaskDetailDialogs";
 import { useTaskDetailDraft } from "./useTaskDetailDraft";
@@ -52,6 +54,14 @@ export default function TaskDetail({
   const hasDraft =
     draft.dirty || commentDirty || decisionDirty || Boolean(relations.relationTarget.trim());
   const closing = useTaskDetailClose(hasDraft, pending, onClose, onOpenTask);
+  // One read of the workflow serves the header controls and the body.
+  const steered = workflow && task.access !== "context" && task.access !== "respond";
+  const workflowPanel = useWorkflowPanel(task, {
+    eventSequence: taskEventSequence(events, liveSequence),
+    onTaskChanged,
+    enabled: steered,
+  });
+  const panel = steered ? workflowPanel : undefined;
   const { returnFocus, initialFocusRef, titleRef, close, requestOpen } = closing;
   const header = (
     <TaskDetailHeader
@@ -108,21 +118,14 @@ export default function TaskDetail({
           onRequeue={onRequeue}
         />
         <div className="task-detail-panel relative min-h-0 min-w-0 overflow-auto bg-card">
-          {/* Sticky: whatever the panel is scrolled to, the key, the title and the
-          status stay in view. The one shadow here is the same rule the selected
-          row and the active segment carry. */}
-          {workflow && task.access !== "context" && task.access !== "respond" ? (
-            <TaskDecisionPanel
-              task={task}
-              onTaskChanged={onTaskChanged}
-              onDraftChange={setDecisionDirty}
-              onPendingChange={setDecisionPending}
-            >
-              {header}
-            </TaskDecisionPanel>
-          ) : (
-            <div className="sticky top-0 z-[3] bg-card shadow-[var(--raise)]">{header}</div>
-          )}
+          <TaskDetailSticky
+            header={header}
+            panel={panel}
+            onDecisionDraftChange={setDecisionDirty}
+            onDecisionPendingChange={setDecisionPending}
+            {...{ detail, draft, relations, principals, assigneeOptions, onTaskChanged }}
+            onOpenTask={requestOpen}
+          />
           <div className="flex min-w-0 flex-col gap-4.5 px-4 pt-3.5 pb-7">
             <TaskDetailDraftAlerts
               task={task}
@@ -140,13 +143,11 @@ export default function TaskDetail({
               <TaskDetailBody
                 detail={detail}
                 events={events}
-                liveSequence={liveSequence}
                 principals={principals}
-                assigneeOptions={assigneeOptions}
                 onTaskChanged={onTaskChanged}
                 onComment={onComment}
                 draft={draft}
-                relations={relations}
+                panel={panel}
                 descriptionMode={descriptionMode}
                 setDescriptionMode={setDescriptionMode}
                 setUploadingDescription={setUploadingDescription}

@@ -2,7 +2,7 @@ import { useState, type Ref } from "react";
 import { MoreHorizontal, Pencil, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { Queue, Task, TaskParent } from "@/types";
-import { isWorkflowTask, taskStatusLabel } from "@/lib/tasks";
+import { isWorkflowTask } from "@/lib/tasks";
 import { Button } from "@/components/ui/button";
 import { DialogTitle } from "@/components/ui/dialog";
 import {
@@ -11,10 +11,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { StatusPill } from "@/components/ui/status";
-import { taskTone } from "@/lib/statusTone";
-import { formatTaskTime } from "./taskTime";
-import { MetaInline } from "./TaskDetailControls";
 import { TaskParentLine } from "./TaskDetailParent";
 
 export function TaskDetailHeader({
@@ -58,12 +54,12 @@ export function TaskDetailHeader({
     <header className="flex items-start gap-2.5 bg-card px-3.5 pt-2.75 pb-2.5">
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <TaskParentLine task={task} parent={parent} queues={queues} onOpen={onOpenParent} />
-        <div className="flex min-w-0 items-center gap-2.25">
+        <div className="flex min-w-0 items-start gap-2.25">
           <DialogTitle asChild>
             <h2
               ref={titleRef}
               tabIndex={-1}
-              className="shrink-0 rounded-sm font-mono text-ui font-medium tabular-nums text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              className="mt-0.75 shrink-0 rounded-sm font-mono text-ui font-medium tabular-nums text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             >
               {task.key}
             </h2>
@@ -79,7 +75,7 @@ export function TaskDetailHeader({
               onBlur={() => setEditing(false)}
             />
           ) : (
-            <span className="min-w-0 truncate text-title font-semibold tracking-[-.01em]">
+            <span className="line-clamp-2 min-w-0 text-title font-semibold tracking-[-.01em] text-pretty">
               {title}
             </span>
           )}
@@ -91,16 +87,11 @@ export function TaskDetailHeader({
               aria-label="Edit title"
               disabled={pending}
               onClick={() => setEditing(true)}
-              className="size-7 shrink-0"
+              className="size-6 shrink-0"
             >
               <Pencil className="size-3.5" />
             </Button>
           )}
-        </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2 text-ui">
-          <StatusPill tone={taskTone(task.category)}>{taskStatusLabel(task)}</StatusPill>
-          <MetaInline label="agent" value={task.assignee || "unassigned"} />
-          <MetaInline label="updated" value={formatTaskTime(task.updated_at)} />
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">

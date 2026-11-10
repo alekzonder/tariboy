@@ -2,8 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useApi } from "@/components/apiContext";
 import { useApiQuery } from "@/hooks/useApiQuery";
 import type { Task } from "@/types";
-import { cn } from "@/lib/utils";
-import { FIELD_MONO, LABEL, MONO, SelectShell } from "./panelStyles";
+import { CHIP, CHIP_VALUE, ChipSelect } from "./TaskDetailControls";
 import { taskQueries, writeTask } from "./taskQueries";
 import { assignablePool } from "./workflowShared";
 import { errorText } from "@/lib/errors";
@@ -34,25 +33,22 @@ export default function WorkflowAssignee({
 
   if (!pool) {
     return (
-      <dl className="flex min-w-0 flex-col gap-1.25">
-        <dt className={LABEL}>Assignee</dt>
-        <dd className={cn(MONO, "flex h-7.5 min-w-0 items-center truncate")}>
-          {task.assignee || "Unassigned"}
-        </dd>
+      <dl className={CHIP}>
+        <dt className="lowercase">Assignee</dt>
+        <dd className={CHIP_VALUE}>{task.assignee || "Unassigned"}</dd>
       </dl>
     );
   }
   const options = members.map((agent) => `agent:${agent}`);
   return (
-    <label className="flex min-w-0 flex-col gap-1.25">
-      <span className={LABEL}>Assignee</span>
-      <SelectShell
-        className={cn("flex", FIELD_MONO)}
+    <>
+      <ChipSelect
+        label="Assignee"
         value={task.assignee}
         disabled={reassign.isPending}
-        onChange={(event) => {
+        onChange={(value) => {
           reassign.reset();
-          reassign.mutate(event.target.value.slice("agent:".length));
+          reassign.mutate(value.slice("agent:".length));
         }}
       >
         {!options.includes(task.assignee) && (
@@ -65,12 +61,12 @@ export default function WorkflowAssignee({
             {value}
           </option>
         ))}
-      </SelectShell>
+      </ChipSelect>
       {reassign.error && (
         <span role="alert" className="text-ui text-status-failed">
           {errorText(reassign.error)}
         </span>
       )}
-    </label>
+    </>
   );
 }

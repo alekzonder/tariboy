@@ -1,35 +1,34 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useApi } from "@/components/apiContext";
-import { useApiQuery } from "@/hooks/useApiQuery";
-import { taskKeys, taskQueries, refreshTasks, writeTask } from "./taskQueries";
-import { useEffect, useRef, useState } from "react";
+import { useId } from "react";
 import { Button } from "@/components/ui/button";
-import type { Task, WorkflowView, StatusVisit } from "@/types";
+import type { Task, WorkflowView } from "@/types";
 import { cn } from "@/lib/utils";
-import { EMPTY, LABEL, MONO, QUIET_ACTION, ROW } from "./panelStyles";
+import { EMPTY, LABEL, MONO, QUIET_ACTION } from "./panelStyles";
 import ReturnToAgent from "./ReturnToAgent";
-import { formatTaskTime } from "./taskTime";
-import WorkflowActions, { ActionError, type OpenForm } from "./WorkflowActions";
+import { SectionToggle } from "./SectionToggle.view";
+import WorkflowActions, { ActionError } from "./WorkflowActions";
 import WorkflowArtifacts from "./WorkflowArtifacts";
 import { MoveForm, UpgradeForm } from "./WorkflowMoveForms";
-import { useWorkflowConfirm, type ConfirmRequest } from "./WorkflowConfirm";
-import { isClosed, requiredBy, selectedStep, stepArtifacts, stepOf } from "./workflowGraph";
+import { isClosed, requiredBy, stepArtifacts, stepOf } from "./workflowGraph";
 import WorkflowOutcomes from "./WorkflowOutcomes";
 import WorkflowPauseBanner from "./WorkflowPauseBanner";
 import WorkflowProblem from "./WorkflowProblem";
 import WorkflowRuns from "./WorkflowRuns";
 import WorkflowStepper from "./WorkflowStepper";
-import { errorText } from "@/lib/errors";
+import { WorkflowSummary } from "./WorkflowSummary.view";
+import WorkflowVisits from "./WorkflowVisits";
+import { useWorkflowPanel, type WorkflowPanelState } from "./useWorkflowPanel";
 
 /** A mono value that may be a 64-character ID: it wraps rather than overflows. */
 const MONO_ID = cn(MONO, "min-w-0 break-all");
 
 /**
- * The workflow of a task, in the task detail: what is wrong, where it is,
- * what it may do next, what it produced, and what ran. It replaces the status
- * control of a flexible task; the status changes only through an outcome, a
- * return to the agent, a move, a cancel, or a pause decision. The Desktop
- * acts as the customer (operator routes).
+ * The workflow of a task in one column: what is wrong, where it is, what it
+ * may do next, what it produced, and what ran. The task detail does not use
+ * this composition: it puts `WorkflowControls` in its sticky header,
+ * `WorkflowFindings` at the top of its body and `WorkflowLog` at the bottom,
+ * all three over one `useWorkflowPanel`. The status changes only through an
+ * outcome, a return to the agent, a move, a cancel, or a pause decision. The
+ * Desktop acts as the customer (operator routes).
  */
 export function WorkflowPanel({
   task,
@@ -40,42 +39,50 @@ export function WorkflowPanel({
   task: Task;
   /** The Needs you card above holds the outcomes and the pause decisions. */
   decisionsElsewhere?: boolean;
-  /**
-   * The latest task event the detail holds. A workflow event (a rejected
-   * request, a script run) need not change the task's revision, so a new
-   * sequence refetches the view too.
-   */
+  /** The latest task event the detail holds; a new one refetches the view. */
   eventSequence?: number;
   onTaskChanged?: () => void;
 }) {
-  const api = useApi();
-  const client = useQueryClient();
-  const workflow = useApiQuery(taskQueries.workflow(api, task.key));
-  const view = workflow.data;
-  const error = workflow.error ? errorText(workflow.error) : "";
-  const [form, setForm] = useState<OpenForm>(null);
-  const [chosen, setChosen] = useState<string | null | undefined>(undefined);
-  const { confirm, dialog } = useWorkflowConfirm();
-  useRefetchOnChange(task, eventSequence);
-  const cancellation = useMutation({
-    mutationFn: () => writeTask(client, api, () => api.workflows.cancelWorkflowTask(task.key)),
-    onSuccess: () => onTaskChanged?.(),
-  });
-  const watching = useMutation({
-    mutationFn: () => api.workflows.runTaskWatch(task.key),
-    onSuccess: () => void workflow.refetch(),
-  });
-  const changed = () => {
-    cancellation.reset();
-    void refreshTasks(client, api);
-    onTaskChanged?.();
-  };
-  const refresh = () => {
-    cancellation.reset();
-    void workflow.refetch();
-  };
+  const panel = useWorkflowPanel(task, { eventSequence, onTaskChanged });
+  const { view } = panel;
+  return (
+    <div className="flex min-w-0 flex-col gap-4.5">
+      {view && !decisionsElsewhere && <PauseBanner task={task} view={view} panel={panel} />}
+      <WorkflowTrouble panel={panel} />
+      <WorkflowControls panel={panel} />
+      {view && !decisionsElsewhere && (
+        <WorkflowOutcomes
+          taskKey={task.key}
+          view={view}
+          onChanged={panel.changed}
+          onRefresh={panel.refresh}
+        />
+      )}
+      <WorkflowProduce panel={panel} />
+      <WorkflowLog panel={panel} />
+    </div>
+  );
+}
 
-  const failure = error && <LoadFailure error={error} onRetry={refresh} />;
+/**
+ * The Workflow block of the task header: the steps, the workflow version with
+ * the status, its owner and holder, the actions, and the form an action
+ * opened. With `onOpenChange` the block collapses to one row, the current
+ * status and whose turn it is.
+ */
+export function WorkflowControls({
+  panel,
+  open = true,
+  onOpenChange,
+}: {
+  panel: WorkflowPanelState;
+  open?: boolean;
+  /** The block can be collapsed; without it the block is always open. */
+  onOpenChange?: (open: boolean) => void;
+}) {
+  const { task, view } = panel;
+  const contentId = useId();
+  const failure = panel.error && <LoadFailure error={panel.error} onRetry={panel.refresh} />;
   if (!view) {
     return (
       <section className="flex min-w-0 flex-col gap-1.5">
@@ -84,153 +91,90 @@ export function WorkflowPanel({
       </section>
     );
   }
-
-  const closed = isClosed(view);
-  const editable = task.access !== "context" && task.access !== "respond";
-  const selected = selectedStep(view, chosen);
-  const cancel = () =>
-    confirm({
-      title: "Cancel this task?",
-      description:
-        "The task closes as cancelled and its scripts stop. The workflow status stays where it stopped.",
-      action: "Cancel task",
-      run: () => {
-        cancellation.mutate();
-      },
-    });
-  const write = (request: Omit<ConfirmRequest, "run" | "onCancel">, send: () => Promise<unknown>) =>
-    confirmWrite(confirm, request, () => writeTask(client, api, send), onTaskChanged);
-  const move = (to: string, reason: string) =>
-    write(
-      {
-        title: `Move this task to ${to}?`,
-        description:
-          "The move skips outcomes, required artifacts, and checks, stops the current scripts, and cancels a pending request.",
-        action: "Move task",
-      },
-      () => api.workflows.moveTaskWorkflow(task.key, to, reason),
-    );
-  const upgradeTo = `${view.name}@${view.queue_version ?? ""}`;
-  const upgrade = (reason: string) =>
-    write(
-      {
-        title: `Upgrade this task to ${upgradeTo}?`,
-        description: `The task starts again at the first status of ${upgradeTo}. The current status ends, its scripts stop, and a pending request is cancelled. Artifacts stay.`,
-        action: "Upgrade task",
-      },
-      () => api.workflows.upgradeTaskWorkflow(task.key, reason),
-    );
-  const open = (next: OpenForm) => {
-    cancellation.reset();
-    watching.reset();
-    setForm(form === next ? null : next);
-  };
-
   return (
-    <div className="flex min-w-0 flex-col gap-4.5">
-      <PauseBanner
-        task={task}
-        view={view}
-        hidden={decisionsElsewhere === true}
-        onChanged={changed}
-      />
-      <WorkflowProblem taskKey={task.key} view={view} onChanged={changed} onRefresh={refresh} />
-      <WorkflowStepper view={view} selected={selected} onSelect={setChosen} />
-      <div className="flex min-w-0 items-center gap-2">
-        <WorkflowHeader view={view} />
-        {/* Labeled, not behind a menu: the customer's way to send the task
-            back, and the manual way out of the workflow, have to be found
-            without hunting for them. */}
-        {editable && (
-          <WorkflowActions
-            view={view}
-            upgradeTo={upgradeTo}
-            cancelling={cancellation.isPending}
-            watching={watching.isPending}
-            onRunWatch={() => {
-              cancellation.reset();
-              watching.mutate();
-            }}
-            onOpen={open}
-            onCancel={cancel}
+    <section aria-label="Workflow" className="flex min-w-0 flex-col gap-2">
+      <div className="flex min-w-0 items-start gap-2">
+        {onOpenChange && (
+          <SectionToggle
+            label="Workflow"
+            open={open}
+            onOpenChange={onOpenChange}
+            controls={contentId}
           />
+        )}
+        {open ? (
+          <div id={contentId} className="flex min-w-0 flex-1 flex-col gap-2">
+            <WorkflowStepper view={view} selected={panel.selected} onSelect={panel.setChosen} />
+            <div className="flex min-w-0 items-center gap-2">
+              <WorkflowHeader view={view} />
+              {/* Labeled, not behind a menu: the customer's way to send the task
+                  back, and the manual way out of the workflow, have to be found
+                  without hunting for them. */}
+              {panel.editable && (
+                <WorkflowActions
+                  view={view}
+                  upgradeTo={panel.upgradeTo}
+                  cancelling={panel.cancellation.isPending}
+                  watching={panel.watching.isPending}
+                  onRunWatch={panel.runWatch}
+                  onOpen={panel.open}
+                  onCancel={panel.cancel}
+                />
+              )}
+            </div>
+          </div>
+        ) : (
+          <WorkflowSummary view={view} onOpen={() => onOpenChange?.(true)} />
         )}
       </div>
       {failure}
-      <ActionError errors={[cancellation.error, watching.error]} />
-      <OpenFormPane
-        form={form}
-        taskKey={task.key}
-        view={view}
-        actions={{ move, upgrade, changed, close: () => setForm(null) }}
-      />
-      <Outcomes
-        hidden={decisionsElsewhere === true}
-        taskKey={task.key}
-        view={view}
-        onChanged={changed}
-        onRefresh={refresh}
-      />
-      <WorkflowArtifacts
-        taskKey={task.key}
-        artifacts={view.artifacts}
-        declared={view.declared_artifacts ?? []}
-        required={closed ? undefined : requiredBy(view)}
-        step={selected ? { status: selected, ...stepArtifacts(view, selected) } : undefined}
-        onShowAll={() => setChosen(null)}
-        editable={editable && !closed}
-        onChanged={changed}
-      />
-      <WorkflowRuns taskKey={task.key} runs={view.runs ?? []} />
-      <VisitList view={view} />
-      {dialog}
-    </div>
+      <ActionError errors={[panel.cancellation.error, panel.watching.error]} />
+      {open && <OpenFormPane panel={panel} taskKey={task.key} view={view} />}
+      {panel.dialog}
+    </section>
   );
 }
 
-/**
- * Refetches the view when the task's revision or event sequence changes,
- * unless a mounted shared detail already refreshes it.
- */
-function useRefetchOnChange(task: Task, eventSequence: number) {
-  const api = useApi();
-  const client = useQueryClient();
-  const lastChange = useRef([task.revision, eventSequence]);
-  useEffect(() => {
-    if (lastChange.current[0] === task.revision && lastChange.current[1] === eventSequence) return;
-    lastChange.current = [task.revision, eventSequence];
-    const queryKey = taskKeys.workflow(api.target, task.key);
-    // A mounted shared detail owns server-wide event/write refreshes, including
-    // workflow. Standalone panels still react to changes in their input props.
-    const sharedDetail = client
-      .getQueryCache()
-      .find({ queryKey: taskKeys.detail(api.target, task.key), exact: true });
-    if (sharedDetail?.isActive()) return;
-    void client.cancelQueries({ queryKey }).then(() => client.invalidateQueries({ queryKey }));
-  }, [client, api, task.key, task.revision, eventSequence]);
+/** What is wrong with the workflow, in full: the first thing of the task body. */
+export function WorkflowTrouble({ panel }: { panel: WorkflowPanelState }) {
+  if (!panel.view) return null;
+  return (
+    <WorkflowProblem
+      taskKey={panel.task.key}
+      view={panel.view}
+      onChanged={panel.changed}
+      onRefresh={panel.refresh}
+    />
+  );
 }
 
-/**
- * Asks before a write; resolves true once it is done, false when the
- * confirmation is declined.
- */
-function confirmWrite(
-  confirm: (request: ConfirmRequest) => void,
-  request: Omit<ConfirmRequest, "run" | "onCancel">,
-  write: () => Promise<unknown>,
-  onDone?: () => void,
-): Promise<boolean> {
-  return new Promise<boolean>((resolve, reject) =>
-    confirm({
-      ...request,
-      onCancel: () => resolve(false),
-      run: () => {
-        write().then(() => {
-          resolve(true);
-          onDone?.();
-        }, reject);
-      },
-    }),
+/** What the workflow produced: the artifacts, filtered by the selected step. */
+export function WorkflowProduce({ panel }: { panel: WorkflowPanelState }) {
+  const { task, view, selected } = panel;
+  if (!view) return null;
+  const closed = isClosed(view);
+  return (
+    <WorkflowArtifacts
+      taskKey={task.key}
+      artifacts={view.artifacts}
+      declared={view.declared_artifacts ?? []}
+      required={closed ? undefined : requiredBy(view)}
+      step={selected ? { status: selected, ...stepArtifacts(view, selected) } : undefined}
+      onShowAll={() => panel.setChosen(null)}
+      editable={panel.editable && !closed}
+      onChanged={panel.changed}
+    />
+  );
+}
+
+/** What ran and where the task has been: the script runs and the visits. */
+export function WorkflowLog({ panel }: { panel: WorkflowPanelState }) {
+  if (!panel.view) return null;
+  return (
+    <>
+      <WorkflowRuns taskKey={panel.task.key} runs={panel.view.runs ?? []} />
+      <WorkflowVisits view={panel.view} />
+    </>
   );
 }
 
@@ -242,66 +186,49 @@ function Loading() {
   );
 }
 
-/** The outcome block, unless the Needs you card above already offers it. */
-function Outcomes({
-  hidden,
-  ...props
-}: { hidden: boolean } & Parameters<typeof WorkflowOutcomes>[0]) {
-  return hidden ? null : <WorkflowOutcomes {...props} />;
-}
-
 /** The pause and its reason, while the workflow is paused. */
 function PauseBanner({
   task,
   view,
-  hidden,
-  onChanged,
+  panel,
 }: {
   task: Task;
   view: WorkflowView;
-  hidden: boolean;
-  onChanged: () => void;
+  panel: WorkflowPanelState;
 }) {
-  if (hidden || view.waiting_on !== "pause") return null;
+  if (view.waiting_on !== "pause") return null;
   return (
     <WorkflowPauseBanner
       taskKey={task.key}
       reason={view.paused_reason ?? task.workflow_paused_reason ?? ""}
       pool={view.owner.startsWith("pool:")}
-      onChanged={onChanged}
+      onChanged={panel.changed}
     />
   );
 }
 
 /** The form an action opened: move, upgrade, or return to agent. */
 function OpenFormPane({
-  form,
+  panel,
   taskKey,
   view,
-  actions,
 }: {
-  form: OpenForm;
+  panel: WorkflowPanelState;
   taskKey: string;
   view: WorkflowView;
-  actions: {
-    move: (to: string, reason: string) => Promise<boolean>;
-    upgrade: (reason: string) => Promise<boolean>;
-    changed: () => void;
-    close: () => void;
-  };
 }) {
-  switch (form) {
+  switch (panel.form) {
     case "move":
-      return <MoveForm view={view} onDone={actions.close} onMove={actions.move} />;
+      return <MoveForm view={view} onDone={panel.closeForm} onMove={panel.move} />;
     case "upgrade":
-      return <UpgradeForm onDone={actions.close} onUpgrade={actions.upgrade} />;
+      return <UpgradeForm onDone={panel.closeForm} onUpgrade={panel.upgrade} />;
     case "return":
       return (
         <ReturnToAgent
           taskKey={taskKey}
           view={view}
-          onChanged={actions.changed}
-          onDone={actions.close}
+          onChanged={panel.changed}
+          onDone={panel.closeForm}
         />
       );
     default:
@@ -347,55 +274,5 @@ function WorkflowHeader({ view }: { view: WorkflowView }) {
         </span>
       )}
     </div>
-  );
-}
-
-function VisitList({ view }: { view: WorkflowView }) {
-  return (
-    <section className="flex min-w-0 flex-col gap-1">
-      <span className={LABEL}>Visits</span>
-      <ol className="flex min-w-0 flex-col">
-        {[...view.visits]
-          .sort((a, b) => a.sequence - b.sequence)
-          .map((visit) => (
-            <VisitRow key={visit.id} visit={visit} digest={view.digest} />
-          ))}
-      </ol>
-    </section>
-  );
-}
-
-/** One stay in a status: when, by whom, how it ended, and its message. */
-function VisitRow({ visit, digest }: { visit: StatusVisit; digest: string }) {
-  return (
-    <li className={cn(ROW, "flex-wrap py-1")}>
-      <span className={cn(MONO_ID, "font-medium")}>{visit.status}</span>
-      {visit.workflow_digest && visit.workflow_digest !== digest && visit.workflow_version && (
-        <span className={cn(MONO, "text-muted-foreground")} title={visit.workflow_digest}>
-          @{visit.workflow_version}
-        </span>
-      )}
-      <span className={cn(MONO, "text-muted-foreground")}>
-        {formatTaskTime(visit.entered_at)} · {visit.entered_by}
-      </span>
-      <span className="text-ui text-muted-foreground">
-        <VisitEnd visit={visit} />
-      </span>
-      {visit.message && (
-        <span className="w-full min-w-0 text-ui break-words whitespace-pre-wrap">
-          {visit.message}
-        </span>
-      )}
-    </li>
-  );
-}
-
-function VisitEnd({ visit }: { visit: StatusVisit }) {
-  if (!visit.left_at) return "current";
-  if (!visit.outcome) return "left";
-  return (
-    <>
-      left by <span className={MONO}>{visit.outcome}</span>
-    </>
   );
 }

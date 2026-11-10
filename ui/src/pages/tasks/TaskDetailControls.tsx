@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -10,18 +11,6 @@ import {
   PRIMARY_FILL,
   SelectShell,
 } from "./panelStyles";
-
-/** `label value` in the header strip: the word is quiet, the value is mono. */
-export function MetaInline({ label, value }: { label: string; value: string }) {
-  return (
-    <span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
-      {label}
-      <span className="min-w-0 truncate font-mono text-meta tabular-nums text-foreground">
-        {value}
-      </span>
-    </span>
-  );
-}
 
 /** One pair of the overview grid. An empty value is an em dash, not a hole. */
 export function Meta({
@@ -114,6 +103,62 @@ export function BannerButton({
     >
       {children}
     </Button>
+  );
+}
+
+/** A parameter of the task in the header row: a quiet label and a mono value
+ *  in one 24px fill. */
+export const CHIP =
+  "relative inline-flex h-6 min-w-0 max-w-full shrink-0 items-center gap-1.5 rounded-control bg-muted px-2 text-ui text-muted-foreground focus-within:ring-2 focus-within:ring-ring";
+/** The value inside a chip. */
+export const CHIP_VALUE = "min-w-0 truncate font-mono text-meta tabular-nums text-foreground";
+
+/**
+ * A chip that changes its value from a closed list. It is a native select
+ * sized to its value, so the label names it for a screen reader and the list
+ * is the platform's own.
+ */
+export function ChipSelect({
+  label,
+  bare = false,
+  value,
+  onChange,
+  disabled,
+  className,
+  children,
+}: {
+  label: string;
+  /** The value explains itself (`P1 High`): the label is only read aloud. */
+  bare?: boolean;
+  /** A fill and a text color that say more than the neutral chip, for a status. */
+  className?: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <label
+      className={cn(CHIP, !className && "hover:bg-accent", disabled && "opacity-60", className)}
+    >
+      <span className={bare ? "sr-only" : "lowercase"}>{label}</span>
+      <select
+        className={cn(
+          CHIP_VALUE,
+          className && "text-inherit",
+          "field-sizing-content max-w-[22ch] cursor-pointer appearance-none bg-transparent pr-3.5 outline-none",
+        )}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {children}
+      </select>
+      <ChevronDown
+        aria-hidden="true"
+        className="pointer-events-none absolute right-2 size-2.5 opacity-45"
+      />
+    </label>
   );
 }
 

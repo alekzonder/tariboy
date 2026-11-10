@@ -667,7 +667,8 @@ describe("CustomerQuestionNotifications", () => {
       ),
     );
     expect(await screen.findByRole("heading", { name: taskKey })).toBeInTheDocument();
-    expect(await screen.findByRole("textbox", { name: "Description" })).toHaveTextContent(
+    // The description reads as text until Edit description opens the editor.
+    expect(document.querySelector(".task-description")).toHaveTextContent(
       "The customer needs a decision",
     );
     // Reading keeps the question waiting; the answer on the task closes it.

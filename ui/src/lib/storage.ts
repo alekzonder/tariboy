@@ -118,6 +118,10 @@ export const storageKeys = {
   taskQueueFilter: stringKey("session", "tasks:queue-filter:v1", 1),
   /** Whether the Metrics section of a task is open; closed until opened once. */
   taskMetricsOpen: oneOfKey("tasks:metrics-open:v1", 1, ["open", "closed"], "closed"),
+  /** Whether the Details block of the task header is open, for every task. */
+  taskDetailsOpen: oneOfKey("tasks:details-open:v1", 1, ["open", "closed"], "closed"),
+  /** Whether the Workflow block of the task header is open, for every task. */
+  taskWorkflowOpen: oneOfKey("tasks:workflow-open:v1", 1, ["open", "closed"], "open"),
   storeToken: stringKey("session", "tariboy_store_token", null),
 };
 

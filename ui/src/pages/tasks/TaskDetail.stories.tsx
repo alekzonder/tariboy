@@ -3,6 +3,9 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { taskItem } from "@/fixtures/tasks";
 import { withWidth } from "@/storybook/decorators";
 import TaskDetail from "./TaskDetail";
+// The dock rules of the panel live with the workspace styles; without them the
+// sheet is the centered dialog and its top leaves the window.
+import "./tasks.css";
 
 // The task panel TasksWorkspace docks on the right when a row is selected. The
 // panel is a Radix Dialog: its content portals to document.body and is

@@ -420,9 +420,9 @@ describe("TasksWorkspace", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
     expect(await screen.findByRole("heading", { name: "TEST-1" })).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Description" })).toHaveTextContent(
-      "Central work system",
-    );
+    // The description reads as text until Edit description opens the editor.
+    expect(document.querySelector(".task-description")).toHaveTextContent("Central work system");
+    expect(screen.queryByRole("textbox", { name: "Description" })).not.toBeInTheDocument();
     expect(screen.getByText("Starting now")).toBeInTheDocument();
   });
 
@@ -597,6 +597,7 @@ describe("TasksWorkspace", () => {
     render(<TasksWorkspace />);
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }));
     await screen.findByRole("heading", { name: "TEST-1" });
+    await userEvent.click(screen.getByRole("button", { name: "Expand details" }));
 
     expect(screen.getAllByText("user:owner", { selector: "dd" })).toHaveLength(2);
     expect(screen.getByText("TEST", { selector: "dd" })).toBeInTheDocument();
