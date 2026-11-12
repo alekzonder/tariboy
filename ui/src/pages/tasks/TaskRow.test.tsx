@@ -749,3 +749,39 @@ describe("task duration", () => {
     expect(formatTaskDuration({ ...task, started_at: undefined })).toBe("—");
   });
 });
+
+describe("task title color by priority", () => {
+  function titleOf(priority: string): HTMLElement {
+    render(
+      <TaskRow
+        row={{ task: { ...task, priority }, depth: 0, hasChildren: false, orphaned: false }}
+        mode="all"
+        hasActiveQuestion={false}
+        expanded={false}
+        selected={false}
+        onToggle={vi.fn()}
+        onSelect={vi.fn()}
+        onAddChild={vi.fn()}
+      />,
+    );
+    return screen.getByText(task.title);
+  }
+
+  it.each(["P0", "P1"])("shows a %s title in red", (priority) => {
+    const title = titleOf(priority);
+    expect(title).toHaveClass("text-status-failed");
+    expect(title).not.toHaveClass("text-muted-foreground");
+  });
+
+  it("shows a P3 title in grey", () => {
+    const title = titleOf("P3");
+    expect(title).toHaveClass("text-muted-foreground");
+    expect(title).not.toHaveClass("text-status-failed");
+  });
+
+  it("keeps a P2 title in the regular text color", () => {
+    const title = titleOf("P2");
+    expect(title).not.toHaveClass("text-status-failed");
+    expect(title).not.toHaveClass("text-muted-foreground");
+  });
+});

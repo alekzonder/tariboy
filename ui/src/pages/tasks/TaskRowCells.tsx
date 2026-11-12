@@ -9,7 +9,7 @@ import {
 import { PriorityTag, StatusPill } from "@/components/ui/status";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
-import { TONE_TEXT, taskTone } from "@/lib/statusTone";
+import { TONE_TEXT, priorityTitleClass, taskTone } from "@/lib/statusTone";
 import {
   taskPriority,
   type Queue,
@@ -195,7 +195,9 @@ function TitleCell({ row, hasActiveQuestion, onSelect, onOpenTask }: TaskRowCell
         className="task-row-main flex min-w-0 items-center gap-1.75 overflow-hidden text-left"
         onClick={onSelect}
       >
-        <span className="min-w-0 truncate">{row.task.title}</span>
+        <span className={cn("min-w-0 truncate", priorityTitleClass(row.task.priority))}>
+          {row.task.title}
+        </span>
         {hasActiveQuestion && (
           <span
             className="size-1.25 shrink-0 rounded-full bg-primary"
