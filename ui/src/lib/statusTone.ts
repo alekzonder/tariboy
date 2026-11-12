@@ -37,6 +37,15 @@ export function priorityTone(priority: string): StatusTone {
   return rank === "P0" || rank === "P1" ? "danger" : "quiet";
 }
 
+/** Task priority → title text color in a task row: P0/P1 red, P3 grey, the
+ *  rest keep the regular text color. */
+export function priorityTitleClass(priority: string): string {
+  const rank = priority.trim().toUpperCase();
+  if (rank === "P0" || rank === "P1") return "text-status-failed";
+  if (rank === "P3") return "text-muted-foreground";
+  return "";
+}
+
 /** Filled pill: background + text. `quiet`/`faint` get the neutral chip, used
  *  where the pill shape has to hold a column (agent rows, priorities). */
 export const TONE_FILL: Record<StatusTone, string> = {
