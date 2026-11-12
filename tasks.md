@@ -329,7 +329,8 @@ task. The layout is Tree-first:
   with inline task/child creation and same-queue drag reparenting; manual before/after drag
   order is limited to the task's current priority bucket. In-progress tasks
   show an explicit **In progress** label, while open and done tasks retain
-  their existing row presentation. A small red indicator marks each task with
+  their existing row presentation. The title of a P0 or P1 task is red, and
+  the title of a P3 task is grey. A small red indicator marks each task with
   an unread `task.question` letter in the customer's mailbox; opening that task
   marks those letters read and clears the indicator. A question letter stays
   open until it is answered on the task. `tariboy mail inbox` lists the

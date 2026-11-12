@@ -341,8 +341,8 @@ menu. The menu has <strong>Host settings</strong>, which opens
 registered host also has <strong>Edit host</strong> and <strong>Remove host</strong>; the local daemon
 has none. A host heading opens <code>/tasks?host=&lt;id&gt;</code>.</p>
 <p>An agent row shows the agent’s derived state (see
-<a href="#agent-state">Agent state</a>). The dot has the color of the state. On the
-right, the row shows one pill: <code>needs you · n</code> in the accent color,
+<a href="#agent-state">Agent state</a>). The dot shows only whether the agent runs:
+green while it runs, gray when it does not run, and red on error. The <code>needs you</code> state does not change the dot. On the right, the row shows one pill: <code>needs you · n</code> in the accent color,
 <code>working · 12 min</code> with a clock that moves each minute (or
 <code>working · waiting for agent command</code> when the state has that reason), <code>error</code> in the danger
 color with the reason in its tooltip, or a muted <code>off</code>. An idle row shows no
@@ -2524,6 +2524,11 @@ that is not already counted. One task counts once. A task that waits on a
 script, or that is in the initial customer status (for example <code>backlog</code>),
 never counts. An <code>idle_limit</code> halt is the loop stopping as configured, so it is
 not an error; the header shows its reason in muted text.</p>
+<p>The <code>needs you</code> state also records whether the agent state is <code>running</code>. The
+pill shows the state; the dot of the sidebar row and of the agent header
+(<code>agentDotTone</code>) shows only whether the agent runs: red for <code>error</code>, green for
+<code>working</code> and for <code>needs you</code> while the agent runs, and gray in every other
+case.</p>
 <p>The data comes from the shared “needs you” read (<code>NeedsYouLive</code> and
 <code>useNeedsYou</code>) that also serves the sidebar counts and Home: each host’s active
 tasks and the user’s inbox, polled at the sidebar interval. The state adds no
