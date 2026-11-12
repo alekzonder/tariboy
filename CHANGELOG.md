@@ -1,3 +1,15 @@
+## [0.115.0] - 2026-11-12
+
+### Added
+
+- In the task list, the title of a P0 or P1 task is red, and the title of a P3 task is gray. P2 titles keep the regular color.
+
+### Changed
+
+- The dot of an agent row and of the agent header shows only whether the agent runs: green while it runs, gray when it does not run, and red on error. An open question no longer changes the dot. The `needs you · n` pill keeps the accent color.
+
+[0.115.0]: https://github.com/alekzonder/tariboy/compare/v0.114.0...v0.115.0
+
 ## [0.114.0] - 2026-11-12
 
 ### Added
