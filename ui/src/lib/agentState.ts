@@ -26,7 +26,7 @@ export interface AgentNeeds {
 
 export type AgentState =
   | { kind: "error"; reason: string }
-  | { kind: "needs"; needs: AgentNeeds }
+  | { kind: "needs"; needs: AgentNeeds; running: boolean }
   | { kind: "working"; since?: string; reason?: string }
   | { kind: "off" }
   | { kind: "idle" };
@@ -98,7 +98,7 @@ export function deriveAgentState({
   const source: StateSource = status ?? agent;
   const reason = errorReason(source);
   if (reason) return { kind: "error", reason };
-  if (needs.count > 0) return { kind: "needs", needs };
+  if (needs.count > 0) return { kind: "needs", needs, running: source.state === "running" };
   if (source.state === "running") {
     return {
       kind: "working",
@@ -118,5 +118,13 @@ const STATE_TONE: Record<AgentState["kind"], StatusTone> = {
   idle: "quiet",
 };
 
-/** The dot and pill color of a derived state. */
+/** The pill color of a derived state. */
 export const agentStateTone = (state: AgentState): StatusTone => STATE_TONE[state.kind];
+
+/** The dot color: red on error, green while the agent runs, gray otherwise.
+ *  Needs you does not change it; only the pill shows it. */
+export function agentDotTone(state: AgentState): StatusTone {
+  if (state.kind === "error") return "danger";
+  if (state.kind === "working" || (state.kind === "needs" && state.running)) return "live";
+  return "quiet";
+}

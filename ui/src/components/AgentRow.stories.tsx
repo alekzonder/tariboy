@@ -17,15 +17,18 @@ const now = new Date(NOW);
 const working = { kind: "working", since: minutesAgo(12) } as const;
 const idle = { kind: "idle" } as const;
 const off = { kind: "off" } as const;
-const needs = { kind: "needs", needs: { count: 1 } } as const;
+const needs = { kind: "needs", needs: { count: 1 }, running: false } as const;
+const needsRunning = { kind: "needs", needs: { count: 2 }, running: true } as const;
 const error = { kind: "error", reason: "Out of budget: day" } as const;
 
 // The derived state: needs you is the accent, working is live, error is
-// danger, off is quiet text, and an idle row carries no pill at all.
+// danger, off is quiet text, and an idle row carries no pill at all. The dot
+// shows only whether the agent runs: green, gray, or red on error.
 export const States: Story = {
   render: () => (
     <>
       <AgentRow name="planner" agentState={needs} now={now} />
+      <AgentRow name="triager" agentState={needsRunning} now={now} />
       <AgentRow name="builder" agentState={working} now={now} />
       <AgentRow name="reviewer" agentState={idle} now={now} />
       <AgentRow name="packager" agentState={off} now={now} />
