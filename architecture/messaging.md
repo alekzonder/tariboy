@@ -94,7 +94,9 @@ leaves it empty and records a `close_note`.
 | any, `task.question` | the question is answered on the task (`task-comment:<id>`), a workflow outcome resolves it (`task-outcome:<status>`), or the customer dismisses it (`task-wait-dismissed`) | — |
 
 An operator can archive any letter without a reply (`tariboy mail close`,
-with an optional note). The agent tool has no archive: an agent answers.
+with an optional note). **Archive all** in the customer's Inbox archives every
+open letter of the customer at once (`POST /api/mail/close-all`). The agent
+tool has no archive: an agent answers.
 
 A notice rendered into an iteration that ends in an error, a timeout or a kill
 stays open and is rendered again next iteration, like a request.

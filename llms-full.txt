@@ -2031,7 +2031,9 @@ leaves it empty and records a `close_note`.
 | any, `task.question` | the question is answered on the task (`task-comment:<id>`), a workflow outcome resolves it (`task-outcome:<status>`), or the customer dismisses it (`task-wait-dismissed`) | — |
 
 An operator can archive any letter without a reply (`tariboy mail close`,
-with an optional note). The agent tool has no archive: an agent answers.
+with an optional note). **Archive all** in the customer's Inbox archives every
+open letter of the customer at once (`POST /api/mail/close-all`). The agent
+tool has no archive: an agent answers.
 
 A notice rendered into an iteration that ends in an error, a timeout or a kill
 stays open and is rendered again next iteration, like a request.
@@ -3801,6 +3803,8 @@ the route host boundary, which shows **Connecting to host…** or **Host
 unavailable.** while it does. With two or more hosts in the workspace, the
 page has a host selector, and a pick replaces `?host=`. In Tasks and Library,
 the selector comes first in the top content row, before filters or tabs.
+Tasks without `?host=` in such a workspace shows every host instead (see
+"Tasks across hosts").
 Both use `HostScopeSelect`, labeled **Host**, with a 28 px height,
 16 px left padding, and 6 px between controls. Settings → Hosts and
 Settings → Application have no selector. With one
@@ -4677,7 +4681,8 @@ Their internal modules separate form state, requests, and presentation:
   commit modules still own the single Save operation for the page.
 - `mailbox` is one two-pane mailbox for Inbox and the agent's Mailbox: `Mailbox` holds
   the box switch and the panes, `MailboxList`, `MailboxLetter` and
-  `MailboxCompose` render them, `MailboxTaskAnswer` is the answer form of a
+  `MailboxCompose` render them, `ArchiveAll` is the Inbox's bulk archive
+  button and its confirmation, `MailboxTaskAnswer` is the answer form of a
   task question, `mailboxModel` holds the pure readings, and
   `mailQueries` the query keys and the live refetch.
 - Tasks separates local view state, panel sizing, query composition, and write
@@ -5551,6 +5556,12 @@ archived with its note, dead), a line naming the letter it replies to (read
 with `mail.show`), and the body as Markdown through the task pipeline, with no
 raw HTML. Sent and Archive load more pages with **Load more**.
 
+In the customer's Inbox with open letters the toolbar also shows **Archive
+all** (`ArchiveAll`). It asks for a confirmation, then calls
+`POST /api/mail/close-all`. The daemon closes every open letter of the
+customer in one transaction, also the ones past the loaded page, and the toast
+shows the number it closed. On an error the dialog stays open.
+
 Opening an unread Inbox letter marks it read. In the customer's mailbox a read
 notice, like a request, stays in the Inbox until **Reply** or **Archive**. In
 an agent's mailbox the daemon closes a read notice, so it moves to Archive and
@@ -6001,11 +6012,35 @@ by any daemon, because hosts are the set of daemons rather than something one
 daemon owns. Malformed or unavailable storage falls back to Default only;
 unavailable storage keeps changes until the window closes.
 
-### Switching agents and reconnects
+### Tasks across hosts
 
-The former **All tasks** view, one task table across every host, is removed.
-`/tasks` shows one host at a time, with a host selector when the workspace has
-two or more hosts, and an old `?view=all` URL opens `/tasks`.
+In a workspace with two or more hosts, `/tasks` without `?host=` shows the
+tasks of every host of the workspace (`AllHostsTasks`), and the Host selector
+reads **All hosts**, its first item. A pick of a host adds `?host=` and shows
+that host alone; a pick of **All hosts** drops `?host=` and `?task=`. A link
+that names its host, such as a sidebar host heading or a desktop notification,
+still opens that host. With one host, `/tasks` shows that host as before. An
+old `?view=all` URL opens `/tasks`.
+
+The toolbar is the one-host toolbar. The search, the status, and the queue,
+assignee and **Waiting for me** filters apply to every host. The Queue menu
+lists the queues of every host with their summed counts, and the Assignee
+menu lists the agents of every host; **My tasks** and **Waiting for me** name
+each host's own customer. **Manage queues…** is not offered, because queues
+belong to one host. Below one table header, each host's rows form a group
+under the host's name and row count, in sidebar order. Each group reads its
+host's daemon below its own `ApiProvider` (`HostTasksSection`, which reuses
+the one-host data and actions), so trees, drag and drop, priority changes,
+child tasks, unread question marks and live updates stay within the host. A
+group without rows is hidden. A host the sidebar cannot reach shows
+`unavailable` and is not asked; a host whose read fails shows the error under
+its name. When every group has loaded and none has a row, the table reads
+**No tasks match this view.** A row opens the task drawer on the task's host.
+**New task** shows a **Task host** selector before the queue; the queue list
+is the picked host's, starting with the queue filter or that host's remembered
+queue. No host is marked current in the sidebar while every host is shown.
+
+### Switching agents and reconnects
 
 Selecting another agent in the sidebar while an agent workspace is open keeps
 the tab that is currently open and shows the new agent in it, so the same view
@@ -12681,13 +12716,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.113.0` alpha on an Apple Silicon Mac.
+This path is for the `0.114.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.113.0_aarch64.dmg`;
+- a verified `Tariboy_0.114.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -13529,6 +13564,7 @@ defaults to the customer.
 | `POST /api/mail` | Send: `to`, `subject`, `text`, `kind`, `data`, `deadline`, `notice`, `instant`, `as` |
 | `POST /api/mail/{id}/reply` | Reply: `text`, `ask`, `instant`, `as` |
 | `POST /api/mail/{id}/close` | Archive without a reply: `note`, `as` |
+| `POST /api/mail/close-all` | Archive every open letter of `as` without a reply, in one transaction: `note`, `as`; returns `closed` |
 | `POST /api/mail/read` | Mark read: `ids`, `as` |
 | `POST /api/mail/{id}/requeue` | Requeue a dead letter: `as` |
 | `GET /api/mail/unread?as=` | Open and unread counts, open letters by sender and kind |
@@ -14719,7 +14755,7 @@ runs the routine.
 
 ## Alpha signing and Gatekeeper
 
-`0.113.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.114.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -14833,7 +14869,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.113.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.114.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 

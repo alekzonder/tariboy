@@ -108,6 +108,7 @@ defaults to the customer.
 | `POST /api/mail` | Send: `to`, `subject`, `text`, `kind`, `data`, `deadline`, `notice`, `instant`, `as` |
 | `POST /api/mail/{id}/reply` | Reply: `text`, `ask`, `instant`, `as` |
 | `POST /api/mail/{id}/close` | Archive without a reply: `note`, `as` |
+| `POST /api/mail/close-all` | Archive every open letter of `as` without a reply, in one transaction: `note`, `as`; returns `closed` |
 | `POST /api/mail/read` | Mark read: `ids`, `as` |
 | `POST /api/mail/{id}/requeue` | Requeue a dead letter: `as` |
 | `GET /api/mail/unread?as=` | Open and unread counts, open letters by sender and kind |
