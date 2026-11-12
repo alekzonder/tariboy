@@ -1,3 +1,12 @@
+## [0.114.0] - 2026-11-12
+
+### Added
+
+- The Inbox toolbar shows Archive all while letters are open. After you confirm, it closes every open letter without a reply and shows how many it archived. The new command `mail.close_all` (`POST /api/mail/close-all`) does the same in one transaction.
+- In a workspace with two or more hosts, Tasks shows the tasks of every host by default. The Host selector starts with All hosts. Search and the status, queue, assignee and Waiting for me filters apply to every host. The rows of each host form a group under the host name. A host that is not available shows as unavailable. New task asks for the host before the queue. A link that names a host still opens that host. With one host, nothing changes.
+
+[0.114.0]: https://github.com/alekzonder/tariboy/compare/v0.113.0...v0.114.0
+
 ## [0.113.0] - 2026-11-10
 
 ### Changed
