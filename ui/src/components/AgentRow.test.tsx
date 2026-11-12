@@ -12,7 +12,7 @@ function row(agentState: AgentState) {
 
 describe("AgentRow", () => {
   it.each([
-    [{ kind: "needs", needs: { count: 2 } }, "needs you · 2", "attention"],
+    [{ kind: "needs", needs: { count: 2 }, running: false }, "needs you · 2", "attention"],
     [{ kind: "working", since: "2026-10-30T12:18:00Z" }, "working · 12 min", "live"],
     [{ kind: "working" }, "working", "live"],
     [
@@ -26,6 +26,17 @@ describe("AgentRow", () => {
     const button = row(agentState as AgentState);
     expect(button).toHaveTextContent(`bob${text}`);
     expect(button.querySelector('[data-slot="agent-row-pill"]')).toHaveAttribute("data-tone", tone);
+  });
+
+  it.each([
+    [{ kind: "needs", needs: { count: 1 }, running: true }, "live"],
+    [{ kind: "needs", needs: { count: 1 }, running: false }, "quiet"],
+    [{ kind: "working" }, "live"],
+    [{ kind: "idle" }, "quiet"],
+    [{ kind: "error", reason: "boom" }, "danger"],
+  ] as const)("colors the dot of %o only by whether the agent runs", (agentState, tone) => {
+    const button = row(agentState as AgentState);
+    expect(button.querySelector('[data-slot="status-dot"]')).toHaveAttribute("data-tone", tone);
   });
 
   it("names the reason of an error", () => {

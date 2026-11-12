@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { StatusDot } from "@/components/ui/status";
 import { AgentControls } from "@/components/AgentControls";
 import type { DaemonCtx } from "@/components/daemonContext";
-import { agentStateTone, type AgentState } from "@/lib/agentState";
+import { agentDotTone, type AgentState } from "@/lib/agentState";
 import { openHostPathInVSCode } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 import type { AgentRow, AgentStatus, AgentView } from "@/types";
@@ -158,7 +158,7 @@ export function AgentWorkspaceHeader(props: AgentWorkspaceHeaderProps) {
       <div className="flex flex-wrap items-start gap-2.5 px-4 pt-3.5 pb-2.75 min-[75rem]:flex-nowrap">
         <div className="flex min-w-0 flex-1 flex-col gap-1 max-[75rem]:basis-full">
           <div className="flex min-w-0 items-center gap-2.25">
-            <StatusDot tone={agentStateTone(agentState)} size={8} />
+            <StatusDot tone={agentDotTone(agentState)} size={8} />
             <h1 className="min-w-0 truncate text-title font-semibold tracking-[-.01em]">
               {agent.name}
             </h1>

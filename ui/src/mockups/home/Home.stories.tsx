@@ -103,7 +103,7 @@ function HomeMockup({ compact, data }: { compact: boolean; data: PageData }) {
 }
 
 const working = (minutes: number): AgentState => ({ kind: "working", since: minutesAgo(minutes) });
-const needsOne: AgentState = { kind: "needs", needs: { count: 1 } };
+const needsOne: AgentState = { kind: "needs", needs: { count: 1 }, running: false };
 const off: AgentState = { kind: "off" };
 
 const base: PageData = {

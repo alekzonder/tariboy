@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 
 import { StatusDot, StatusPill } from "@/components/ui/status";
-import { agentStateTone, type AgentState } from "@/lib/agentState";
+import { agentDotTone, agentStateTone, type AgentState } from "@/lib/agentState";
 import { cn } from "@/lib/utils";
 import { elapsed } from "@/pages/home/homeModel";
 
@@ -65,7 +65,7 @@ export function AgentRow({
       )}
       {...props}
     >
-      <StatusDot tone={tone} />
+      <StatusDot tone={agentDotTone(agentState)} />
       <span className="min-w-0 flex-1 truncate font-medium">{name}</span>
       {!interactive && (
         <span

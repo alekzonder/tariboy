@@ -98,14 +98,15 @@ describe("headerSentence", () => {
   const item = { key: "DEV-1", at: "2026-10-30T12:01:00Z", status: "approval", question: false };
 
   it("names the one thing the agent waits for, with its age", () => {
-    expect(headerSentence({ kind: "needs", needs: { count: 1, first: item } }, ctx)).toBe(
-      "Waiting for you: approval for DEV-1 (29 min)",
-    );
+    expect(
+      headerSentence({ kind: "needs", needs: { count: 1, first: item }, running: false }, ctx),
+    ).toBe("Waiting for you: approval for DEV-1 (29 min)");
     expect(
       headerSentence(
         {
           kind: "needs",
           needs: { count: 1, first: { ...item, status: undefined, question: true } },
+          running: false,
         },
         ctx,
       ),
@@ -113,9 +114,9 @@ describe("headerSentence", () => {
   });
 
   it("counts several things", () => {
-    expect(headerSentence({ kind: "needs", needs: { count: 3, first: item } }, ctx)).toBe(
-      "Waiting for you: 3 things",
-    );
+    expect(
+      headerSentence({ kind: "needs", needs: { count: 3, first: item }, running: false }, ctx),
+    ).toBe("Waiting for you: 3 things");
   });
 
   it("names the Goal task and the run while working", () => {
@@ -148,7 +149,7 @@ describe("headerSentence", () => {
 
 describe("primaryAction", () => {
   it.each([
-    [{ kind: "needs", needs: { count: 1 } }, "answer"],
+    [{ kind: "needs", needs: { count: 1 }, running: false }, "answer"],
     [{ kind: "working" }, "give"],
     [{ kind: "idle" }, "give"],
     [{ kind: "off" }, "start"],

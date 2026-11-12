@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { AgentRow, Letter, Task } from "@/lib/api";
 import type { HostNeeds } from "./needsYou";
-import { agentNeeds, deriveAgentState, type AgentNeeds } from "./agentState";
+import {
+  agentDotTone,
+  agentNeeds,
+  deriveAgentState,
+  type AgentNeeds,
+  type AgentState,
+} from "./agentState";
 
 const task = (over: Partial<Task>): Task =>
   ({ key: "T-1", updated_at: "", assignee: "agent:bob", ...over }) as Task;
@@ -125,6 +131,12 @@ describe("deriveAgentState", () => {
     expect(deriveAgentState({ agent: agent({ state: "running" }), needs: one })).toEqual({
       kind: "needs",
       needs: one,
+      running: true,
+    });
+    expect(deriveAgentState({ agent: agent({ state: "idle" }), needs: one })).toEqual({
+      kind: "needs",
+      needs: one,
+      running: false,
     });
     expect(deriveAgentState({ agent: agent({ enabled: false }), needs: one }).kind).toBe("needs");
     expect(deriveAgentState({ agent: agent({ state: "error" }), needs: one }).kind).toBe("error");
@@ -163,5 +175,18 @@ describe("deriveAgentState", () => {
     expect(deriveAgentState({ agent: agent({ state: "idle" }), status, needs: none }).kind).toBe(
       "working",
     );
+  });
+});
+
+describe("agentDotTone", () => {
+  it.each([
+    [{ kind: "working" }, "live"],
+    [{ kind: "needs", needs: one, running: true }, "live"],
+    [{ kind: "needs", needs: one, running: false }, "quiet"],
+    [{ kind: "off" }, "quiet"],
+    [{ kind: "idle" }, "quiet"],
+    [{ kind: "error", reason: "boom" }, "danger"],
+  ] as const)("colors %o by whether the agent runs, not by needs you", (state, tone) => {
+    expect(agentDotTone(state as AgentState)).toBe(tone);
   });
 });

@@ -7,7 +7,7 @@
  * is quiet text on no background, and cancelled is quieter still.
  *
  * Every status surface in the app (task rows, task tables, and the agent rows
- * and header through `agentStateTone`) reads its colors from here, so the rule is changed in one edit
+ * and header through `agentStateTone` and `agentDotTone`) reads its colors from here, so the rule is changed in one edit
  * rather than re-decided per row. The tone is what callers reason about; the
  * class tables below are the only place a token name is spelled out.
  */
