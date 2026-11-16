@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/alekzonder/tariboy/tbox/internal/harness"
 	"github.com/alekzonder/tariboy/tbox/internal/imgstore"
@@ -37,8 +38,8 @@ func harnessHost(env *Env) harness.Host {
 // runClean removes the run directories and the harness files outside
 // $TBOX_HOME, of one image or of all.
 func runClean(env *Env, args []string) int {
-	if len(args) > 1 {
-		fmt.Fprintln(env.Stderr, "usage: tbox clean [IMAGE]")
+	if len(args) > 1 || (len(args) == 1 && strings.HasPrefix(args[0], "-")) {
+		fmt.Fprint(env.Stderr, cleanUsage)
 		return 2
 	}
 	image := ""

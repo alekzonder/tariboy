@@ -34,13 +34,13 @@ func runExport(env *Env, args []string) int {
 			break
 		}
 		if refText != "" {
-			fmt.Fprintln(env.Stderr, "usage: tbox image export REF [-o FILE] [--force]")
+			fmt.Fprint(env.Stderr, exportUsage)
 			return 2
 		}
 		refText, args = flags.Arg(0), flags.Args()[1:]
 	}
 	if refText == "" {
-		fmt.Fprintln(env.Stderr, "usage: tbox image export REF [-o FILE] [--force]")
+		fmt.Fprint(env.Stderr, exportUsage)
 		return 2
 	}
 	ref, err := imgstore.ParseRef(refText)
@@ -77,7 +77,7 @@ func runImport(env *Env, args []string) int {
 		return 2
 	}
 	if flags.NArg() != 1 {
-		fmt.Fprintln(env.Stderr, "usage: tbox image import FILE")
+		fmt.Fprint(env.Stderr, importUsage)
 		return 2
 	}
 	store, err := openStore(env)
