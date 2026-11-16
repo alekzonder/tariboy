@@ -91,6 +91,41 @@ func singleTopDir(stage string) (string, error) {
 	return stage, nil
 }
 
+var errTooMany = errors.New("archive has too many members")
+
+// streamOverhead is the tar framing allowed on top of MaxExpanded: a header
+// block and padding for every member plus room for extended headers.
+func streamOverhead(lim Limits) int64 { return int64(lim.MaxMembers)*1536 + 64<<10 }
+
+// capStream fails once more than MaxExpanded plus the framing overhead has
+// been read from r, bounding the decompressed size of a stream whatever its
+// headers claim.
+func capStream(r io.Reader, lim Limits) io.Reader {
+	return &cappedReader{r: r, left: lim.MaxExpanded + streamOverhead(lim)}
+}
+
+type cappedReader struct {
+	r    io.Reader
+	left int64
+}
+
+func (c *cappedReader) Read(p []byte) (int, error) {
+	if c.left < 0 {
+		return 0, errExpanded
+	}
+	if int64(len(p)) > c.left+1 {
+		p = p[:c.left+1]
+	}
+	n, err := c.r.Read(p)
+	c.left -= int64(n)
+	if c.left < 0 {
+		return n, errExpanded
+	}
+	return n, err
+}
+
+var errExpanded = errors.New("archive exceeds expanded size limit")
+
 // counter tracks the member and byte limits of one extraction.
 type counter struct {
 	lim      Limits
@@ -109,14 +144,14 @@ func newCounter(lim Limits) *counter {
 func (c *counter) admit(name string, size int64) (string, error) {
 	c.members++
 	if c.members > c.lim.MaxMembers {
-		return "", errors.New("archive has too many members")
+		return "", errTooMany
 	}
 	clean, err := cleanMember(name, c.lim.MaxPathBytes)
 	if err != nil {
 		return "", err
 	}
 	if size < 0 || c.expanded > c.lim.MaxExpanded-size {
-		return "", errors.New("archive exceeds expanded size limit")
+		return "", errExpanded
 	}
 	c.expanded += size
 	return clean, nil
@@ -142,7 +177,7 @@ func cleanMember(name string, maxBytes int) (string, error) {
 }
 
 func extractTarInto(r io.Reader, stage string, lim Limits) error {
-	tr := tar.NewReader(r)
+	tr := tar.NewReader(capStream(r, lim))
 	c := newCounter(lim)
 	for {
 		h, err := tr.Next()
@@ -153,6 +188,9 @@ func extractTarInto(r io.Reader, stage string, lim Limits) error {
 			return fmt.Errorf("read tar: %w", err)
 		}
 		if h.Typeflag == tar.TypeXGlobalHeader {
+			if c.members++; c.members > lim.MaxMembers {
+				return errTooMany
+			}
 			continue
 		}
 		if err := extractTarMember(tr, h, c, stage); err != nil {
@@ -253,6 +291,9 @@ func extractZip(data []byte, stage string, lim Limits) error {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return fmt.Errorf("read zip: %w", err)
+	}
+	if len(zr.File) > lim.MaxMembers {
+		return errTooMany
 	}
 	c := newCounter(lim)
 	for _, f := range zr.File {

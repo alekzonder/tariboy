@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func isolate(t *testing.T) {
@@ -374,5 +375,56 @@ func TestCloneFailures(t *testing.T) {
 	}
 	if _, err := g.Clone(ctx, f.repo, "-x", dir); err == nil {
 		t.Error("bad ref accepted")
+	}
+}
+
+func TestMirrorFollowsRenamedDefaultBranch(t *testing.T) {
+	f := newRepo(t)
+	g := local()
+	ctx := context.Background()
+	mirror := filepath.Join(t.TempDir(), "m")
+	if err := g.Mirror(ctx, f.repo, mirror); err != nil {
+		t.Fatal(err)
+	}
+	git(t, f.repo, "checkout", "-q", "-b", "trunk")
+	write(t, f.repo, "t.txt", "t", 0o644)
+	git(t, f.repo, "add", ".")
+	git(t, f.repo, "commit", "-q", "-m", "trunk")
+	trunk := git(t, f.repo, "rev-parse", "HEAD")
+	git(t, f.repo, "branch", "-D", "main")
+	if err := g.Mirror(ctx, f.repo, mirror); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := g.Resolve(ctx, mirror, ""); err != nil || got != trunk {
+		t.Errorf("Resolve(\"\") = %q, %v; want %q", got, err, trunk)
+	}
+}
+
+func TestResolveBrokenMirrorIsNotRefNotFound(t *testing.T) {
+	isolate(t)
+	_, err := local().Resolve(context.Background(), t.TempDir(), "main")
+	if err == nil || errors.Is(err, ErrRefNotFound) {
+		t.Errorf("err = %v, want a non-ErrRefNotFound error", err)
+	}
+	_, err = local().Resolve(context.Background(), t.TempDir(), "")
+	if err == nil || errors.Is(err, ErrRefNotFound) {
+		t.Errorf("default err = %v, want a non-ErrRefNotFound error", err)
+	}
+}
+
+func TestNormalizeURLRejectsQueryAndFragment(t *testing.T) {
+	for _, in := range []string{"https://h/a/b.git?token=x", "https://h/a/b.git#frag", "ssh://git@h/a?x=1", "git@h:a/b.git?x", "git@h:a/b#f", "https://h/a?"} {
+		if got, err := NormalizeURL(in, false); err == nil {
+			t.Errorf("NormalizeURL(%q) = %q, want error", in, got)
+		}
+	}
+}
+
+func TestGitErrorKeepsOneMaskedLine(t *testing.T) {
+	stderr := []byte("Cloning into 'x'...\nfatal: unable to access 'https://user:tok@host/a/': " + strings.Repeat("é", 2000) + "\n\n")
+	err := gitError(context.Background(), "clone", errors.New("exit"), stderr)
+	msg := err.Error()
+	if strings.Contains(msg, "tok") || strings.Contains(msg, "Cloning") || !utf8.ValidString(msg) || len(msg) > 400 {
+		t.Errorf("error = %q", msg)
 	}
 }
