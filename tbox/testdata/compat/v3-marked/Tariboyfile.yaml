@@ -1,0 +1,16 @@
+schema_version: 3
+image_version: 0.3.0
+plugins:
+  - name: whoami
+  - name: mail
+skills:
+  - dir: ./skills/hello-skill
+  - dir: ./skills/tariboy-only
+    only: tariboy
+prompts:
+  - file: ./intro.md
+  - runtime: identity
+  - file: ./tariboy-only.md
+    only: tariboy
+  - runtime: messages
+  - file: ./closing.md
