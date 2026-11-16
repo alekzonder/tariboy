@@ -545,3 +545,28 @@ func TestExportIgnoresUserGitConfig(t *testing.T) {
 		t.Fatalf("notes.txt = %q", b)
 	}
 }
+
+// TestMirrorKeepsDirectoryWhenCheckDoesNotFinish checks that a mirror is not
+// deleted when the repository check was cut short by the context.
+func TestMirrorKeepsDirectoryWhenCheckDoesNotFinish(t *testing.T) {
+	f := newRepo(t)
+	mirror := filepath.Join(t.TempDir(), "m")
+	if err := local().Mirror(context.Background(), f.repo, mirror); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := local().Mirror(ctx, f.repo, mirror); err == nil {
+		t.Fatal("mirror with a cancelled context succeeded")
+	}
+	if got, err := local().Resolve(context.Background(), mirror, "main"); err != nil || got != f.second {
+		t.Fatalf("mirror lost: %q %v", got, err)
+	}
+	slow := Git{AllowLocal: true, Timeout: time.Nanosecond}
+	if err := slow.Mirror(context.Background(), f.repo, mirror); err == nil {
+		t.Fatal("mirror with a timed-out check succeeded")
+	}
+	if got, err := local().Resolve(context.Background(), mirror, "main"); err != nil || got != f.second {
+		t.Fatalf("mirror lost after a timeout: %q %v", got, err)
+	}
+}

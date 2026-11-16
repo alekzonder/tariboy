@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"fmt"
 	"io/fs"
 	"os"
@@ -22,28 +23,20 @@ func inCwd(env *Env, p string) string {
 }
 
 func runExport(env *Env, args []string) int {
-	flags := newFlags("image export", env.Stderr)
-	out := flags.String("o", "", "output file (default: NAME-TAG.tariboy-image.tar.gz in the current directory)")
-	force := flags.Bool("force", false, "overwrite an existing output file")
-	var refText string
-	for {
-		if err := flags.Parse(args); err != nil {
-			return 2
-		}
-		if flags.NArg() == 0 {
-			break
-		}
-		if refText != "" {
-			fmt.Fprint(env.Stderr, exportUsage)
-			return 2
-		}
-		refText, args = flags.Arg(0), flags.Args()[1:]
+	var out string
+	var force bool
+	pos, err := parseInterleaved(env, "image export", args, func(fs *flag.FlagSet) {
+		fs.StringVar(&out, "o", "", "output file (default: NAME-TAG.tariboy-image.tar.gz in the current directory)")
+		fs.BoolVar(&force, "force", false, "overwrite an existing output file")
+	})
+	if err != nil {
+		return 2
 	}
-	if refText == "" {
+	if len(pos) != 1 {
 		fmt.Fprint(env.Stderr, exportUsage)
 		return 2
 	}
-	ref, err := imgstore.ParseRef(refText)
+	ref, err := imgstore.ParseRef(pos[0])
 	if err != nil {
 		return fail(env, err)
 	}
@@ -59,12 +52,12 @@ func runExport(env *Env, args []string) int {
 	if err := portable.Export(&buf, img, ref, "tbox-"+version.Version); err != nil {
 		return fail(env, err)
 	}
-	name := *out
+	name := out
 	if name == "" {
 		name = fmt.Sprintf("%s-%s.tariboy-image.tar.gz", ref.Name, ref.Tag)
 	}
 	target := inCwd(env, name)
-	if err := writeExport(target, buf.Bytes(), *force); err != nil {
+	if err := writeExport(target, buf.Bytes(), force); err != nil {
 		return fail(env, err)
 	}
 	fmt.Fprintf(env.Stdout, "exported %s %s to %s\n", ref, img.Manifest.Digest, target)
@@ -72,26 +65,18 @@ func runExport(env *Env, args []string) int {
 }
 
 func runImport(env *Env, args []string) int {
-	flags := newFlags("image import", env.Stderr)
-	force := flags.Bool("force", false, "move a tag that points at other content")
-	var file string
-	for {
-		if err := flags.Parse(args); err != nil {
-			return 2
-		}
-		if flags.NArg() == 0 {
-			break
-		}
-		if file != "" {
-			fmt.Fprint(env.Stderr, importUsage)
-			return 2
-		}
-		file, args = flags.Arg(0), flags.Args()[1:]
+	var force bool
+	pos, err := parseInterleaved(env, "image import", args, func(fs *flag.FlagSet) {
+		fs.BoolVar(&force, "force", false, "move a tag that points at other content")
+	})
+	if err != nil {
+		return 2
 	}
-	if file == "" {
+	if len(pos) != 1 {
 		fmt.Fprint(env.Stderr, importUsage)
 		return 2
 	}
+	file := pos[0]
 	store, err := openStore(env)
 	if err != nil {
 		return fail(env, err)
@@ -105,7 +90,7 @@ func runImport(env *Env, args []string) int {
 	if err != nil {
 		return fail(env, err)
 	}
-	if err := checkTagMove(store, ref, img.Manifest.Digest, *force); err != nil {
+	if err := checkTagMove(store, ref, img.Manifest.Digest, force); err != nil {
 		return fail(env, err)
 	}
 	moved, err := store.Publish(ref.Name, img, []string{ref.Tag})

@@ -2,10 +2,10 @@ package cli
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/alekzonder/tariboy/tbox/internal/harness"
@@ -51,14 +51,17 @@ func harnessHost(env *Env) harness.Host {
 // $TBOX_HOME and the image archives no tag points at, of one image or of
 // all.
 func runClean(env *Env, args []string) int {
-	if len(args) > 1 || (len(args) == 1 && strings.HasPrefix(args[0], "-")) {
+	pos, err := parseInterleaved(env, "clean", args, func(*flag.FlagSet) {})
+	if err != nil || len(pos) > 1 {
 		fmt.Fprint(env.Stderr, cleanUsage)
 		return 2
 	}
 	image := ""
-	if len(args) == 1 {
-		image = args[0]
-		if err := imgstore.CheckName(image); err != nil {
+	if len(pos) == 1 {
+		// An image named before the name rule was tightened can still be
+		// cleaned.
+		image = pos[0]
+		if err := imgstore.CheckExistingName(image); err != nil {
 			return fail(env, err)
 		}
 	}

@@ -177,7 +177,11 @@ func (g Git) Mirror(ctx context.Context, url, dir string) error {
 		return err
 	}
 	if _, err := os.Lstat(dir); err == nil {
-		if g.isRepository(ctx, dir) {
+		isRepo, err := g.isRepository(ctx, dir)
+		if err != nil {
+			return err
+		}
+		if isRepo {
 			return g.updateMirror(ctx, url, dir)
 		}
 		if err := os.RemoveAll(dir); err != nil {
@@ -189,10 +193,19 @@ func (g Git) Mirror(ctx context.Context, url, dir string) error {
 	return g.newMirror(ctx, url, dir)
 }
 
-// isRepository reports whether dir is a bare git repository.
-func (g Git) isRepository(ctx context.Context, dir string) bool {
+// isRepository reports whether dir is a bare git repository. It returns an
+// error when the check did not run to completion (cancelled, timed out, git
+// not started), so the caller never takes dir for a broken mirror then.
+func (g Git) isRepository(ctx context.Context, dir string) (bool, error) {
 	out, err := g.run(ctx, "rev-parse", gitDir(dir), "rev-parse", "--is-bare-repository")
-	return err == nil && strings.TrimSpace(string(out)) == "true"
+	if err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			return false, nil
+		}
+		return false, err
+	}
+	return strings.TrimSpace(string(out)) == "true", nil
 }
 
 func (g Git) newMirror(ctx context.Context, url, dir string) error {
@@ -216,8 +229,10 @@ func (g Git) newMirror(ctx context.Context, url, dir string) error {
 	if err := g.syncHead(ctx, tmp); err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, dir); err != nil && !g.isRepository(ctx, dir) {
-		return err
+	if err := os.Rename(tmp, dir); err != nil {
+		if isRepo, _ := g.isRepository(ctx, dir); !isRepo {
+			return err
+		}
 	}
 	return nil
 }

@@ -321,7 +321,7 @@ func TestBuildStoreImageWithInvalidDirectoryName(t *testing.T) {
 	if code, _, errs := runIn(t, home, "/", "store", "add", "s", dir); code != 0 {
 		t.Fatal(errs)
 	}
-	if code, _, errs := runIn(t, home, "/", "build", "s/Demo"); code != 1 || !strings.Contains(errs, "--name") {
+	if code, _, errs := runIn(t, home, "/", "build", "s/Demo"); code != 1 || !strings.Contains(errs, "--name") || !strings.Contains(errs, "first character a-z or 0-9, then a-z 0-9 . _ -") {
 		t.Fatalf("without --name: %d %q", code, errs)
 	}
 	if code, out, errs := runIn(t, home, "/", "build", "s/Demo", "--name", "demo"); code != 0 || !strings.Contains(out, "built demo:") {

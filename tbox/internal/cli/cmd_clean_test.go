@@ -144,3 +144,85 @@ func TestCleanRemovesUntaggedArchives(t *testing.T) {
 		}
 	}
 }
+
+// legacyImage builds demo and renames its image directory to name, the way an
+// image built before the image-name rule was tightened sits on disk.
+func legacyImage(t *testing.T, home, name string) {
+	t.Helper()
+	if code, _, errs := runIn(t, home, "/", "build", "--path", demoSource(t)); code != 0 {
+		t.Fatalf("build: %s", errs)
+	}
+	if err := os.Rename(filepath.Join(home, "images", "demo"), filepath.Join(home, "images", name)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLegacyImageNamesCanBeListedAndRemoved(t *testing.T) {
+	home := t.TempDir()
+	legacyImage(t, home, "_foo")
+	if code, out, errs := runIn(t, home, "/", "images"); code != 0 || !strings.Contains(out, "_foo") {
+		t.Fatalf("images: %d %q %q", code, out, errs)
+	}
+	if code, out, errs := runIn(t, home, "/", "image", "show", "_foo"); code != 0 || !strings.Contains(out, "ref: _foo:latest") {
+		t.Fatalf("show: %d %q %q", code, out, errs)
+	}
+	if code, _, errs := cleanCmd(t, home, t.TempDir(), "_foo"); code != 0 {
+		t.Fatalf("clean _foo: %d %q", code, errs)
+	}
+	for _, tag := range []string{"1.0.0", "latest"} {
+		if code, _, errs := runIn(t, home, "/", "image", "rm", "_foo:"+tag); code != 0 {
+			t.Fatalf("rm _foo:%s: %d %q", tag, code, errs)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(home, "images", "_foo")); !os.IsNotExist(err) {
+		t.Fatalf("image directory left: %v", err)
+	}
+
+	legacyImage(t, home, "-x")
+	if code, _, errs := cleanCmd(t, home, t.TempDir(), "-x"); code != 2 || !strings.Contains(errs, cleanUsage) {
+		t.Fatalf("clean -x: %d %q", code, errs)
+	}
+	for _, tag := range []string{"1.0.0", "latest"} {
+		if code, _, errs := runIn(t, home, "/", "image", "rm", "--", "-x:"+tag); code != 0 {
+			t.Fatalf("rm -- -x:%s: %d %q", tag, code, errs)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(home, "images", "-x")); !os.IsNotExist(err) {
+		t.Fatalf("image directory left: %v", err)
+	}
+	if code, _, errs := runIn(t, home, "/", "build", "--path", demoSource(t), "--name", "_new"); code != 1 || errs == "" {
+		t.Fatalf("build with a legacy name: %d %q", code, errs)
+	}
+}
+
+func TestDashDashEndsOptionsForImageCommands(t *testing.T) {
+	home, work := t.TempDir(), t.TempDir()
+	if code, _, errs := runIn(t, home, "/", "build", "--path", demoSource(t)); code != 0 {
+		t.Fatalf("build: %s", errs)
+	}
+	if code, out, errs := runIn(t, home, "/", "image", "show", "--", "demo"); code != 0 || !strings.Contains(out, "ref: demo:latest") {
+		t.Fatalf("show --: %d %q %q", code, out, errs)
+	}
+	// After -- an option is a positional argument: a second REF or FILE.
+	if code, _, errs := runIn(t, home, work, "image", "export", "--", "demo", "-o", "x.tar.gz"); code != 2 {
+		t.Fatalf("export -- REF -o: %d %q", code, errs)
+	}
+	if _, err := os.Stat(filepath.Join(work, "x.tar.gz")); !os.IsNotExist(err) {
+		t.Fatalf("export wrote after --: %v", err)
+	}
+	if code, _, errs := runIn(t, home, work, "image", "export", "-o", "x.tar.gz", "--", "demo"); code != 0 {
+		t.Fatalf("export -o FILE -- REF: %d %q", code, errs)
+	}
+	if code, _, errs := runIn(t, t.TempDir(), work, "image", "import", "--", "x.tar.gz", "--force"); code != 2 {
+		t.Fatalf("import -- FILE --force: %d %q", code, errs)
+	}
+	if code, _, errs := runIn(t, t.TempDir(), work, "image", "import", "--force", "--", "x.tar.gz"); code != 0 {
+		t.Fatalf("import --force -- FILE: %d %q", code, errs)
+	}
+	if code, out, errs := cleanCmd(t, home, t.TempDir(), "--", "demo"); code != 0 || !strings.Contains(out, "of demo") {
+		t.Fatalf("clean -- demo: %d %q %q", code, out, errs)
+	}
+	if code, _, errs := runIn(t, home, "/", "image", "rm", "--", "demo:1.0.0"); code != 0 {
+		t.Fatalf("rm --: %d %q", code, errs)
+	}
+}

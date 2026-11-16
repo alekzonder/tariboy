@@ -90,13 +90,19 @@ func openWith(in, out *os.File, sys sysDeps) (Terminal, error) {
 	return r, nil
 }
 
-// watch restores the terminal on a terminating signal and re-raises it.
+// watch restores the terminal on a terminating signal and re-raises it. A
+// signal queued while Close ran is re-raised too: select may pick done first.
 func (r *realTerm) watch() {
 	select {
 	case sig := <-r.sigs:
 		_ = r.Close()
 		r.sys.raise(sig)
 	case <-r.done:
+		select {
+		case sig := <-r.sigs:
+			r.sys.raise(sig)
+		default:
+		}
 	}
 }
 
