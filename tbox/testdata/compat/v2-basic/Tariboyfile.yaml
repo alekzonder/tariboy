@@ -1,0 +1,7 @@
+schema_version: 2
+image_version: 1.0.0
+plugins: []
+skills:
+  - dir: ./skills/hello-skill
+prompts:
+  - file: ./instructions.md
