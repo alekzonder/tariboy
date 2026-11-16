@@ -86,8 +86,9 @@ dist/releases/0.115.0/
 downloads the archive of its platform when the desktop app installs or
 updates it, and a Linux host also downloads it with `tariboy update`. The app
 itself carries no server binaries, so a release without these archives cannot
-install Tariboy on a server. Each archive holds the seven server binaries,
-`VERSION`, their `SHA256SUMS`, and the fixed `remote-install.sh`. The artifact
+install Tariboy on a server. Each archive holds the eight server binaries
+(`tbox` among them, at the release version), `VERSION`, their `SHA256SUMS`,
+and the fixed `remote-install.sh`. The artifact
 gate extracts each one, checks those entries, their architecture, `VERSION`,
 internal checksums, and that the installer matches the repository copy. It
 also makes sure that the app bundles only the `darwin-arm64` set.

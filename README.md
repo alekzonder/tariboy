@@ -111,7 +111,9 @@ make build
 
 `make build` also builds `bin/tbox`, a standalone runner with no daemon that
 builds an image from a directory or a Store and starts it in an ordinary
-Claude Code, Codex or OpenCode session. See [tbox](https://alekzonder.github.io/tariboy/binaries/tbox).
+Claude Code, Codex or OpenCode session. It ships with each release at the same
+version and is installed on servers together with `tariboy`, `ttasks` and
+`tmail`. See [tbox](https://alekzonder.github.io/tariboy/binaries/tbox).
 
 For native Desktop packages, follow the
 [Desktop build instructions](https://alekzonder.github.io/tariboy/development#rust-desktop-host).
