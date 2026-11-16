@@ -124,6 +124,9 @@ func storeImageDir(env *Env, home paths.Home, arg string) (dir, root string, err
 	}
 	root = reg.Root(s)
 	dir = filepath.Join(root, "images", sel.Name)
+	if fi, lerr := os.Lstat(filepath.Join(root, "images")); lerr != nil || !fi.IsDir() {
+		return "", "", fmt.Errorf("store %s has no image %q", sel.Store, sel.Name)
+	}
 	if fi, lerr := os.Lstat(dir); lerr != nil || !fi.IsDir() {
 		return "", "", fmt.Errorf("store %s has no image %q", sel.Store, sel.Name)
 	}
@@ -166,13 +169,13 @@ func buildImage(env *Env, home paths.Home, opts build.Options, label string) (bu
 // printWarnings writes each build warning to stderr.
 func printWarnings(env *Env, res build.Result) {
 	for _, w := range res.Warnings {
-		fmt.Fprintf(env.Stderr, "warning: %s\n", w)
+		fmt.Fprintf(env.Stderr, "warning: %s\n", textsafe.Line(w, 2000))
 	}
 }
 
 func printBuild(env *Env, res build.Result) {
 	for _, u := range res.Updates {
-		fmt.Fprintf(env.Stdout, "updated %s %s..%s\n", u.Key, shortCommit(u.Old), shortCommit(u.New))
+		fmt.Fprintf(env.Stdout, "updated %s %s..%s\n", safe(u.Key), safe(shortCommit(u.Old)), safe(shortCommit(u.New)))
 	}
 	if !res.Built {
 		fmt.Fprintf(env.Stdout, "up to date %s %s\n", res.Name, res.Digest)

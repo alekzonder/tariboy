@@ -44,10 +44,10 @@ minimum before anything starts.
 | `tbox run STORE/IMAGE HARNESS [-- ARGS...]` | Build if changed, then start. |
 | `tbox run --path DIR HARNESS [-- ARGS...]` | Build if changed, then start. |
 | `tbox store add NAME SOURCE [--ref REF]`, `list`, `show NAME`, `refresh NAME`, `ref NAME REF`, `remove NAME` | Manage Stores. |
-| `tbox skills`, `tbox skill STORE/SKILL` | List the skills of all Stores, or show one. |
+| `tbox skills`, `tbox skill STORE/SKILL` (outside a session) | List the skills of all Stores, or show one. |
 | `tbox prompts`, `tbox prompt STORE/PROMPT` | List the prompts of all Stores, or print one. |
 | `tbox clean [IMAGE]` | Remove run directories and harness files. |
-| `tbox skills`, `tbox skill NAME`, `tbox skill exec NAME SCRIPT [ARGS...]` | In-session commands, see "Inside a session". |
+| `tbox skills`, `tbox skill NAME`, `tbox skill exec NAME SCRIPT [ARGS...]` (inside a session) | List and show the skills of the session image, or run a script. |
 | `tbox version` | Print the version. |
 
 ## The `$TBOX_HOME` layout
@@ -74,18 +74,21 @@ harness. `tbox` never writes into your working directory.
 ## Stores
 
 A Store is a place that holds images, skills and prompts. Its content is
-untrusted: `tbox` reads it and never executes anything from it, and never
-writes into a Store directory.
+untrusted: `tbox` reads it and never executes anything from it. It never
+modifies its own clones and unpacked archives under `$TBOX_HOME/stores`. The
+only file it may create in a directory Store or in an image source directory
+is `tbox-lock.json`, next to a Tariboyfile that has remote entries, when that
+directory is writable and not inside `$TBOX_HOME/stores`.
 
 ```bash
-tbox store add tariboy https://github.com/alekzonder/tariboy-store.git
+tbox store add team https://github.com/example/team-store.git
 tbox store add team git@github.com:team/store.git --ref v2
 tbox store add local ./my-store
 tbox store list
-tbox store show tariboy
-tbox store refresh tariboy
-tbox store ref tariboy main
-tbox store remove tariboy
+tbox store show team
+tbox store refresh team
+tbox store ref team main
+tbox store remove team
 ```
 
 | Source | `add` | `refresh` |
@@ -112,10 +115,10 @@ The inventory of a Store:
 is listed with its error and does not hide the others. Symlinks below the Store
 root are not followed.
 
-Items are addressed as `<store>/<name>`: `tbox build tariboy/developer`,
-`tbox skill tariboy/review`, `tbox prompt tariboy/process`. A bare name is an
+Items are addressed as `<store>/<name>`: `tbox build team/demo`,
+`tbox skill team/review`, `tbox prompt team/process`. A bare name is an
 error that lists the matching `<store>/<name>` candidates. `tbox skill
-STORE/SKILL` prints the description, the sorted list of files and `SKILL.md`;
+STORE/SKILL` prints the description, the sorted list of files and `SKILL.md` (for a skill at the Store root, only the files directly in the root);
 `tbox prompt STORE/PROMPT` prints the file as it is (at most 4 MiB). All other
 text from a Store, such as names and descriptions, is printed with control
 characters replaced.
@@ -217,7 +220,7 @@ Warnings go to stderr, one per line, prefixed `warning: `.
 ```bash
 tbox run my-image claude
 tbox run my-image:0.2.0 codex -- --model gpt-5
-tbox run tariboy/developer claude
+tbox run team/demo claude
 tbox run --path ./my-image opencode
 ```
 
