@@ -63,6 +63,7 @@ var payloadBinaries = []string{
 	"tariboy-scripts",
 	"tariboy-shim",
 	"tariboy-plugin-telegram",
+	"tbox",
 }
 
 type Options struct {

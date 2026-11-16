@@ -315,6 +315,7 @@ mod tests {
             ("tmail", "tariboy-mail"),
             ("tariboy-scripts", "tariboy-scripts"),
             ("tscripts", "tariboy-scripts"),
+            ("tbox", "tbox"),
         ] {
             assert_eq!(
                 std::fs::read_link(link_dir.join(name)).unwrap(),

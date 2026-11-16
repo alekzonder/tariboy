@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 /// It remains separate from CARGO_PKG_VERSION so bundled payloads and the
 /// running daemon are checked against the same release value.
 pub const VERSION: &str = env!("TARIBOY_VERSION");
-pub const BINARIES: [&str; 7] = [
+pub const BINARIES: [&str; 8] = [
     "tariboyd",
     "tariboy",
     "tariboy-tasks",
@@ -15,13 +15,14 @@ pub const BINARIES: [&str; 7] = [
     "tariboy-scripts",
     "tariboy-shim",
     "tariboy-plugin-telegram",
+    "tbox",
 ];
 pub struct ManagedLink {
     pub name: &'static str,
     pub source: &'static str,
 }
 
-pub const MANAGED_LINKS: [ManagedLink; 10] = [
+pub const MANAGED_LINKS: [ManagedLink; 11] = [
     ManagedLink {
         name: "tariboyd",
         source: "tariboyd",
@@ -61,6 +62,10 @@ pub const MANAGED_LINKS: [ManagedLink; 10] = [
     ManagedLink {
         name: "tariboy-plugin-telegram",
         source: "tariboy-plugin-telegram",
+    },
+    ManagedLink {
+        name: "tbox",
+        source: "tbox",
     },
 ];
 const VERSION_FILE: &str = "VERSION";
@@ -337,6 +342,12 @@ mod tests {
             .unwrap_err()
             .contains("tariboy-scripts"));
         std::fs::write(dir.join("tariboy-scripts"), b"binary").unwrap();
+        std::fs::remove_file(dir.join("tbox")).unwrap();
+        assert!(bundle
+            .platform(Platform::LinuxX86_64)
+            .unwrap_err()
+            .contains("tbox"));
+        std::fs::write(dir.join("tbox"), b"binary").unwrap();
         std::fs::remove_file(dir.join("tariboy-shim")).unwrap();
         assert!(bundle
             .platform(Platform::LinuxX86_64)
