@@ -1993,7 +1993,13 @@ restart, stays on one device, and is ignored when it is unreadable.
 The table header and its rows read one column layout, so a column cannot
 drift from its heading. By default `Pri` comes first in every table, then
 `Key`, 168px holding the tree indents, the chevron and the key, which truncates
-rather than wrapping; `Task` takes the rest. The table adds `Agent`. There is no
+rather than wrapping; `Task` takes the rest. The table adds `Agent`. Its badge
+is green while the assignee is an agent in state `running` on the row's host,
+and grey otherwise: a stopped or failed agent and a person stay grey. The
+console page builds the set of running agents from the sidebar's agent poll
+(`runningAgentsByHost` in `pages/tasks/runningAgents.ts`, passed through
+`RunningAgentsContext`), so the color lags the agent by at most one poll, and a
+host that stops answering keeps its last known colors. There is no
 `Queue` column: the key prefix already names the queue. The header is sticky.
 The drag grip lives in the row's left padding and appears on hover.
 
