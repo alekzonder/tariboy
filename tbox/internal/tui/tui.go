@@ -76,8 +76,8 @@ func Input(t Terminal, prompt, initial string) (string, error) {
 	prompt = clean(prompt)
 	text := []rune(initial)
 	for {
-		cols, _ := t.Size()
-		if err := s.draw([]string{truncate(prompt+": "+string(text), cols-1)}); err != nil {
+		cols, _, limit := geometry(t)
+		if err := s.draw([]string{truncate(prompt+": "+display(string(text)), cols-1)}, limit); err != nil {
 			return "", err
 		}
 		k, err := t.ReadKey()
@@ -87,7 +87,7 @@ func Input(t Terminal, prompt, initial string) (string, error) {
 		switch k.Code {
 		case KeyEnter:
 			out := string(text)
-			return out, s.leave(truncate(prompt+": "+clean(out), cols-1))
+			return out, s.leave(truncate(prompt+": "+clean(out), cols-1), limit)
 		case KeyEsc, KeyCtrlC:
 			return "", ErrCancelled
 		case KeyBackspace:
@@ -97,7 +97,7 @@ func Input(t Terminal, prompt, initial string) (string, error) {
 		case KeySpace:
 			text = append(text, ' ')
 		case KeyRune:
-			if k.Rune >= 0x20 && k.Rune != 0x7f {
+			if !isControl(k.Rune) {
 				text = append(text, k.Rune)
 			}
 		}
@@ -167,7 +167,7 @@ func (l *list) chosen() []int {
 }
 
 func (l *list) typeRune(r rune) action {
-	if r < 0x20 || r == 0x7f {
+	if isControl(r) {
 		return actNone
 	}
 	if len(l.filter) == 0 {
@@ -235,7 +235,7 @@ func (l *list) view(cols, rows int) []string {
 		l.top = l.cursor - h + 1
 	}
 	w := max(cols-4, 1)
-	lines := []string{truncate(l.title, cols-1), truncate("filter: "+string(l.filter), cols-1)}
+	lines := []string{truncate(l.title, cols-1), truncate("filter: "+display(string(l.filter)), cols-1)}
 	textW := w
 	if l.multi {
 		textW = max(w-4, 1)
@@ -280,8 +280,8 @@ func runList(t Terminal, title string, items []Item, checked []bool, multi bool)
 	defer s.showCursor()
 	defer s.clear()
 	for {
-		cols, rows := t.Size()
-		if err := s.draw(l.view(cols, rows)); err != nil {
+		cols, rows, limit := geometry(t)
+		if err := s.draw(l.view(cols, rows), limit); err != nil {
 			return nil, err
 		}
 		k, err := t.ReadKey()
@@ -292,8 +292,7 @@ func runList(t Terminal, title string, items []Item, checked []bool, multi bool)
 		case actCancel:
 			return nil, ErrCancelled
 		case actDone:
-			cols, _ := t.Size()
-			return l, s.leave(truncate(l.summary(), cols-1))
+			return l, s.leave(truncate(l.summary(), cols-1), limit)
 		}
 	}
 }
