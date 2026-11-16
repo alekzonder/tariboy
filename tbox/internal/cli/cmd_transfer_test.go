@@ -80,3 +80,40 @@ func TestExportRefusesOverwrite(t *testing.T) {
 		t.Fatal("--force did not overwrite")
 	}
 }
+
+func TestImportRefusesToMoveATagWithoutForce(t *testing.T) {
+	home, src, work := t.TempDir(), demoSource(t), t.TempDir()
+	if code, _, errs := runIn(t, home, "/", "build", "--path", src); code != 0 {
+		t.Fatalf("build: %s", errs)
+	}
+	if code, _, errs := runIn(t, home, work, "image", "export", "demo:1.0.0", "-o", "one.tar.gz"); code != 0 {
+		t.Fatalf("export: %s", errs)
+	}
+	writeFile(t, filepath.Join(src, "p.md"), "changed prompt\n")
+	if code, _, errs := runIn(t, home, "/", "build", "--path", src); code != 0 {
+		t.Fatalf("rebuild: %s", errs)
+	}
+	if code, _, errs := runIn(t, home, work, "image", "export", "demo:1.0.0", "-o", "two.tar.gz"); code != 0 {
+		t.Fatalf("export: %s", errs)
+	}
+
+	other := t.TempDir()
+	if code, _, errs := runIn(t, other, work, "image", "import", "one.tar.gz"); code != 0 {
+		t.Fatalf("import one: %s", errs)
+	}
+	_, before, _ := runIn(t, other, "/", "image", "show", "demo:1.0.0")
+	code, _, errs := runIn(t, other, work, "image", "import", "two.tar.gz")
+	if code != 1 || !strings.Contains(errs, "demo:1.0.0") || !strings.Contains(errs, "--force") {
+		t.Fatalf("import over other content: %d %q", code, errs)
+	}
+	if _, after, _ := runIn(t, other, "/", "image", "show", "demo:1.0.0"); after != before {
+		t.Fatalf("tag moved without --force:\n%s\n%s", before, after)
+	}
+	if code, _, errs := runIn(t, other, work, "image", "import", "one.tar.gz"); code != 0 {
+		t.Fatalf("re-import of the same content: %d %q", code, errs)
+	}
+	code, out, errs := runIn(t, other, work, "image", "import", "two.tar.gz", "--force")
+	if code != 0 || !strings.Contains(out, "moved 1.0.0 to new content") {
+		t.Fatalf("import --force: %d %q %q", code, out, errs)
+	}
+}

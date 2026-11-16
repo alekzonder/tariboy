@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -157,5 +158,141 @@ func TestSourceDirIsKeptAcrossFingerprintUpdates(t *testing.T) {
 	}
 	if fp, d, ok := s.Fingerprint("demo"); !ok || fp != "fp2" || d != "d2" {
 		t.Fatalf("fingerprint %q %q %v", fp, d, ok)
+	}
+}
+
+func TestCheckNameAndTagRejectLeadingPunctuation(t *testing.T) {
+	for _, name := range []string{".demo", "-demo", "_demo", ".", ".."} {
+		if CheckName(name) == nil {
+			t.Errorf("name %q accepted", name)
+		}
+	}
+	for _, name := range []string{"demo", "0demo", "my.image", "a-b_c"} {
+		if err := CheckName(name); err != nil {
+			t.Errorf("name %q: %v", name, err)
+		}
+	}
+	for _, tag := range []string{".hidden", ".tmp-1", ".", ".."} {
+		if CheckTag(tag) == nil {
+			t.Errorf("tag %q accepted", tag)
+		}
+	}
+	for _, tag := range []string{"latest", "1.0.0", "-dev", "_x"} {
+		if err := CheckTag(tag); err != nil {
+			t.Errorf("tag %q: %v", tag, err)
+		}
+	}
+}
+
+func TestOpenRejectsArchiveOfOtherDigest(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	one, two := image(t, "1.0.0", "one"), image(t, "1.0.0", "two")
+	if _, err := s.Publish("demo", one, []string{"latest"}); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := two.Write(&buf); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(s.refPath("demo", one.Manifest.Digest), buf.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Open(Ref{"demo", "latest"}); err == nil || !strings.Contains(err.Error(), "digest") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRemoveChecksNameAndTag(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	if _, err := s.Publish("demo", image(t, "1.0.0", "one"), []string{"latest"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, ref := range []Ref{{"../demo", "latest"}, {"demo", "../tags/latest"}, {"demo", ".latest"}} {
+		if err := s.Remove(ref); err == nil || errors.Is(err, ErrNotFound) {
+			t.Errorf("%v: err = %v", ref, err)
+		}
+	}
+	if _, _, err := s.Resolve(Ref{"demo", "latest"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestListReadsOnlyTheManifest(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	img := image(t, "1.0.0", "one")
+	if _, err := s.Publish("demo", img, []string{"1.0.0", "latest"}); err != nil {
+		t.Fatal(err)
+	}
+	// Corrupt everything after manifest.json: a listing still shows the tag,
+	// an Open still refuses it.
+	broken := img
+	broken.Members = append([]archive.Member{}, img.Members...)
+	broken.Members[1].Body = []byte("{}")
+	var buf bytes.Buffer
+	if err := broken.Write(&buf); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(s.refPath("demo", img.Manifest.Digest), buf.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reads := 0
+	manifestReadHook = func(string) { reads++ }
+	t.Cleanup(func() { manifestReadHook = nil })
+	entries, err := s.List()
+	if err != nil || len(entries) != 2 || entries[1].Tag != "latest" || entries[1].Digest != img.Manifest.Digest || entries[1].ImageVersion != "1.0.0" || entries[1].BuiltAt != img.Manifest.BuiltAt {
+		t.Fatalf("%+v %v", entries, err)
+	}
+	if reads != 1 {
+		t.Fatalf("manifest read %d times for one digest", reads)
+	}
+	if _, err := s.Open(Ref{"demo", "latest"}); err == nil {
+		t.Fatal("broken archive opened")
+	}
+}
+
+func TestPruneUntagged(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	one, two := image(t, "1.0.0", "one"), image(t, "1.0.0", "two")
+	if _, err := s.Publish("demo", one, []string{"latest"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Publish("demo", two, []string{"latest"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Publish("other", one, []string{"old"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Publish("other", two, []string{"old"}); err != nil {
+		t.Fatal(err)
+	}
+	// A temporary file of an interrupted write is not an archive.
+	if err := os.WriteFile(filepath.Join(s.refsDir("demo"), ".tmp-x"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := s.PruneUntagged("demo")
+	if err != nil || len(removed) != 1 || removed[0] != one.Manifest.Digest {
+		t.Fatalf("removed %v err %v", removed, err)
+	}
+	if _, err := os.Stat(s.refPath("demo", one.Manifest.Digest)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("untagged archive left: %v", err)
+	}
+	if _, err := s.Open(Ref{"demo", "latest"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(s.refPath("other", one.Manifest.Digest)); err != nil {
+		t.Fatalf("other image pruned: %v", err)
+	}
+	if _, err := s.PruneUntagged("../demo"); err == nil {
+		t.Fatal("bad name accepted")
+	}
+	all, err := s.PruneAllUntagged()
+	if err != nil || len(all) != 1 || all[0] != (Pruned{Name: "other", Digest: one.Manifest.Digest}) {
+		t.Fatalf("all %v err %v", all, err)
+	}
+	if again, err := s.PruneAllUntagged(); err != nil || len(again) != 0 {
+		t.Fatalf("again %v err %v", again, err)
+	}
+	if _, err := os.Stat(filepath.Join(s.refsDir("demo"), ".tmp-x")); err != nil {
+		t.Fatalf("temporary file touched: %v", err)
 	}
 }

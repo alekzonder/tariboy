@@ -57,8 +57,9 @@ type metadata struct {
 }
 
 // Export writes img as an image-artifact envelope the way
-// imageportable.Service.Export does. The digest in the metadata is the
-// content digest of img.
+// imageportable.Service.Export does. The digest in the metadata is the one
+// tariboy records for the archive (archive.TariboyDigest): the content
+// digest, except for images built before ids were content digests.
 func Export(w io.Writer, img archive.Image, ref imgstore.Ref, producerVersion string) error {
 	var body bytes.Buffer
 	if err := img.Write(&body); err != nil {
@@ -69,7 +70,7 @@ func Export(w io.Writer, img archive.Image, ref imgstore.Ref, producerVersion st
 	for _, p := range img.Manifest.Plugins {
 		plugins = append(plugins, p.Name)
 	}
-	meta, err := json.Marshal(metadata{Ref: ref.String(), Digest: img.Manifest.Digest, ProducerVersion: producerVersion, Plugins: plugins})
+	meta, err := json.Marshal(metadata{Ref: ref.String(), Digest: archive.TariboyDigest(img, body.Bytes()), ProducerVersion: producerVersion, Plugins: plugins})
 	if err != nil {
 		return err
 	}
@@ -104,7 +105,9 @@ func Export(w io.Writer, img archive.Image, ref imgstore.Ref, producerVersion st
 
 // Import reads an image-artifact envelope with the limits and checks of
 // portablearchive.Stage and imageportable.Service.Preview, and returns the
-// inner image with the ref the producer recorded. It touches no file.
+// inner image with the ref the producer recorded. The metadata digest is
+// compared under tariboy's rule (archive.TariboyDigest); the returned image
+// keeps its content digest. It touches no file.
 func Import(r io.Reader) (archive.Image, imgstore.Ref, error) {
 	manifest, body, err := readEnvelope(r)
 	if err != nil {
@@ -125,7 +128,7 @@ func Import(r io.Reader) (archive.Image, imgstore.Ref, error) {
 	if img.Manifest.Name != ref.Name {
 		return archive.Image{}, imgstore.Ref{}, errors.New("image portable: invalid runnable artifact: name mismatch")
 	}
-	if img.Manifest.Digest != meta.Digest {
+	if archive.TariboyDigest(img, body) != meta.Digest {
 		return archive.Image{}, imgstore.Ref{}, errors.New("image portable: image digest mismatch")
 	}
 	if !samePlugins(img.Manifest.Plugins, meta.Plugins) {

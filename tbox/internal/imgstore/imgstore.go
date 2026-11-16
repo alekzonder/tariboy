@@ -92,6 +92,12 @@ func WriteFileAtomic(path string, data []byte) error {
 }
 
 func (s Store) readTag(name, tag string) (string, error) {
+	if err := CheckName(name); err != nil {
+		return "", err
+	}
+	if err := CheckTag(tag); err != nil {
+		return "", err
+	}
 	data, err := os.ReadFile(filepath.Join(s.tagsDir(name), tag))
 	if errors.Is(err, fs.ErrNotExist) {
 		return "", fmt.Errorf("%w: %s:%s", ErrNotFound, name, tag)
@@ -116,7 +122,7 @@ func (s Store) tags(name string) ([]string, error) {
 	}
 	var out []string
 	for _, e := range entries {
-		if e.Type().IsRegular() && !strings.HasPrefix(e.Name(), ".") {
+		if e.Type().IsRegular() && CheckTag(e.Name()) == nil {
 			out = append(out, e.Name())
 		}
 	}
@@ -178,12 +184,6 @@ func (s Store) Publish(name string, img archive.Image, tags []string) ([]string,
 
 // Resolve returns the digest a ref points at and the path of its archive.
 func (s Store) Resolve(ref Ref) (string, string, error) {
-	if err := CheckName(ref.Name); err != nil {
-		return "", "", err
-	}
-	if err := CheckTag(ref.Tag); err != nil {
-		return "", "", err
-	}
 	digest, err := s.readTag(ref.Name, ref.Tag)
 	if err != nil {
 		return "", "", err
@@ -198,9 +198,10 @@ func (s Store) Resolve(ref Ref) (string, string, error) {
 	return digest, path, nil
 }
 
-// Open reads and validates the archive a ref points at.
+// Open reads and validates the archive a ref points at. The archive must
+// hold the content the tag names.
 func (s Store) Open(ref Ref) (archive.Image, error) {
-	_, path, err := s.Resolve(ref)
+	digest, path, err := s.Resolve(ref)
 	if err != nil {
 		return archive.Image{}, err
 	}
@@ -209,11 +210,37 @@ func (s Store) Open(ref Ref) (archive.Image, error) {
 		return archive.Image{}, err
 	}
 	defer f.Close()
-	return archive.Read(f)
+	img, err := archive.Read(f)
+	if err != nil {
+		return archive.Image{}, err
+	}
+	if img.Manifest.Digest != digest {
+		return archive.Image{}, fmt.Errorf("archive of %s has content digest %s, not %s", ref, img.Manifest.Digest, digest)
+	}
+	return img, nil
 }
 
-// List returns one entry per tag, sorted by name and tag. A tag whose archive
-// cannot be read is skipped.
+// manifestReadHook, when set, is called with the path of every archive List
+// reads a manifest from.
+var manifestReadHook func(path string)
+
+// listManifest reads only manifest.json of the archive of name and digest.
+func (s Store) listManifest(name, digest string) (archive.Manifest, error) {
+	path := s.refPath(name, digest)
+	if manifestReadHook != nil {
+		manifestReadHook(path)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return archive.Manifest{}, err
+	}
+	defer f.Close()
+	return archive.ReadManifest(f)
+}
+
+// List returns one entry per tag, sorted by name and tag. It reads only
+// manifest.json, once per archive, and does not validate the archive; Open
+// does. A tag whose manifest cannot be read is skipped.
 func (s Store) List() ([]Entry, error) {
 	dirs, err := os.ReadDir(s.Dir)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -227,17 +254,38 @@ func (s Store) List() ([]Entry, error) {
 		if !d.IsDir() || CheckName(d.Name()) != nil {
 			continue
 		}
-		tags, err := s.tags(d.Name())
+		entries, err := s.listName(d.Name())
 		if err != nil {
 			return nil, err
 		}
-		for _, tag := range tags {
-			img, err := s.Open(Ref{Name: d.Name(), Tag: tag})
-			if err != nil {
-				continue
-			}
-			out = append(out, Entry{Name: d.Name(), Tag: tag, Digest: img.Manifest.Digest, ImageVersion: img.Manifest.ImageVersion, BuiltAt: img.Manifest.BuiltAt})
+		out = append(out, entries...)
+	}
+	return out, nil
+}
+
+func (s Store) listName(name string) ([]Entry, error) {
+	tags, err := s.tags(name)
+	if err != nil {
+		return nil, err
+	}
+	manifests := map[string]*archive.Manifest{}
+	var out []Entry
+	for _, tag := range tags {
+		digest, err := s.readTag(name, tag)
+		if err != nil {
+			continue
 		}
+		man, seen := manifests[digest]
+		if !seen {
+			if m, err := s.listManifest(name, digest); err == nil {
+				man = &m
+			}
+			manifests[digest] = man
+		}
+		if man == nil {
+			continue
+		}
+		out = append(out, Entry{Name: name, Tag: tag, Digest: digest, ImageVersion: man.ImageVersion, BuiltAt: man.BuiltAt})
 	}
 	return out, nil
 }
@@ -357,4 +405,77 @@ func (s Store) SetSourceDir(name, dir string) error {
 	}
 	rec.Source = dir
 	return s.writeRecord(name, rec)
+}
+
+// Pruned names one archive PruneAllUntagged removed.
+type Pruned struct {
+	Name   string
+	Digest string
+}
+
+// PruneUntagged removes the archives of name that no tag points at and
+// returns their digests, sorted. Files that are not archives, such as the
+// temporary files of a write in progress, are left alone.
+func (s Store) PruneUntagged(name string) ([]string, error) {
+	if err := CheckName(name); err != nil {
+		return nil, err
+	}
+	tags, err := s.tags(name)
+	if err != nil {
+		return nil, err
+	}
+	tagged := map[string]bool{}
+	for _, tag := range tags {
+		digest, err := s.readTag(name, tag)
+		if err != nil {
+			// A tag that cannot be read might point anywhere: keep everything.
+			return nil, fmt.Errorf("prune %s: %w", name, err)
+		}
+		tagged[digest] = true
+	}
+	refs, err := os.ReadDir(s.refsDir(name))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var removed []string
+	for _, e := range refs {
+		digest, ok := strings.CutSuffix(e.Name(), refSuffix)
+		if !ok || !e.Type().IsRegular() || !digestPattern.MatchString(digest) || tagged[digest] {
+			continue
+		}
+		if err := os.Remove(s.refPath(name, digest)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return removed, err
+		}
+		removed = append(removed, digest)
+	}
+	s.prune(name)
+	return removed, nil
+}
+
+// PruneAllUntagged runs PruneUntagged for every image name.
+func (s Store) PruneAllUntagged() ([]Pruned, error) {
+	dirs, err := os.ReadDir(s.Dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out []Pruned
+	for _, d := range dirs {
+		if !d.IsDir() || CheckName(d.Name()) != nil {
+			continue
+		}
+		digests, err := s.PruneUntagged(d.Name())
+		for _, digest := range digests {
+			out = append(out, Pruned{Name: d.Name(), Digest: digest})
+		}
+		if err != nil {
+			return out, err
+		}
+	}
+	return out, nil
 }

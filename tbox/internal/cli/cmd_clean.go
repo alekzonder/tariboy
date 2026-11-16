@@ -47,8 +47,9 @@ func harnessHost(env *Env) harness.Host {
 	}
 }
 
-// runClean removes the run directories and the harness files outside
-// $TBOX_HOME, of one image or of all.
+// runClean removes the run directories, the harness files outside
+// $TBOX_HOME and the image archives no tag points at, of one image or of
+// all.
 func runClean(env *Env, args []string) int {
 	if len(args) > 1 || (len(args) == 1 && strings.HasPrefix(args[0], "-")) {
 		fmt.Fprint(env.Stderr, cleanUsage)
@@ -73,5 +74,23 @@ func runClean(env *Env, args []string) int {
 	} else {
 		fmt.Fprintf(env.Stdout, "removed run directories and harness files of %s\n", image)
 	}
+	n, err := pruneArchives(imgstore.Store{Dir: home.ImagesDir()}, image)
+	if n > 0 {
+		fmt.Fprintf(env.Stdout, "removed %d untagged image archive(s)\n", n)
+	}
+	if err != nil {
+		return fail(env, err)
+	}
 	return 0
+}
+
+// pruneArchives removes the untagged archives of image, or of every image
+// when image is empty, and returns how many it removed.
+func pruneArchives(store imgstore.Store, image string) (int, error) {
+	if image == "" {
+		removed, err := store.PruneAllUntagged()
+		return len(removed), err
+	}
+	removed, err := store.PruneUntagged(image)
+	return len(removed), err
 }

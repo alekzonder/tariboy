@@ -73,10 +73,22 @@ func runExport(env *Env, args []string) int {
 
 func runImport(env *Env, args []string) int {
 	flags := newFlags("image import", env.Stderr)
-	if err := flags.Parse(args); err != nil {
-		return 2
+	force := flags.Bool("force", false, "move a tag that points at other content")
+	var file string
+	for {
+		if err := flags.Parse(args); err != nil {
+			return 2
+		}
+		if flags.NArg() == 0 {
+			break
+		}
+		if file != "" {
+			fmt.Fprint(env.Stderr, importUsage)
+			return 2
+		}
+		file, args = flags.Arg(0), flags.Args()[1:]
 	}
-	if flags.NArg() != 1 {
+	if file == "" {
 		fmt.Fprint(env.Stderr, importUsage)
 		return 2
 	}
@@ -84,13 +96,16 @@ func runImport(env *Env, args []string) int {
 	if err != nil {
 		return fail(env, err)
 	}
-	f, err := os.Open(inCwd(env, flags.Arg(0)))
+	f, err := os.Open(inCwd(env, file))
 	if err != nil {
 		return fail(env, err)
 	}
 	defer f.Close()
 	img, ref, err := portable.Import(f)
 	if err != nil {
+		return fail(env, err)
+	}
+	if err := checkTagMove(store, ref, img.Manifest.Digest, *force); err != nil {
 		return fail(env, err)
 	}
 	moved, err := store.Publish(ref.Name, img, []string{ref.Tag})
@@ -102,6 +117,25 @@ func runImport(env *Env, args []string) int {
 		fmt.Fprintf(env.Stdout, "moved %s to new content\n", tag)
 	}
 	return 0
+}
+
+// checkTagMove refuses to point an existing tag at other content unless
+// force is set.
+func checkTagMove(store imgstore.Store, ref imgstore.Ref, digest string, force bool) error {
+	if force {
+		return nil
+	}
+	old, _, err := store.Resolve(ref)
+	if errors.Is(err, imgstore.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if old != digest {
+		return fmt.Errorf("%s already exists with other content %s (use --force to move it)", ref, old)
+	}
+	return nil
 }
 
 // writeExport writes data to target, which must not exist unless force is set.

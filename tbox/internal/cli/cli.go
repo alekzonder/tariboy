@@ -92,7 +92,7 @@ commands:
   skill STORE/SKILL                        show a Store skill
   prompts                                  list the prompts of all Stores
   prompt STORE/PROMPT                      print a Store prompt
-  clean [IMAGE]                            remove run directories and harness files
+  clean [IMAGE]                            remove run directories, harness files and untagged archives
   version                                  print the version (also --version)
   help                                     print this help (also --help, -h)
 Run tbox <command> --help for the usage of a command.
@@ -101,9 +101,9 @@ Run tbox <command> --help for the usage of a command.
 const (
 	buildUsage  = "usage: tbox build [STORE/IMAGE | --path DIR] [--name N] [--tag T]... [--update]\n"
 	cleanUsage  = "usage: tbox clean [IMAGE]\n"
-	imageUsage  = "usage: tbox image show REF | rm REF | export REF [-o FILE] [--force] | import FILE | new NAME\n"
+	imageUsage  = "usage: tbox image show REF | rm REF | export REF [-o FILE] [--force] | import FILE [--force] | new NAME\n"
 	exportUsage = "usage: tbox image export REF [-o FILE] [--force]\n"
-	importUsage = "usage: tbox image import FILE\n"
+	importUsage = "usage: tbox image import FILE [--force]\n"
 )
 
 // commandUsages is the usage text of each command for --help.
