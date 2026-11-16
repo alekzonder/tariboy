@@ -2,8 +2,8 @@ GO      ?= go
 BINDIR  := bin
 PREFIX  ?= $(HOME)/.local
 INSTALLDIR := $(PREFIX)/bin
-BINARIES := tariboyd tariboy tariboy-tasks tariboy-mail tariboy-scripts tariboy-shim tariboy-store tariboy-plugin-telegram tbox
-MANAGED_LINKS := tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-mail:tariboy-mail tmail:tariboy-mail tariboy-scripts:tariboy-scripts tscripts:tariboy-scripts tariboy-shim:tariboy-shim tariboy-store:tariboy-store tariboy-plugin-telegram:tariboy-plugin-telegram tbox:tbox
+BINARIES := tariboyd tariboy tariboy-tasks tariboy-mail tariboy-scripts tariboy-shim tariboy-store tariboy-plugin-telegram
+MANAGED_LINKS := tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-mail:tariboy-mail tmail:tariboy-mail tariboy-scripts:tariboy-scripts tscripts:tariboy-scripts tariboy-shim:tariboy-shim tariboy-store:tariboy-store tariboy-plugin-telegram:tariboy-plugin-telegram
 SA := $(BINDIR)/tariboy
 LONG_SOCKET_TESTS := TestHostInstallDrainTimeoutRestartsRolledBackActiveVersion|TestStartupRefreshReadsCurrentWatchesAtDeliveryBoundary
 # Desktop E2E specs receive separate owner-only state from their fixture, so
@@ -65,6 +65,8 @@ install:
 		echo "install $(BINDIR)/$$b -> $(INSTALLDIR)/$$b"; \
 		install -m 0755 $(BINDIR)/$$b $(INSTALLDIR)/$$b; \
 	done
+	@echo "install $(BINDIR)/tbox -> $(INSTALLDIR)/tbox"
+	@install -m 0755 $(BINDIR)/tbox $(INSTALLDIR)/tbox
 	@for link in $(MANAGED_LINKS); do \
 		name=$${link%%:*}; source=$${link#*:}; \
 		test "$$name" != "$$source" || continue; \
@@ -99,6 +101,8 @@ uninstall:
 		echo "rm -f $(INSTALLDIR)/$$name"; \
 		rm -f $(INSTALLDIR)/$$name; \
 	done
+	@echo "rm -f $(INSTALLDIR)/tbox"
+	@rm -f $(INSTALLDIR)/tbox
 
 # make test adds -tags tmux when tmux is installed, so the shim tests that
 # drive a real tmux run there and stay out of a plain go test. The plugin
