@@ -195,6 +195,16 @@ func (r Registry) Add(ctx context.Context, name, source, ref string) (Store, err
 }
 
 func (r Registry) materialize(ctx context.Context, name, source, ref string) (Store, error) {
+	if pathLike(source) {
+		dir, ok := r.localDir(source)
+		if !ok {
+			return Store{}, fmt.Errorf("directory not found: %s", source)
+		}
+		if ref != "" {
+			return Store{}, errors.New("--ref applies to git stores only")
+		}
+		return Store{Name: name, Kind: KindDir, Source: dir}, nil
+	}
 	if dir, ok := r.localDir(source); ok {
 		if ref != "" {
 			return Store{}, errors.New("--ref applies to git stores only")
@@ -223,6 +233,13 @@ func (r Registry) materialize(ctx context.Context, name, source, ref string) (St
 		return Store{}, err
 	}
 	return Store{Name: name, Kind: KindGit, Source: url, Ref: ref, Commit: commit}, nil
+}
+
+// pathLike reports whether source is written as a filesystem path; such a
+// source is never read as owner/repo.
+func pathLike(source string) bool {
+	return strings.HasPrefix(source, "/") || strings.HasPrefix(source, "./") ||
+		strings.HasPrefix(source, "../") || strings.HasPrefix(source, "~")
 }
 
 // localDir returns the absolute directory source names, if it names one.
@@ -368,7 +385,8 @@ func (r Registry) change(name string, fn func(Store) (Store, error)) (Store, err
 // Remove unregisters a Store and deletes tbox's own clone or extracted
 // archive. A dir Store's directory and built images are never touched.
 func (r Registry) Remove(name string) error {
-	return r.update(func(list []Store) ([]Store, error) {
+	var own string
+	err := r.update(func(list []Store) ([]Store, error) {
 		i := find(list, name)
 		if i < 0 {
 			return nil, fmt.Errorf("%w: %s", ErrNotFound, name)
@@ -377,12 +395,15 @@ func (r Registry) Remove(name string) error {
 			if !ValidName(s.Name) {
 				return nil, fmt.Errorf("refusing to remove store with invalid name %q", s.Name)
 			}
-			if err := r.removeOwn(r.Root(s)); err != nil {
-				return nil, err
-			}
+			own = r.Root(s)
 		}
 		return append(list[:i:i], list[i+1:]...), nil
 	})
+	if err != nil || own == "" {
+		return err
+	}
+	// The registration is saved first: a failed save leaves nothing dangling.
+	return r.removeOwn(own)
 }
 
 // Selector names one item of one Store as STORE/NAME.

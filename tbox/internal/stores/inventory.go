@@ -13,7 +13,23 @@ import (
 	"github.com/alekzonder/tariboy/tbox/internal/tfile"
 )
 
-const maxSkillFile = 256 << 10
+const errNoSkill = "SKILL.md not found"
+
+const (
+	maxSkillFile = 256 << 10
+	// maxRows bounds the rows of each kind; a hostile Store may hold millions.
+	maxRows = 1000
+)
+
+// capNames cuts names to maxRows and returns the number left out.
+func capNames(names []string) ([]string, int) {
+	if len(names) <= maxRows {
+		return names, 0
+	}
+	return names[:maxRows], len(names) - maxRows
+}
+
+func moreText(n int) string { return fmt.Sprintf("… %d more not shown", n) }
 
 // Image is an image source found in a Store.
 type Image struct {
@@ -29,7 +45,7 @@ type Skill struct {
 }
 
 // Prompt is a prompt file found in a Store.
-type Prompt struct{ Name, Path string }
+type Prompt struct{ Name, Path, Err string }
 
 // Inventory lists the content of a Store. Rows with a problem carry Err and
 // do not hide the other rows.
@@ -80,7 +96,8 @@ func subdirs(dir string) []string {
 
 func readImages(dir string) []Image {
 	var out []Image
-	for _, name := range subdirs(dir) {
+	names, more := capNames(subdirs(dir))
+	for _, name := range names {
 		imgDir := filepath.Join(dir, name)
 		file := filepath.Join(imgDir, tfile.Filename)
 		fi, err := os.Lstat(file)
@@ -96,6 +113,9 @@ func readImages(dir string) []Image {
 			row.Version, row.Schema = f.ImageVersion, f.SchemaVersion
 		}
 		out = append(out, row)
+	}
+	if more > 0 {
+		out = append(out, Image{Err: moreText(more)})
 	}
 	return out
 }
@@ -118,10 +138,21 @@ func readSkills(root string) []Skill {
 
 func skillRows(dir string) []Skill {
 	var out []Skill
-	for _, name := range subdirs(dir) {
+	names, more := capNames(subdirs(dir))
+	for _, name := range names {
 		row := Skill{Name: name, Dir: filepath.Join(dir, name)}
-		row.Description, _, row.Err = describe(row.Dir)
+		var fmName string
+		row.Description, fmName, row.Err = describe(row.Dir)
+		if row.Err == errNoSkill {
+			continue
+		}
+		if row.Err == "" && fmName != name {
+			row.Err = fmt.Sprintf("frontmatter name %q does not match directory %q", fmName, name)
+		}
 		out = append(out, row)
+	}
+	if more > 0 {
+		out = append(out, Skill{Err: moreText(more)})
 	}
 	return out
 }
@@ -144,7 +175,7 @@ func describe(dir string) (description, name, errText string) {
 	body, err := fsafe.ReadFileNoFollow(filepath.Join(dir, "SKILL.md"), maxSkillFile)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return "", "", "SKILL.md not found"
+			return "", "", errNoSkill
 		}
 		return "", "", err.Error()
 	}
@@ -170,5 +201,9 @@ func readPrompts(dir string) []Prompt {
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	if len(out) > maxRows {
+		more := len(out) - maxRows
+		out = append(out[:maxRows], Prompt{Err: moreText(more)})
+	}
 	return out
 }
