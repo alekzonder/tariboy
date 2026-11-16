@@ -2,12 +2,16 @@ package source
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
+	"github.com/alekzonder/tariboy/tbox/internal/fetch"
 	"github.com/alekzonder/tariboy/tbox/internal/fsafe"
+	"github.com/alekzonder/tariboy/tbox/internal/gitx"
 	"github.com/alekzonder/tariboy/tbox/internal/lock"
 	"github.com/alekzonder/tariboy/tbox/internal/skill"
 	"github.com/alekzonder/tariboy/tbox/internal/tfile"
@@ -21,21 +25,56 @@ func (r Resolver) treeDir(key, commit string) string {
 	return filepath.Join(r.sourcesDir(), hexSum([]byte(key+commit)))
 }
 
-// gitCommit makes the mirror of url current and returns the commit to use:
-// the pinned one, or the resolution of ref.
+// gitCommit returns the commit to use: the pinned one, or the resolution of
+// ref. A pinned commit the local mirror already holds needs no network;
+// otherwise the mirror is made current first, at most once per session.
 func (r Resolver) gitCommit(ctx context.Context, url, ref string, pinned *lock.Entry) (string, error) {
+	mirror := r.mirrorDir(url)
+	if pinned != nil && r.Git.HasCommit(ctx, mirror, pinned.Commit) {
+		return pinned.Commit, nil
+	}
+	if err := r.refreshMirror(ctx, url, mirror); err != nil {
+		return "", err
+	}
+	if pinned != nil {
+		if !r.Git.HasCommit(ctx, mirror, pinned.Commit) {
+			return "", fmt.Errorf("pinned commit %s is no longer in the repository; run tbox build --update to lock a current commit", pinned.Commit)
+		}
+		return pinned.Commit, nil
+	}
+	return r.Git.Resolve(ctx, mirror, ref)
+}
+
+// refreshMirror fetches the mirror of url unless this session already did.
+func (r Resolver) refreshMirror(ctx context.Context, url, mirror string) error {
+	if r.session != nil {
+		if _, done := r.session.Load(mirror); done {
+			return nil
+		}
+	}
 	fetchURL := url
 	if r.RewriteURL != nil {
 		fetchURL = r.RewriteURL(url)
 	}
-	mirror := r.mirrorDir(url)
 	if err := r.Git.Mirror(ctx, fetchURL, mirror); err != nil {
-		return "", err
+		return err
 	}
-	if pinned != nil {
-		return pinned.Commit, nil
+	if r.session != nil {
+		r.session.Store(mirror, true)
 	}
-	return r.Git.Resolve(ctx, mirror, ref)
+	return nil
+}
+
+// export writes the subtree path of commit into dest and names a symbolic
+// link of the repository in its error.
+func (r Resolver) export(ctx context.Context, e tfile.SkillEntry, commit, dest string) error {
+	err := r.Git.Export(ctx, r.mirrorDir(e.Git), commit, e.Path, dest)
+	var link *fetch.LinkError
+	if errors.As(err, &link) {
+		at := path.Clean(path.Join(e.Path, link.Name))
+		return fmt.Errorf("repository %s contains a symbolic link at %s; tbox does not package symbolic links", gitx.DisplayAddress(e.Git), at)
+	}
+	return err
 }
 
 func (r Resolver) gitSkill(ctx context.Context, e tfile.SkillEntry, pinned *lock.Entry) (string, lock.Entry, error) {
@@ -119,7 +158,7 @@ func (r Resolver) exportTree(ctx context.Context, e tfile.SkillEntry, commit, na
 	if name == "" {
 		dir = filepath.Join(stage, "root")
 	}
-	if err := r.Git.Export(ctx, r.mirrorDir(e.Git), commit, e.Path, dir); err != nil {
+	if err := r.export(ctx, e, commit, dir); err != nil {
 		return "", "", err
 	}
 	if name == "" {

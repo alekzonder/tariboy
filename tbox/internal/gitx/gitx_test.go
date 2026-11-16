@@ -444,3 +444,104 @@ func TestDisplayAddressHidesCredentials(t *testing.T) {
 		}
 	}
 }
+
+func TestMirrorFetchesOnlyBranchesAndTags(t *testing.T) {
+	f := newRepo(t)
+	git(t, f.repo, "update-ref", "refs/pull/1/head", f.devTip)
+	mirror := filepath.Join(t.TempDir(), "m")
+	if err := local().Mirror(context.Background(), f.repo, mirror); err != nil {
+		t.Fatal(err)
+	}
+	refs := git(t, mirror, "--git-dir="+mirror, "for-each-ref", "--format=%(refname)")
+	if strings.Contains(refs, "refs/pull/") || !strings.Contains(refs, "refs/heads/dev") || !strings.Contains(refs, "refs/tags/v1") {
+		t.Fatalf("mirror refs:\n%s", refs)
+	}
+	if got, err := local().Resolve(context.Background(), mirror, ""); err != nil || got != f.second {
+		t.Fatalf("default branch %q %v", got, err)
+	}
+}
+
+func TestMirrorRepairsBrokenDirectory(t *testing.T) {
+	f := newRepo(t)
+	mirror := filepath.Join(t.TempDir(), "m")
+	write(t, mirror, "junk", "not a repository", 0o644)
+	if err := local().Mirror(context.Background(), f.repo, mirror); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := local().Resolve(context.Background(), mirror, "main"); err != nil || got != f.second {
+		t.Fatalf("Resolve %q %v", got, err)
+	}
+	entries, _ := os.ReadDir(filepath.Dir(mirror))
+	if len(entries) != 1 {
+		t.Fatalf("leftovers beside the mirror: %v", entries)
+	}
+}
+
+func TestMirrorFailureLeavesNothing(t *testing.T) {
+	isolate(t)
+	parent := t.TempDir()
+	if err := local().Mirror(context.Background(), filepath.Join(t.TempDir(), "absent"), filepath.Join(parent, "m")); err == nil {
+		t.Fatal("mirror of a missing remote succeeded")
+	}
+	if entries, _ := os.ReadDir(parent); len(entries) != 0 {
+		t.Fatalf("leftovers: %v", entries)
+	}
+}
+
+func TestTimeoutFromEnvironment(t *testing.T) {
+	t.Setenv("TBOX_GIT_TIMEOUT", "7")
+	if got := (Git{}).timeout(); got != 7*time.Second {
+		t.Fatalf("timeout %v", got)
+	}
+	if got := (Git{Timeout: time.Second}).timeout(); got != time.Second {
+		t.Fatalf("explicit timeout %v", got)
+	}
+	for _, bad := range []string{"", "x", "0", "-3"} {
+		t.Setenv("TBOX_GIT_TIMEOUT", bad)
+		if got := (Git{}).timeout(); got != 120*time.Second {
+			t.Fatalf("TBOX_GIT_TIMEOUT=%q gives %v", bad, got)
+		}
+	}
+}
+
+func TestHasCommit(t *testing.T) {
+	f := newRepo(t)
+	mirror := filepath.Join(t.TempDir(), "m")
+	ctx := context.Background()
+	if local().HasCommit(ctx, mirror, f.first) {
+		t.Fatal("missing mirror has a commit")
+	}
+	if err := local().Mirror(ctx, f.repo, mirror); err != nil {
+		t.Fatal(err)
+	}
+	if !local().HasCommit(ctx, mirror, f.first) {
+		t.Fatal("mirror lacks the first commit")
+	}
+	if local().HasCommit(ctx, mirror, strings.Repeat("ab", 20)) {
+		t.Fatal("mirror has an unknown commit")
+	}
+}
+
+func TestExportIgnoresUserGitConfig(t *testing.T) {
+	f := newRepo(t)
+	write(t, f.repo, "skills/a/notes.txt", "one\ntwo\n", 0o644)
+	git(t, f.repo, "add", ".")
+	git(t, f.repo, "commit", "-q", "-m", "notes")
+	commit := git(t, f.repo, "rev-parse", "HEAD")
+	attrs := filepath.Join(t.TempDir(), "attributes")
+	write(t, filepath.Dir(attrs), "attributes", "* text eol=crlf\n", 0o644)
+	cfg := filepath.Join(t.TempDir(), "gitconfig")
+	write(t, filepath.Dir(cfg), "gitconfig", "[core]\n\tautocrlf = true\n\teol = crlf\n\tattributesFile = "+attrs+"\n", 0o644)
+	mirror := filepath.Join(t.TempDir(), "m")
+	if err := local().Mirror(context.Background(), f.repo, mirror); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
+	dest := filepath.Join(t.TempDir(), "out")
+	if err := local().Export(context.Background(), mirror, commit, "skills/a", dest); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dest, "notes.txt")); string(b) != "one\ntwo\n" {
+		t.Fatalf("notes.txt = %q", b)
+	}
+}
