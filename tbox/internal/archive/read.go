@@ -412,3 +412,50 @@ func legacyRefID(name, imageVersion string) string {
 	}
 	return sha256hex([]byte(name + "\n" + imageVersion))
 }
+
+// maxManifestBytes bounds manifest.json read by ReadManifest.
+const maxManifestBytes = int64(16 << 20)
+
+// ReadManifest decodes manifest.json, the first member of an archive Write
+// produced, without reading or validating the other members. It is for
+// listings; Read is the validating reader. Digest is left empty.
+func ReadManifest(r io.Reader) (Manifest, error) {
+	gz, err := gzip.NewReader(io.LimitReader(r, maxCompressed+1))
+	if err != nil {
+		return Manifest{}, err
+	}
+	defer gz.Close()
+	tr := tar.NewReader(gz)
+	h, err := tr.Next()
+	if err != nil {
+		return Manifest{}, err
+	}
+	if h.Name != manifestName || h.Typeflag != tar.TypeReg || h.Size < 0 || h.Size > maxManifestBytes {
+		return Manifest{}, errors.New("image archive does not start with manifest.json")
+	}
+	body, err := io.ReadAll(io.LimitReader(tr, h.Size))
+	if err != nil {
+		return Manifest{}, err
+	}
+	var man Manifest
+	if err := json.Unmarshal(body, &man); err != nil {
+		return Manifest{}, fmt.Errorf("invalid image manifest: %w", err)
+	}
+	return man, nil
+}
+
+// TariboyDigest is the digest internal/image archiveDigest gives img stored
+// as the archive file body, which tariboy's export records and its import
+// compares: the sha256 of body when the manifest has no id, the id itself
+// when it is the legacy RefID(name, image_version), and the content digest
+// otherwise. tbox keeps the content digest (Manifest.Digest) as the image
+// identity; this digest is only for the portable envelope.
+func TariboyDigest(img Image, body []byte) string {
+	switch {
+	case img.Manifest.ID == "":
+		return sha256hex(body)
+	case img.Manifest.ID == legacyRefID(img.Manifest.Name, img.Manifest.ImageVersion):
+		return img.Manifest.ID
+	}
+	return img.Manifest.Digest
+}

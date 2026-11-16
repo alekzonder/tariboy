@@ -108,3 +108,39 @@ func TestProbeOutputHasTimeout(t *testing.T) {
 		t.Fatalf("probe took %v", d)
 	}
 }
+
+// buildTwice builds the demo source, changes it and builds it again, so the
+// first archive is left without a tag. It returns the image directory.
+func buildTwice(t *testing.T, home string) string {
+	t.Helper()
+	src := demoSource(t)
+	if code, _, errs := runIn(t, home, "/", "build", "--path", src); code != 0 {
+		t.Fatalf("build: %s", errs)
+	}
+	writeFile(t, filepath.Join(src, "p.md"), "changed prompt\n")
+	if code, _, errs := runIn(t, home, "/", "build", "--path", src); code != 0 {
+		t.Fatalf("rebuild: %s", errs)
+	}
+	dir := filepath.Join(home, "images", "demo")
+	if refs, _ := os.ReadDir(filepath.Join(dir, "refs")); len(refs) != 2 {
+		t.Fatalf("refs %v", refs)
+	}
+	return dir
+}
+
+func TestCleanRemovesUntaggedArchives(t *testing.T) {
+	for _, args := range [][]string{{"demo"}, nil} {
+		home := t.TempDir()
+		dir := buildTwice(t, home)
+		code, out, errs := cleanCmd(t, home, t.TempDir(), args...)
+		if code != 0 || errs != "" || !strings.Contains(out, "removed 1 untagged image archive") {
+			t.Fatalf("clean %v: %d %q %q", args, code, out, errs)
+		}
+		if refs, _ := os.ReadDir(filepath.Join(dir, "refs")); len(refs) != 1 {
+			t.Fatalf("clean %v: refs %v", args, refs)
+		}
+		if code, _, errs := runIn(t, home, "/", "image", "show", "demo:latest"); code != 0 {
+			t.Fatalf("clean %v: tagged image lost: %s", args, errs)
+		}
+	}
+}

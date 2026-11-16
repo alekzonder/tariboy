@@ -52,7 +52,7 @@ binary cannot block `tbox run`.
 | `tbox images` | List the built images, then the images of the Stores. |
 | `tbox image show REF`, `tbox image rm REF` | Show or remove a built image. |
 | `tbox image export REF [-o FILE] [--force]` | Write a portable archive. |
-| `tbox image import FILE` | Install a portable archive. |
+| `tbox image import FILE [--force]` | Install a portable archive. |
 | `tbox image new [NAME] [--skill STORE/SKILL]... [--prompt STORE/PROMPT]... [--new-prompt] [--version V] [--force] [--no-build]` | Create an image source from Store skills and prompts, then build it. |
 | `tbox run [IMAGE [HARNESS]] [-- ARGS...]` | Start a harness session; missing arguments are chosen from lists. |
 | `tbox run IMAGE HARNESS [-- ARGS...]` | Start a harness session. |
@@ -61,7 +61,7 @@ binary cannot block `tbox run`.
 | `tbox store add NAME SOURCE [--ref REF]`, `list`, `show NAME`, `refresh NAME`, `ref NAME REF`, `remove NAME` | Manage Stores. |
 | `tbox skills`, `tbox skill STORE/SKILL` (outside a session) | List the skills of all Stores, or show one. |
 | `tbox prompts`, `tbox prompt STORE/PROMPT` | List the prompts of all Stores, or print one. |
-| `tbox clean [IMAGE]` | Remove run directories and harness files. |
+| `tbox clean [IMAGE]` | Remove run directories, harness files and untagged image archives. |
 | `tbox skills`, `tbox skill NAME`, `tbox skill exec NAME SCRIPT [ARGS...]` (inside a session) | List and show the skills of the session image, or run a script. |
 | `tbox version`, `tbox --version` | Print the version. |
 | `tbox help`, `tbox --help`, `tbox -h` | Print the list of commands. |
@@ -277,7 +277,8 @@ built and `tbox` prints `up to date`. The `image_version` number does not matter
 When the content changed under an unchanged `image_version`, the version tag and
 `latest` move to the new build, and `tbox` prints one line saying so. This is
 different from Tariboy, which refuses to rebuild the same version with other
-content. The previous archive stays in `refs/` until `tbox image rm` removes it.
+content. The previous archive stays in `refs/` until `tbox image rm` or
+`tbox clean` removes it.
 
 A source that uses `extends` builds to a different digest in `tbox` and in
 Tariboy: Tariboy copies the layers into one directory, while `tbox` resolves
@@ -471,8 +472,10 @@ tbox clean my-image   # one image
 `tbox-<plugin>.config.toml` profiles whose first line is the
 `# Written by tbox` header. A `tbox-*.config.toml` without that header is kept,
 and a note names it. It removes nothing else: `config.toml` and the rest of
-`$CODEX_HOME` stay byte for byte as they were. Built images stay too; remove
-those with `tbox image rm`.
+`$CODEX_HOME` stay byte for byte as they were. It also removes the archives in
+`images/<name>/refs/` that no tag points at any more, such as the previous
+build of a moved tag, and prints how many it removed. Tagged images stay;
+remove those with `tbox image rm`.
 
 `tbox clean IMAGE` finds the run directories of the image by the manifest of
 the unpacked image. A run directory whose image cannot be read is kept, and a
@@ -532,7 +535,9 @@ tbox image import my-image.tariboy-image.tar.gz
 The file is the `tariboy-portable` envelope that `tariboy image import`
 accepts, so an image built in `tbox` imports into Tariboy, and `tbox` imports
 the export of Tariboy. A portable image whose name differs from its envelope ref
-is rejected. An image imported from Tariboy runs as a whole; skills that need
+is rejected. When the image already has the tag with other content, the import
+fails and names the ref; `--force` moves the tag to the imported content. An
+image imported from Tariboy runs as a whole; skills that need
 the daemon are still in it. Compatibility is covered by shared fixtures in
 `tbox/testdata/compat/`, and a format change in Tariboy breaks those tests.
 
