@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -21,8 +23,8 @@ const (
 	newEmptyPromptLabel = "new empty prompt (instructions.md)"
 	noContentText       = "no skills or prompts found; add a Store with: tbox store add NAME SOURCE"
 	noImagesText        = "no images found; build one with: tbox build --path DIR, or add a Store with: tbox store add NAME SOURCE"
-	runNoTerminalHint   = "tbox run: IMAGE and HARNESS are required when stdin is not a terminal\n" + runUsage
-	newNoTerminalHint   = "tbox image new: NAME and one of --skill, --prompt or --new-prompt are required when stdin is not a terminal\n" + imageNewUsage
+	runNoTerminalHint   = "tbox run: IMAGE and HARNESS are required when stdin or stderr is not a terminal\n" + runUsage
+	newNoTerminalHint   = "tbox image new: NAME and one of --skill, --prompt or --new-prompt are required when stdin or stderr is not a terminal\n" + imageNewUsage
 )
 
 // exitError ends an interactive command with a code and a message that is
@@ -82,12 +84,50 @@ type newPick struct {
 	newPrompt bool
 }
 
+// checkNewName reports why name cannot be the name of a new source: an
+// invalid image name, or an existing source when force is not set.
+func checkNewName(home paths.Home, name string, force bool) error {
+	_, err := newNameProblem(home, name, force)
+	return err
+}
+
+// newNameProblem returns a short reason for the prompt and the full error,
+// both empty when name is acceptable.
+func newNameProblem(home paths.Home, name string, force bool) (string, error) {
+	if err := imgstore.CheckName(name); err != nil {
+		return err.Error(), err
+	}
+	dir := filepath.Join(home.SourcesDir(), name)
+	if _, err := os.Lstat(dir); err == nil && !force {
+		return "source " + name + " exists; choose another name", fmt.Errorf("source %s exists; use --force to replace it", dir)
+	}
+	return "", nil
+}
+
+// askName reads the image name until checkNewName accepts it; the prompt of
+// each retry carries the reason.
+func askName(t tui.Terminal, home paths.Home, force bool) (string, error) {
+	prompt := "image name"
+	for {
+		in, err := tui.Input(t, prompt, "")
+		if err != nil {
+			return "", err
+		}
+		name := strings.TrimSpace(in)
+		reason, cerr := newNameProblem(home, name, force)
+		if cerr == nil {
+			return name, nil
+		}
+		prompt = "image name (" + reason + ")"
+	}
+}
+
 // pickNew asks for the name (when empty), the skills and the prompts.
-func pickNew(env *Env, name string) (newPick, error) {
+func pickNew(env *Env, home paths.Home, name string, force bool) (newPick, error) {
 	var buf bytes.Buffer
 	pick := newPick{name: name}
 	err := withTerminal(env, func(t tui.Terminal) error {
-		all, err := readInventories(quietEnv(env, &buf), mustRegistry(env))
+		all, err := readInventories(quietEnv(env, &buf), newRegistry(home, env.Cwd))
 		if err != nil {
 			return err
 		}
@@ -96,12 +136,8 @@ func pickNew(env *Env, name string) (newPick, error) {
 			return exitError{1, noContentText}
 		}
 		if pick.name == "" {
-			in, err := tui.Input(t, "image name", "")
-			if err != nil {
+			if pick.name, err = askName(t, home, force); err != nil {
 				return err
-			}
-			if pick.name = strings.TrimSpace(in); pick.name == "" {
-				return exitError{exitUsage, "the image name is empty"}
 			}
 		}
 		return pickItems(t, &pick, skillItems, skillSels, promptItems, promptSels)
@@ -156,11 +192,6 @@ func libraryItems(all []storeInventory) (skills []tui.Item, skillSels []stores.S
 	return
 }
 
-func mustRegistry(env *Env) stores.Registry {
-	home, _ := paths.Resolve(env.Getenv)
-	return newRegistry(home, env.Cwd)
-}
-
 // completeRun fills the missing positional arguments of tbox run from lists.
 // pos holds the arguments given; want is 2 for IMAGE HARNESS and 1 for
 // --path. The returned note is printed after the terminal is restored.
@@ -168,6 +199,11 @@ func completeRun(env *Env, pos []string, want int) (out []string, note string, e
 	var buf bytes.Buffer
 	out = slices.Clone(pos) // pos aliases the arguments after "--"
 	err = withTerminal(env, func(t tui.Terminal) error {
+		// The harness check comes before any list is drawn.
+		installed := harness.Installed(harnessHost(env))
+		if len(installed) == 0 {
+			return exitError{1, "no harness is installed (looked for " + strings.Join(harness.Names(), ", ") + " on PATH)"}
+		}
 		if want == 2 && len(out) == 0 {
 			ref, err := pickImage(quietEnv(env, &buf), t)
 			if err != nil {
@@ -175,7 +211,7 @@ func completeRun(env *Env, pos []string, want int) (out []string, note string, e
 			}
 			out = append(out, ref)
 		}
-		name, n, err := pickHarness(env, t)
+		name, n, err := pickHarness(t, installed)
 		if err != nil {
 			return err
 		}
@@ -186,12 +222,10 @@ func completeRun(env *Env, pos []string, want int) (out []string, note string, e
 	return out, note, err
 }
 
-func pickHarness(env *Env, t tui.Terminal) (name, note string, err error) {
-	names := harness.Installed(harnessHost(env))
-	switch len(names) {
-	case 0:
-		return "", "", exitError{1, "no harness is installed (looked for " + strings.Join(harness.Names(), ", ") + " on PATH)"}
-	case 1:
+// pickHarness chooses one of the installed harnesses, of which there is at
+// least one; a single one is taken without a list.
+func pickHarness(t tui.Terminal, names []string) (name, note string, err error) {
+	if len(names) == 1 {
 		return names[0], "using harness " + names[0], nil
 	}
 	items := make([]tui.Item, len(names))

@@ -184,7 +184,7 @@ func TestInteractiveImageNewCancel(t *testing.T) {
 func TestInteractiveNoTerminal(t *testing.T) {
 	home := t.TempDir()
 	r := runInteractive(t, home, nil, nil, "run", "demo")
-	if r.code != 2 || !strings.Contains(r.err, "tbox run: IMAGE and HARNESS are required when stdin is not a terminal") {
+	if r.code != 2 || !strings.Contains(r.err, "tbox run: IMAGE and HARNESS are required when stdin or stderr is not a terminal") {
 		t.Fatalf("run: %d %q", r.code, r.err)
 	}
 	r = runInteractive(t, home, nil, nil, "image", "new")
@@ -201,7 +201,7 @@ func TestInteractiveNothingToChoose(t *testing.T) {
 		t.Fatalf("new: %d %q", r.code, r.err)
 	}
 	term = &fakeTerm{}
-	r = runInteractive(t, home, term, nil, "run")
+	r = runInteractive(t, home, term, []string{"claude"}, "run")
 	if r.code != 1 || !strings.Contains(r.err, "tbox build") || !strings.Contains(r.err, "tbox store add") {
 		t.Fatalf("run: %d %q", r.code, r.err)
 	}
@@ -255,17 +255,109 @@ func TestInteractiveRunPicksImageAndOnlyHarness(t *testing.T) {
 func TestInteractiveRunOneArgAsksHarness(t *testing.T) {
 	home := t.TempDir()
 	buildTwo(t, home)
-	term := &fakeTerm{keys: keys(one(kDown), one(kEnter))}
+	term := &fakeTerm{keys: one(kEnter)} // claude, the first row
 	r := runInteractive(t, home, term, []string{"claude", "codex"}, "run", "alpha")
-	// second installed harness is codex; its adapter may reject the fake
-	// binary, so only the image and the single list matter here.
-	if len(term.keys) != 0 {
-		t.Fatalf("keys left: %v", term.keys)
+	if r.code != 0 || r.call == nil {
+		t.Fatalf("%d %q", r.code, r.err)
 	}
-	if strings.Contains(term.out.String(), "alpha") && strings.Contains(term.out.String(), "beta") {
+	screen := term.out.String()
+	if !strings.Contains(screen, "harness") || !strings.Contains(screen, "claude") || !strings.Contains(screen, "codex") {
+		t.Fatalf("harness list not shown: %q", screen)
+	}
+	if strings.Contains(screen, "beta") {
 		t.Fatal("image list was shown")
 	}
-	_ = r
+	if r.call.argv[0] != "claude" || !hasEnv(r.call.env, "TBOX_IMAGE=alpha:latest") {
+		t.Fatalf("exec %v %v", r.call.argv, r.call.env)
+	}
+}
+
+func TestInteractiveRunPathAsksHarness(t *testing.T) {
+	home := t.TempDir()
+	src := demoSource(t)
+	term := &fakeTerm{keys: one(kEnter)}
+	r := runInteractive(t, home, term, []string{"claude", "codex"}, "run", "--path", src)
+	if r.code != 0 || r.call == nil {
+		t.Fatalf("%d %q", r.code, r.err)
+	}
+	if screen := term.out.String(); !strings.Contains(screen, "codex") {
+		t.Fatalf("harness list not shown: %q", screen)
+	}
+	if r.call.argv[0] != "claude" || !hasEnv(r.call.env, "TBOX_IMAGE=demo:latest") {
+		t.Fatalf("exec %v %v", r.call.argv, r.call.env)
+	}
+}
+
+func hasEnv(env []string, kv string) bool {
+	for _, e := range env {
+		if e == kv {
+			return true
+		}
+	}
+	return false
+}
+
+func TestWithTerminalPanicClosesOnce(t *testing.T) {
+	term := &fakeTerm{}
+	env := &Env{OpenTerminal: func() (tui.Terminal, error) { return term, nil }}
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("no panic")
+			}
+		}()
+		_ = withTerminal(env, func(tui.Terminal) error { panic("boom") })
+	}()
+	if term.closed != 1 {
+		t.Fatalf("closed %d times", term.closed)
+	}
+}
+
+func TestInteractiveRunNoHarnessBeforeImageList(t *testing.T) {
+	home := t.TempDir()
+	buildTwo(t, home)
+	term := &fakeTerm{}
+	r := runInteractive(t, home, term, nil, "run")
+	if r.code != 1 || !strings.Contains(r.err, "no harness is installed") {
+		t.Fatalf("%d %q", r.code, r.err)
+	}
+	if term.out.Len() != 0 {
+		t.Fatalf("image list drawn before the harness check: %q", term.out.String())
+	}
+}
+
+func TestInteractiveImageNewReasksInvalidName(t *testing.T) {
+	localRegistry(t)
+	home := t.TempDir()
+	runIn(t, home, "/", "store", "add", "s", twoSkillStore(t))
+	if c, _, e := runIn(t, home, "/", "image", "new", "taken", "--skill", "s/a", "--no-build"); c != 0 {
+		t.Fatal(e)
+	}
+	term := &fakeTerm{keys: keys(typed("Bad Name"), one(kEnter), typed("taken"), one(kEnter), typed("demo"), one(kEnter),
+		one(kSpace), one(kEnter), one(kEnter))} // skill a, no prompt
+	r := runInteractive(t, home, term, nil, "image", "new", "--no-build")
+	if r.code != 0 {
+		t.Fatalf("%d %q %q", r.code, r.out, r.err)
+	}
+	screen := term.out.String()
+	if !strings.Contains(screen, "invalid image name") || !strings.Contains(screen, "exists") {
+		t.Fatalf("errors not shown: %q", screen)
+	}
+	if _, err := os.Stat(filepath.Join(home, "sources", "demo", "Tariboyfile.yaml")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInteractiveImageNewNameCheckedBeforeLists(t *testing.T) {
+	localRegistry(t)
+	home := t.TempDir()
+	runIn(t, home, "/", "store", "add", "s", twoSkillStore(t))
+	runIn(t, home, "/", "image", "new", "taken", "--skill", "s/a", "--no-build")
+	term := &fakeTerm{}
+	r := runInteractive(t, home, term, nil, "image", "new", "taken")
+	if r.code != 1 || !strings.Contains(r.err, "exists") || r.opened != 0 {
+		t.Fatalf("%d opened %d %q", r.code, r.opened, r.err)
+	}
 }
 
 func TestInteractiveRunCancel(t *testing.T) {

@@ -48,20 +48,23 @@ func runImageNew(env *Env, args []string) int {
 		fmt.Fprintln(env.Stderr, imageNewUsage)
 		return 2
 	}
+	home, err := paths.Resolve(env.Getenv)
+	if err != nil {
+		return fail(env, err)
+	}
 	if !flagged {
 		name := ""
 		if len(pos) == 1 {
 			name = pos[0]
+			if err := checkNewName(home, name, force); err != nil {
+				return fail(env, err)
+			}
 		}
-		pick, err := pickNew(env, name)
+		pick, err := pickNew(env, home, name, force)
 		if err != nil {
 			return interactiveExit(env, err, newNoTerminalHint)
 		}
 		pos, skills.list, prompts.list, newPrompt = []string{pick.name}, pick.skills, pick.prompts, pick.newPrompt
-	}
-	home, err := paths.Resolve(env.Getenv)
-	if err != nil {
-		return fail(env, err)
 	}
 	dir, err := construct.Create(newRegistry(home, env.Cwd), home, construct.Spec{
 		Name: pos[0], Version: version, Skills: skills.list, Prompts: prompts.list,

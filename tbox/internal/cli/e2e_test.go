@@ -29,6 +29,22 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// childEnviron is the environment of this test process without the image
+// session variables, so a test run from inside a tbox session does not put
+// the child tbox into agent mode.
+func childEnviron() []string {
+	var out []string
+	for _, kv := range os.Environ() {
+		k, _, _ := strings.Cut(kv, "=")
+		switch k {
+		case "TBOX_IMAGE_DIR", "TBOX_IMAGE", "TBOX_SKILL_DIR":
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
+}
+
 func TestEndToEnd(t *testing.T) {
 	self, err := os.Executable()
 	if err != nil {
@@ -51,7 +67,7 @@ func TestEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	env := append(os.Environ(), "TBOX_HOME="+home, "PATH="+bin+":"+os.Getenv("PATH"), "TBOX_E2E_CHILD=1")
+	env := append(childEnviron(), "TBOX_HOME="+home, "PATH="+bin+":"+os.Getenv("PATH"), "TBOX_E2E_CHILD=1")
 	run := func(args ...string) string {
 		cmd := exec.Command(self, args...)
 		cmd.Env = env
