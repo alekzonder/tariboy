@@ -361,11 +361,20 @@ func TestCorruptedCacheIsRepairedOrFailsNamingEntry(t *testing.T) {
 		}
 	}
 	_ = first
-	// Remote gone: a further tampering must fail naming the entry.
+	// Remote gone: the local mirror still repairs a further tampering.
 	if err := os.WriteFile(matches[0], []byte("tampered\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	os.RemoveAll(env.repo)
+	write(t, filepath.Join(env.dir, "prompt.md"), "changed once more\n")
+	if res, err := Build(env.opts); err != nil || !res.Built {
+		t.Fatalf("repair from the mirror %+v %v", res, err)
+	}
+	// Remote and mirror gone: a further tampering must fail naming the entry.
+	if err := os.WriteFile(matches[0], []byte("tampered\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	os.RemoveAll(filepath.Join(string(env.opts.Resolver.Home), "cache", "git"))
 	write(t, filepath.Join(env.dir, "prompt.md"), "changed again\n")
 	env.opts.Resolver.Git.Timeout = 5 * time.Second
 	if _, err := Build(env.opts); err == nil || !strings.Contains(err.Error(), env.repo) {

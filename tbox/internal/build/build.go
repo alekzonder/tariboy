@@ -61,6 +61,11 @@ func writeAtomic(path string, data []byte) error {
 // without the network; they are resolved only when a build is needed, when no
 // lock record exists, or with opts.Update.
 func Build(opts Options) (Result, error) {
+	if opts.Resolver != nil {
+		// One session per build: each git mirror is fetched at most once.
+		r := opts.Resolver.WithSession()
+		opts.Resolver = &r
+	}
 	j, err := newJob(opts)
 	if err != nil {
 		return Result{}, err

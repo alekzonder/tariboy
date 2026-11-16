@@ -317,7 +317,9 @@ func TestPinnedCorruptedGitSkillIsRepaired(t *testing.T) {
 	}
 }
 
-func TestPinnedCorruptedGitSkillRemoteGoneFails(t *testing.T) {
+// With the remote gone, a corrupted cache entry is repaired from the local
+// mirror; without the mirror it fails naming the remote.
+func TestPinnedCorruptedGitSkillRemoteGone(t *testing.T) {
 	repo := newRepo(t)
 	r := resolver(t)
 	e := tfile.SkillEntry{Git: repo, Path: "skills/alpha"}
@@ -327,6 +329,11 @@ func TestPinnedCorruptedGitSkillRemoteGoneFails(t *testing.T) {
 	}
 	corrupt(t, filepath.Join(dir, "SKILL.md"))
 	os.RemoveAll(repo)
+	if dir, _, err = r.SkillDir(context.Background(), e, &got); err != nil {
+		t.Fatalf("repair from the mirror: %v", err)
+	}
+	corrupt(t, filepath.Join(dir, "SKILL.md"))
+	os.RemoveAll(r.mirrorDir(repo))
 	if _, _, err := r.SkillDir(context.Background(), e, &got); err == nil || !strings.Contains(err.Error(), repo) {
 		t.Fatalf("want error naming %s, got %v", repo, err)
 	}
@@ -481,5 +488,79 @@ func TestErrorsHideAddressCredentials(t *testing.T) {
 	_, _, err = r.GitSkillAs(ctx, tfile.SkillEntry{Git: "https://alice:s3cr3t-token@host.invalid/x/y.git", Path: "a"}, "a", nil)
 	if err == nil || strings.Contains(err.Error(), "s3cr3t") {
 		t.Fatalf("GitSkillAs: %v", err)
+	}
+}
+
+func TestPinnedCommitInMirrorNeedsNoNetwork(t *testing.T) {
+	repo := newRepo(t)
+	r := resolver(t)
+	e := tfile.SkillEntry{Git: repo, Path: "skills/alpha"}
+	_, got, err := r.SkillDir(context.Background(), e, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The cache entry is lost but the mirror holds the pinned commit.
+	if err := os.RemoveAll(r.sourcesDir()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(repo); err != nil {
+		t.Fatal(err)
+	}
+	dir, again, err := r.SkillDir(context.Background(), e, &got)
+	if err != nil || again != got {
+		t.Fatalf("%+v %v", again, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "SKILL.md")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPinnedCommitGoneUpstreamSaysSo(t *testing.T) {
+	repo := newRepo(t)
+	r := resolver(t)
+	e := tfile.SkillEntry{Git: repo, Path: "skills/alpha"}
+	pinned := lock.Entry{Kind: "git", URL: repo, Path: "skills/alpha", Commit: strings.Repeat("ab", 20), SHA256: strings.Repeat("0", 64)}
+	_, _, err := r.SkillDir(context.Background(), e, &pinned)
+	if err == nil || !strings.Contains(err.Error(), "is no longer in the repository") || !strings.Contains(err.Error(), "tbox build --update") {
+		t.Fatalf("skill: %v", err)
+	}
+	_, _, err = r.PromptFile(context.Background(), tfile.PromptEntry{Git: repo, Path: "docs/review.md"}, &pinned)
+	if err == nil || !strings.Contains(err.Error(), "is no longer in the repository") {
+		t.Fatalf("prompt: %v", err)
+	}
+}
+
+func TestSessionRefreshesMirrorOnce(t *testing.T) {
+	repo := newRepo(t)
+	r := resolver(t).WithSession()
+	ctx := context.Background()
+	_, first, err := r.SkillDir(ctx, tfile.SkillEntry{Git: repo, Path: "skills/alpha"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitAgain(t, repo)
+	_, second, err := r.PromptFile(ctx, tfile.PromptEntry{Git: repo, Path: "docs/review.md"}, nil)
+	if err != nil || second.Commit != first.Commit {
+		t.Fatalf("second entry refreshed the mirror again: %+v %v", second, err)
+	}
+	fresh := resolver(t)
+	fresh.Home = r.Home
+	_, third, err := fresh.PromptFile(ctx, tfile.PromptEntry{Git: repo, Path: "docs/review.md"}, nil)
+	if err != nil || third.Commit == first.Commit {
+		t.Fatalf("a new session did not refresh: %+v %v", third, err)
+	}
+}
+
+func TestGitSkillWithSymlinkSaysSo(t *testing.T) {
+	repo := newRepo(t)
+	if err := os.Symlink("SKILL.md", filepath.Join(repo, "skills/alpha/link.md")); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "add", ".")
+	git(t, repo, "commit", "-q", "-m", "link")
+	_, _, err := resolver(t).SkillDir(context.Background(), tfile.SkillEntry{Git: repo, Path: "skills/alpha"}, nil)
+	want := "repository " + repo + " contains a symbolic link at skills/alpha/link.md; tbox does not package symbolic links"
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("err %v", err)
 	}
 }

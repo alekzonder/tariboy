@@ -14,6 +14,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/alekzonder/tariboy/tbox/internal/fetch"
@@ -41,6 +42,18 @@ type Resolver struct {
 	// RewriteURL, when set, maps every git URL before it is fetched; lock keys
 	// and metadata keep the original URL. Tests use it; production leaves nil.
 	RewriteURL func(string) string
+
+	// session, when set, remembers the mirrors fetched through this value
+	// and its copies, so each is fetched at most once.
+	session *sync.Map
+}
+
+// WithSession returns a copy of r that fetches each git mirror at most once
+// for all its copies. A build uses one session, so the entries of one
+// repository share a single fetch.
+func (r Resolver) WithSession() Resolver {
+	r.session = &sync.Map{}
+	return r
 }
 
 // Describe returns the skill or prompt source text of a resolved entry:

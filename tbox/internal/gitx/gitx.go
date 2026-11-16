@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -36,9 +37,16 @@ type Git struct {
 	Env []string
 }
 
+// TimeoutEnv names the environment variable that sets the git timeout in
+// whole seconds when Git.Timeout is zero.
+const TimeoutEnv = "TBOX_GIT_TIMEOUT"
+
 func (g Git) timeout() time.Duration {
 	if g.Timeout > 0 {
 		return g.Timeout
+	}
+	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv(TimeoutEnv))); err == nil && n > 0 {
+		return time.Duration(n) * time.Second
 	}
 	return defaultTimeout
 }
@@ -51,9 +59,13 @@ func (g Git) environ() []string {
 	return append(env, g.Env...)
 }
 
-// command builds a git command with the fixed safety options.
+// command builds a git command with the fixed safety options. The user's
+// line-ending and attribute settings are overridden so an export does not
+// depend on them; .gitattributes inside the exported tree (export-ignore,
+// export-subst) still apply to git archive.
 func (g Git) command(ctx context.Context, args ...string) *exec.Cmd {
-	full := []string{"-c", "core.hooksPath=/dev/null", "-c", "protocol.ext.allow=never"}
+	full := []string{"-c", "core.hooksPath=/dev/null", "-c", "protocol.ext.allow=never",
+		"-c", "core.autocrlf=false", "-c", "core.eol=lf", "-c", "core.attributesFile=/dev/null"}
 	if !g.AllowLocal {
 		full = append(full, "-c", "protocol.file.allow=never")
 	}
@@ -151,37 +163,96 @@ func (g Git) stream(ctx context.Context, op string, use func(io.Reader) error, a
 
 func gitDir(dir string) string { return "--git-dir=" + dir }
 
-// Mirror creates a bare mirror of url in dir, or updates and prunes it when
-// dir exists.
+// mirrorRefspecs are the refs a mirror keeps: branches and tags only, not
+// refs/pull/* or other hosting refs.
+var mirrorRefspecs = []string{"+refs/heads/*:refs/heads/*", "+refs/tags/*:refs/tags/*"}
+
+// Mirror creates a bare mirror of the branches and tags of url in dir, or
+// updates and prunes it when dir exists. A new mirror is fetched into a
+// temporary sibling and renamed into place; a dir that is not a git
+// repository is removed and fetched again.
 func (g Git) Mirror(ctx context.Context, url, dir string) error {
 	url, err := NormalizeURL(url, g.AllowLocal)
 	if err != nil {
 		return err
 	}
-	if _, err := os.Lstat(dir); errors.Is(err, os.ErrNotExist) {
-		if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+	if _, err := os.Lstat(dir); err == nil {
+		if g.isRepository(ctx, dir) {
+			return g.updateMirror(ctx, url, dir)
+		}
+		if err := os.RemoveAll(dir); err != nil {
 			return err
 		}
-		if _, err := g.run(ctx, "clone", "clone", "--mirror", "--", url, dir); err != nil {
-			_ = os.RemoveAll(dir)
-			return err
-		}
-		return g.syncHead(ctx, dir)
-	} else if err != nil {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
+	return g.newMirror(ctx, url, dir)
+}
+
+// isRepository reports whether dir is a bare git repository.
+func (g Git) isRepository(ctx context.Context, dir string) bool {
+	out, err := g.run(ctx, "rev-parse", gitDir(dir), "rev-parse", "--is-bare-repository")
+	return err == nil && strings.TrimSpace(string(out)) == "true"
+}
+
+func (g Git) newMirror(ctx context.Context, url, dir string) error {
+	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.MkdirTemp(filepath.Dir(dir), "."+filepath.Base(dir)+".new-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmp)
+	if _, err := g.run(ctx, "init", "init", "--quiet", "--bare", "--", tmp); err != nil {
+		return err
+	}
+	if _, err := g.run(ctx, "remote", gitDir(tmp), "remote", "add", "origin", "--", url); err != nil {
+		return err
+	}
+	if err := g.fetchMirror(ctx, tmp); err != nil {
+		return err
+	}
+	if err := g.syncHead(ctx, tmp); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, dir); err != nil && !g.isRepository(ctx, dir) {
+		return err
+	}
+	return nil
+}
+
+func (g Git) updateMirror(ctx context.Context, url, dir string) error {
 	if _, err := g.run(ctx, "remote", gitDir(dir), "remote", "set-url", "origin", "--", url); err != nil {
 		return err
 	}
-	if _, err := g.run(ctx, "remote update", gitDir(dir), "remote", "update", "--prune"); err != nil {
+	if err := g.fetchMirror(ctx, dir); err != nil {
 		return err
 	}
 	return g.syncHead(ctx, dir)
 }
 
+func (g Git) fetchMirror(ctx context.Context, dir string) error {
+	args := append([]string{gitDir(dir), "fetch", "--quiet", "--prune", "--no-tags", "origin"}, mirrorRefspecs...)
+	_, err := g.run(ctx, "fetch", args...)
+	return err
+}
+
+// HasCommit reports whether the repository in mirrorDir holds commit. A
+// missing or broken mirror holds nothing.
+func (g Git) HasCommit(ctx context.Context, mirrorDir, commit string) bool {
+	if checkCommit(commit) != nil {
+		return false
+	}
+	if _, err := os.Lstat(mirrorDir); err != nil {
+		return false
+	}
+	_, err := g.run(ctx, "cat-file", gitDir(mirrorDir), "cat-file", "-e", commit+"^{commit}")
+	return err == nil
+}
+
 // syncHead points the mirror's HEAD at the branch the remote HEAD names, as
-// neither clone --mirror after the first time nor remote update follows a
-// renamed default branch. A remote without a symbolic HEAD, or one naming a
+// a fetch does not follow a renamed default branch. A remote without a symbolic HEAD, or one naming a
 // branch the mirror lacks, leaves HEAD alone.
 func (g Git) syncHead(ctx context.Context, dir string) error {
 	out, err := g.run(ctx, "ls-remote", gitDir(dir), "ls-remote", "--symref", "origin", "HEAD")

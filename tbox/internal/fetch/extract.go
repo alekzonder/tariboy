@@ -199,9 +199,19 @@ func extractTarInto(r io.Reader, stage string, lim Limits) error {
 	}
 }
 
+// LinkError is the error for a symbolic or hard link member, which is never
+// extracted. Name is the member path as stored in the archive.
+type LinkError struct{ Name string }
+
+func (e *LinkError) Error() string {
+	return fmt.Sprintf("invalid archive member %q: regular files and directories only", e.Name)
+}
+
 func extractTarMember(tr *tar.Reader, h *tar.Header, c *counter, stage string) error {
 	switch h.Typeflag {
 	case tar.TypeReg, tar.TypeDir:
+	case tar.TypeSymlink, tar.TypeLink:
+		return &LinkError{Name: h.Name}
 	default:
 		return fmt.Errorf("invalid archive member %q: regular files and directories only", h.Name)
 	}
@@ -306,6 +316,9 @@ func extractZip(data []byte, stage string, lim Limits) error {
 
 func extractZipMember(f *zip.File, c *counter, stage string) error {
 	mode := f.Mode()
+	if mode&os.ModeSymlink != 0 {
+		return &LinkError{Name: f.Name}
+	}
 	if !mode.IsRegular() && !mode.IsDir() {
 		return fmt.Errorf("invalid archive member %q: regular files and directories only", f.Name)
 	}
