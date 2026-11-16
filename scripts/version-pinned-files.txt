@@ -2,6 +2,7 @@
 # scripts/set-version.sh. Keep this list explicit: a repository-wide rewrite
 # would corrupt unrelated dependency versions.
 internal/version/version.go
+tbox/internal/version/version.go
 desktop/src-tauri/Cargo.toml
 desktop/src-tauri/tauri.conf.json
 README.md

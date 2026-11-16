@@ -29,6 +29,35 @@ func TestVersionPinsAgreeWithCanonicalVersion(t *testing.T) {
 	}
 }
 
+// tbox is a separate Go module that must not import tariboy packages, so it
+// declares its own copy of the product version. Read it as text and require the
+// exact canonical value, prerelease suffix included.
+func TestTboxVersionMatchesCanonicalVersion(t *testing.T) {
+	root := repositoryRoot(t)
+	if got, want := readGoVersionConst(t, filepath.Join(root, tboxVersionPath)), version.Version; got != want {
+		t.Fatalf("%s Version = %q, want canonical version %q", tboxVersionPath, got, want)
+	}
+}
+
+const tboxVersionPath = "tbox/internal/version/version.go"
+
+func readGoVersionConst(t *testing.T, path string) string {
+	t.Helper()
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	for _, line := range strings.Split(string(contents), "\n") {
+		if value, ok := strings.CutPrefix(line, "const Version = \""); ok {
+			if value, ok := strings.CutSuffix(value, "\""); ok {
+				return value
+			}
+		}
+	}
+	t.Fatalf("parse const Version from %s", path)
+	return ""
+}
+
 func TestDeclaredReleaseVersionMatchesCanonicalVersion(t *testing.T) {
 	root := repositoryRoot(t)
 	if got, want := readReleaseVersion(t, filepath.Join(root, "scripts/release-version.txt")), version.Version; got != want {
@@ -358,9 +387,11 @@ var prosePinnedPaths = []string{
 // deliberately not prose-scanned: desktop/src-tauri/Cargo.toml pins six
 // third-party dependency versions (uuid, portable-pty, zip, plist, ureq and
 // security-framework), so a scan there would report noise rather than drift.
+// TestTboxVersionMatchesCanonicalVersion parses the tbox version file.
 var exactlyParsedPinnedPaths = []string{
 	"desktop/src-tauri/Cargo.toml",
 	"desktop/src-tauri/tauri.conf.json",
+	tboxVersionPath,
 }
 
 // canonicalVersionSourcePath declares the canonical version and therefore needs
