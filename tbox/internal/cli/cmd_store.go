@@ -61,16 +61,18 @@ func storeUsageError(env *Env, line string) int {
 }
 
 // parseInterleaved parses flags that may follow positional arguments.
+// Everything after the first "--" is positional.
 func parseInterleaved(env *Env, name string, args []string, define func(*flag.FlagSet)) ([]string, error) {
 	fs := newFlags(name, env.Stderr)
 	define(fs)
+	args, rest := splitDashDash(args)
 	var pos []string
 	for {
 		if err := fs.Parse(args); err != nil {
 			return nil, err
 		}
 		if fs.NArg() == 0 {
-			return pos, nil
+			return append(pos, rest...), nil
 		}
 		pos = append(pos, fs.Arg(0))
 		args = fs.Args()[1:]

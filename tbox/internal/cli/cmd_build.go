@@ -66,7 +66,7 @@ func runBuild(env *Env, args []string) int {
 		return 2
 	}
 	if len(pos) > 1 || (len(pos) == 1 && path != "") {
-		fmt.Fprintln(env.Stderr, "usage: tbox build [STORE/IMAGE | --path DIR] [--name N] [--tag T]... [--update]")
+		fmt.Fprint(env.Stderr, buildUsage)
 		return 2
 	}
 	home, err := paths.Resolve(env.Getenv)
@@ -76,7 +76,7 @@ func runBuild(env *Env, args []string) int {
 	opts := build.Options{Name: name, Tags: tags, Update: update}
 	var label string
 	if len(pos) == 1 {
-		opts.SourceDir, opts.StoreRoot, err = storeImageDir(env, home, pos[0])
+		opts.SourceDir, opts.StoreRoot, err = storeImageDir(env, home, pos[0], name)
 		label = pos[0]
 	} else {
 		opts.SourceDir, label = absDir(env, path), ""
@@ -108,14 +108,13 @@ func absDir(env *Env, dir string) string {
 }
 
 // storeImageDir returns the source directory of the image STORE/IMAGE and the
-// root of its Store. The directory is never reached through a symlink.
-func storeImageDir(env *Env, home paths.Home, arg string) (dir, root string, err error) {
+// root of its Store. The directory is never reached through a symlink. IMAGE
+// is the directory name as the Store lists it; when it is not a valid image
+// name, name (the --name flag) must give one.
+func storeImageDir(env *Env, home paths.Home, arg, name string) (dir, root string, err error) {
 	sel, ok := stores.ParseSelector(arg)
-	if !ok {
-		return "", "", fmt.Errorf("%q is not STORE/IMAGE", arg)
-	}
-	if err := imgstore.CheckName(sel.Name); err != nil {
-		return "", "", err
+	if !ok || sel.Name == "." || sel.Name == ".." {
+		return "", "", fmt.Errorf("%q is not STORE/IMAGE", safe(arg))
 	}
 	reg := newRegistry(home, env.Cwd)
 	s, err := reg.Get(sel.Store)
@@ -129,6 +128,9 @@ func storeImageDir(env *Env, home paths.Home, arg string) (dir, root string, err
 	}
 	if fi, lerr := os.Lstat(dir); lerr != nil || !fi.IsDir() {
 		return "", "", fmt.Errorf("store %s has no image %q", sel.Store, sel.Name)
+	}
+	if name == "" && imgstore.CheckName(sel.Name) != nil {
+		return "", "", fmt.Errorf("store image %q is not a valid image name (allowed: a-z 0-9 . _ -); build it with tbox build %s --name NAME", safe(sel.Name), safe(arg))
 	}
 	return dir, root, nil
 }

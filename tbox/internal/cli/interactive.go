@@ -24,7 +24,7 @@ const (
 	noContentText       = "no skills or prompts found; add a Store with: tbox store add NAME SOURCE"
 	noImagesText        = "no images found; build one with: tbox build --path DIR, or add a Store with: tbox store add NAME SOURCE"
 	runNoTerminalHint   = "tbox run: IMAGE and HARNESS are required when stdin or stderr is not a terminal\n" + runUsage
-	newNoTerminalHint   = "tbox image new: NAME and one of --skill, --prompt or --new-prompt are required when stdin or stderr is not a terminal\n" + imageNewUsage
+	newNoTerminalHint   = "tbox image new: NAME and one of --skill, --prompt or --new-prompt are required when stdin or stderr is not a terminal\n" + imageNewUsage + "\n"
 )
 
 // exitError ends an interactive command with a code and a message that is

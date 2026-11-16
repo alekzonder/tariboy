@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"slices"
@@ -23,14 +24,15 @@ const runUsage = "usage: tbox run IMAGE|STORE/IMAGE HARNESS [-- ARGS...]\n      
 // replaced by the harness, so tbox does not stay in the process tree.
 func runRun(env *Env, args []string) int {
 	own, extra := splitDashDash(args)
-	fs := newFlags("run", env.Stderr)
-	path := fs.String("path", "", "build-if-changed from this source directory and run its image")
-	if err := fs.Parse(own); err != nil {
+	var path string
+	pos, err := parseInterleaved(env, "run", own, func(fs *flag.FlagSet) {
+		fs.StringVar(&path, "path", "", "build-if-changed from this source directory and run its image")
+	})
+	if err != nil {
 		return 2
 	}
-	pos := fs.Args()
 	want := 2
-	if *path != "" {
+	if path != "" {
 		want = 1
 	}
 	if len(pos) > want {
@@ -39,7 +41,6 @@ func runRun(env *Env, args []string) int {
 	}
 	if len(pos) < want {
 		var note string
-		var err error
 		if pos, note, err = completeRun(env, pos, want); err != nil {
 			return interactiveExit(env, err, runNoTerminalHint)
 		}
@@ -58,7 +59,7 @@ func runRun(env *Env, args []string) int {
 		return fail(env, err)
 	}
 	store := imgstore.Store{Dir: home.ImagesDir()}
-	ref, code := resolveRunRef(env, home, *path, pos)
+	ref, code := resolveRunRef(env, home, path, pos)
 	if code != 0 {
 		return code
 	}
@@ -104,7 +105,7 @@ func resolveRunRef(env *Env, home paths.Home, path string, pos []string) (imgsto
 		opts.SourceDir = absDir(env, path)
 	case strings.Contains(pos[0], "/"):
 		var err error
-		if opts.SourceDir, opts.StoreRoot, err = storeImageDir(env, home, pos[0]); err != nil {
+		if opts.SourceDir, opts.StoreRoot, err = storeImageDir(env, home, pos[0], ""); err != nil {
 			return imgstore.Ref{}, fail(env, err)
 		}
 		label = pos[0]

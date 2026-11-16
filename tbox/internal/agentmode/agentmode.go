@@ -15,6 +15,7 @@ import (
 	"github.com/alekzonder/tariboy/tbox/internal/fsafe"
 	"github.com/alekzonder/tariboy/tbox/internal/rundir"
 	"github.com/alekzonder/tariboy/tbox/internal/skill"
+	"github.com/alekzonder/tariboy/tbox/internal/textsafe"
 )
 
 // Environment variables of an image session.
@@ -42,7 +43,7 @@ func Run(host Host, imageDir string, args []string) int {
 	switch args[0] {
 	case "skills", "skill":
 	default:
-		fmt.Fprintf(host.Stderr, "tbox: %s is not available inside an image session (%s=%s)\n", args[0], EnvImage, lookup(host.Environ, EnvImage))
+		refuse(host, imageDir, args[0])
 		return 2
 	}
 	run, err := rundir.Open(imageDir)
@@ -54,6 +55,19 @@ func Run(host Host, imageDir string, args []string) int {
 		return listSkills(host, run)
 	}
 	return skillCommand(host, run, args[1:])
+}
+
+// available lists the commands of a session, for the refusal of any other.
+const available = "available: tbox skills, tbox skill NAME, tbox skill exec NAME SCRIPT [ARGS...], tbox version, tbox help"
+
+// refuse explains that command does not work in this session. It names the
+// image when TBOX_IMAGE is set and the image directory otherwise.
+func refuse(host Host, imageDir, command string) {
+	where := "image directory " + imageDir
+	if img := lookup(host.Environ, EnvImage); img != "" {
+		where = "image " + img
+	}
+	fmt.Fprintf(host.Stderr, "tbox: %s is not available inside the session of %s\n%s\n", textsafe.Line(command, 100), textsafe.Line(where, 1000), available)
 }
 
 func lookup(environ []string, key string) string {

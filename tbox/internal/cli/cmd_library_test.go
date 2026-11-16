@@ -135,7 +135,7 @@ func TestInsideSessionLibraryCommandsStayAgentMode(t *testing.T) {
 		t.Fatal("skills not registered")
 	}
 	code, _, errs := run2(t, map[string]string{"TBOX_IMAGE_DIR": t.TempDir(), "TBOX_IMAGE": "demo:latest"}, "prompts")
-	if code != 2 || !strings.Contains(errs, "not available inside an image session") {
+	if code != 2 || !strings.Contains(errs, "not available inside the session of") {
 		t.Fatalf("%d %q", code, errs)
 	}
 }
@@ -311,5 +311,23 @@ func TestRootLevelSkillListsOnlyRootFiles(t *testing.T) {
 	want := "name: rooty\ndescription: Root skill\nfiles:\n  SKILL.md\n  notes.txt\n\n"
 	if code != 0 || !strings.HasPrefix(out, want) || strings.Contains(out, "images/") || strings.Contains(out, "prompts/") {
 		t.Fatalf("%d %q %q", code, out, errs)
+	}
+}
+
+func TestBuildStoreImageWithInvalidDirectoryName(t *testing.T) {
+	localRegistry(t)
+	home, dir := t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(dir, "images/Demo/Tariboyfile.yaml"), "schema_version: 3\nimage_version: 1.0.0\n")
+	if code, _, errs := runIn(t, home, "/", "store", "add", "s", dir); code != 0 {
+		t.Fatal(errs)
+	}
+	if code, _, errs := runIn(t, home, "/", "build", "s/Demo"); code != 1 || !strings.Contains(errs, "--name") {
+		t.Fatalf("without --name: %d %q", code, errs)
+	}
+	if code, out, errs := runIn(t, home, "/", "build", "s/Demo", "--name", "demo"); code != 0 || !strings.Contains(out, "built demo:") {
+		t.Fatalf("with --name: %d %q %q", code, out, errs)
+	}
+	if code, _, errs := runIn(t, home, "/", "build", "s/.."); code != 1 || !strings.Contains(errs, "is not STORE/IMAGE") {
+		t.Fatalf("dot-dot: %d %q", code, errs)
 	}
 }

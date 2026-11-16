@@ -147,7 +147,17 @@ func TestBrokenDirectoryFailsClosed(t *testing.T) {
 
 func TestOtherCommandsUnavailable(t *testing.T) {
 	s := newSession(t)
-	if code := s.run(s.dir, "build", "x"); code != 2 || s.err.String() != "tbox: build is not available inside an image session (TBOX_IMAGE=demo:latest)\n" {
+	if code := s.run(s.dir, "build", "x"); code != 2 || !strings.HasPrefix(s.err.String(), "tbox: build is not available inside the session of image demo:latest\n") {
 		t.Fatalf("build: %d %q", code, s.err.String())
+	}
+	for _, want := range []string{"skills", "skill NAME", "skill exec NAME SCRIPT", "version", "help"} {
+		if !strings.Contains(s.err.String(), want) {
+			t.Errorf("refusal lacks %q: %q", want, s.err.String())
+		}
+	}
+	host := Host{Stdout: &s.out, Stderr: &s.err}
+	s.err.Reset()
+	if code := Run(host, s.dir, []string{"run"}); code != 2 || !strings.Contains(s.err.String(), "session of image directory "+s.dir) {
+		t.Fatalf("no TBOX_IMAGE: %d %q", code, s.err.String())
 	}
 }

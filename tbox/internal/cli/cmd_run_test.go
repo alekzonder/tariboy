@@ -131,3 +131,25 @@ func TestRunPathPrintsWarnings(t *testing.T) {
 		t.Fatalf("run: %q", errs)
 	}
 }
+
+func TestRunFlagAfterPositionals(t *testing.T) {
+	home, src := t.TempDir(), demoSource(t)
+	code, errs, call := runWithExec(t, home, "/", "run", "claude", "--path", src, "--", "--model", "x")
+	if code != 0 || call == nil || call.argv[len(call.argv)-1] != "x" {
+		t.Fatalf("%d %q %v", code, errs, call)
+	}
+}
+
+func TestDashDashEndsFlags(t *testing.T) {
+	home := t.TempDir()
+	if code, _, errs := runIn(t, home, "/", "build", "--", "s/img", "--update"); code != 2 || !strings.Contains(errs, "usage: tbox build") {
+		t.Fatalf("%d %q", code, errs)
+	}
+}
+
+func TestImageNewHintEndsWithNewline(t *testing.T) {
+	r := runInteractive(t, t.TempDir(), nil, nil, "image", "new")
+	if r.code != 2 || !strings.HasSuffix(r.err, "\n") {
+		t.Fatalf("%d %q", r.code, r.err)
+	}
+}
