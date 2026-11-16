@@ -145,7 +145,9 @@ cat >"$fixture/bin/node" <<'EOF'
 printf '%s\n' "${TEST_NODE_VERSION:-v22.0.0}"
 EOF
 printf '#!/bin/sh\nprintf "cargo:%%s\\n" "$*" >>%s/events\n' "$fixture" >"$fixture/bin/cargo"
-mkdir -p "$fixture/desktop/src-tauri"
+mkdir -p "$fixture/desktop/src-tauri" "$fixture/tbox"
+# tbox targets run inside tbox/, where the fake `go env GOROOT` resolves $PWD.
+ln -s ../fake-goroot "$fixture/tbox/fake-goroot"
 chmod +x "$fixture/bin/go" "$fixture/fake-goroot/bin/gofmt" "$fixture/bin/npm" "$fixture/bin/npx" "$fixture/bin/node" "$fixture/bin/cargo"
 for script in tariboy-tasks-e2e.sh tariboy-smoke-contract-test.sh package-alpha-contract-test.sh tariboy-branding-contract-test.sh make-clean-contract-test.sh server-install-contract-test.sh publish-docs-contract-test.sh ui-test-memory-gate-test.sh docs-build-cache-test.sh designer-check-contract-test.sh; do
   printf '#!/bin/sh\nexit 0\n' >"$fixture/scripts/$script"
