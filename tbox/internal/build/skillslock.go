@@ -28,8 +28,10 @@ type restorer struct {
 	r     *srcpkg.Resolver
 	roots []string
 	// sets are searched in order: the image's own lock first.
-	sets     []lockSet
-	pin      skillslock.Pin
+	sets []lockSet
+	pin  skillslock.Pin
+	// within confines local lock sources to the Store root; empty for none.
+	within   string
 	dirs     map[string]string
 	entries  map[string]lock.Entry
 	keys     map[string]string
@@ -86,7 +88,7 @@ func (rs *restorer) lookup(name string) (string, bool) {
 		if !ok {
 			continue
 		}
-		got, err := skillslock.Restore(rs.ctx, rs.r, set.dir, map[string]skillslock.Skill{name: s}, rs.pin)
+		got, err := skillslock.RestoreWithin(rs.ctx, rs.r, set.dir, rs.within, map[string]skillslock.Skill{name: s}, rs.pin)
 		if err != nil {
 			rs.err = fmt.Errorf("%s: %w", filepath.Join(set.dir, skillslock.Filename), err)
 			return "", false
@@ -160,7 +162,7 @@ func (j *job) prepareRestore() error {
 		}
 	}
 	j.restore = &restorer{
-		ctx: context.Background(), r: j.opts.Resolver, roots: roots, sets: sets, pin: j.pin,
+		ctx: context.Background(), r: j.opts.Resolver, roots: roots, sets: sets, pin: j.pin, within: j.opts.StoreRoot,
 		dirs: map[string]string{}, entries: map[string]lock.Entry{}, keys: map[string]string{},
 	}
 	return nil

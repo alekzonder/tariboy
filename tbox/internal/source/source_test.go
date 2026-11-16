@@ -464,3 +464,22 @@ func TestGitSkillAtRepositoryRoot(t *testing.T) {
 		t.Fatalf("pinned offline: %s %+v %v", dir2, got2, err)
 	}
 }
+
+func TestErrorsHideAddressCredentials(t *testing.T) {
+	isolate(t)
+	r := resolver(t)
+	r.Git.AllowLocal = false
+	ctx := context.Background()
+	_, _, err := r.SkillDir(ctx, tfile.SkillEntry{Git: "https://alice:s3cr3t-token@host.invalid/x/y.git", Path: "skills/a"}, nil)
+	if err == nil || strings.Contains(err.Error(), "s3cr3t") || !strings.Contains(err.Error(), "https://host.invalid/x/y.git") {
+		t.Fatalf("skill: %v", err)
+	}
+	_, _, err = r.PromptFile(ctx, tfile.PromptEntry{URL: "https://alice:s3cr3t-token@host.invalid/p.md?k=s3cr3t"}, nil)
+	if err == nil || strings.Contains(err.Error(), "s3cr3t") {
+		t.Fatalf("prompt: %v", err)
+	}
+	_, _, err = r.GitSkillAs(ctx, tfile.SkillEntry{Git: "https://alice:s3cr3t-token@host.invalid/x/y.git", Path: "a"}, "a", nil)
+	if err == nil || strings.Contains(err.Error(), "s3cr3t") {
+		t.Fatalf("GitSkillAs: %v", err)
+	}
+}

@@ -93,6 +93,8 @@ type Restored struct {
 	Keys map[string]string
 	// Warnings name the skills whose content differs from computedHash.
 	Warnings []string
+
+	within string
 }
 
 var githubSource = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
@@ -106,11 +108,24 @@ var githubSource = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 // an error. A skill whose content hash differs from computedHash gets a
 // warning, not an error. pin may be nil.
 func Restore(ctx context.Context, r *source.Resolver, lockDir string, skills map[string]Skill, pin Pin) (*Restored, error) {
+	return RestoreWithin(ctx, r, lockDir, "", skills, pin)
+}
+
+// RestoreWithin is Restore with every local source confined to the
+// directory within (a Store root): a local source that lies outside it is an
+// error. An empty within confines nothing. Github skills live in the tbox
+// cache and are not confined.
+func RestoreWithin(ctx context.Context, r *source.Resolver, lockDir, within string, skills map[string]Skill, pin Pin) (*Restored, error) {
 	base, err := filepath.EvalSymlinks(lockDir)
 	if err != nil {
 		return nil, err
 	}
-	out := &Restored{Dirs: map[string]string{}, Entries: map[string]lock.Entry{}, Keys: map[string]string{}}
+	if within != "" {
+		if within, err = filepath.EvalSymlinks(within); err != nil {
+			return nil, err
+		}
+	}
+	out := &Restored{Dirs: map[string]string{}, Entries: map[string]lock.Entry{}, Keys: map[string]string{}, within: within}
 	names := make([]string, 0, len(skills))
 	for name := range skills {
 		names = append(names, name)
@@ -135,6 +150,9 @@ func (out *Restored) restore(ctx context.Context, r *source.Resolver, base, name
 		dir, err = out.github(ctx, r, name, s, pin)
 	case "local":
 		dir, err = local(base, name, s.Source)
+		if err == nil && out.within != "" && !Inside(out.within, dir) {
+			err = fmt.Errorf("local source %q points outside the Store", s.Source)
+		}
 	default:
 		return fmt.Errorf("unsupported sourceType %q", s.SourceType)
 	}
@@ -205,6 +223,13 @@ func local(base, name, src string) (string, error) {
 		return "", fmt.Errorf("local source %q must be directory named %s", src, name)
 	}
 	return dir, nil
+}
+
+// Inside reports whether path is root or lies below it. Both are compared
+// as cleaned paths; root must be canonical.
+func Inside(root, path string) bool {
+	rel, err := filepath.Rel(root, filepath.Clean(path))
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
 // Remapper returns a tfile.Remap that maps <root>/.agents/skills/<name>[/...]
