@@ -577,13 +577,13 @@ the daemon are still in it. Compatibility is covered by shared fixtures in
   the image. `tbox` does not isolate the session.
 - Tariboy does not understand `schema_version: 3` yet, so a v3 source builds in
   `tbox` only. The archive that `tbox` writes is schema v2.
-- The harness adapters were verified against Claude Code 2.1.325, Codex 0.166.0
-  and OpenCode 1.19.5 without a live session. Not yet verified in a live
-  session: that an interactive Claude Code session picks up
-  `--append-system-prompt-file` (if it turns out to be print-mode only, `tbox`
-  will pass the prompt text with `--append-system-prompt`); that OpenCode
-  resolves your credentials and loads the absolute `instructions` file into the
-  system prompt of a real session; that an interactive Codex session behaves
-  like `codex debug prompt-input`; and whether Codex ever prunes a plugin cache
-  entry that no marketplace lists.
+- The harness adapters were verified in live sessions against Claude Code
+  2.1.325, Codex 0.166.0 and OpenCode 1.19.5: in each one the model quoted a
+  marker from the prompt of the image, and in Claude Code and Codex it named a
+  skill of the image as `<image>:<skill>`. Claude Code was checked in an
+  interactive session and with `-p`, Codex with `codex exec`, OpenCode with
+  `opencode run`. The interactive screens of Codex and OpenCode read the same
+  profile and configuration, but nobody drove them through `tbox` yet. It is
+  also not known whether Codex ever prunes a plugin cache entry that no
+  marketplace lists.
 - Whether a skill is invoked depends on the harness and the model.
