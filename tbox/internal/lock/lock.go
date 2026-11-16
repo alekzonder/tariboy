@@ -13,6 +13,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/alekzonder/tariboy/tbox/internal/fsafe"
 	"github.com/alekzonder/tariboy/tbox/internal/paths"
 )
 
@@ -43,9 +44,13 @@ func Key(kind, url, path, ref string) string {
 	return kind + "|" + url + "|" + path + "|" + ref
 }
 
-// Read loads the lock at path. A missing file is an empty lock.
+// maxLockBytes bounds a lock file, like skills-lock.json.
+const maxLockBytes = 4 << 20
+
+// Read loads the lock at path. A missing file is an empty lock. The file is
+// not followed through a symlink and may hold at most 4 MiB.
 func Read(path string) (File, error) {
-	data, err := os.ReadFile(path)
+	data, err := fsafe.ReadFileNoFollow(path, maxLockBytes)
 	if errors.Is(err, os.ErrNotExist) {
 		return File{Version: currentVersion, Entries: map[string]Entry{}}, nil
 	}

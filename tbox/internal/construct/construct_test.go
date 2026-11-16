@@ -238,6 +238,8 @@ func TestCreateErrors(t *testing.T) {
 		{"unknown prompt", Spec{Name: "x", Prompts: []stores.Selector{sel("g", "zzz")}}, "gp"},
 		{"duplicate name", Spec{Name: "x", Skills: []stores.Selector{sel("g", "other"), sel("d", "other")}}, "g/other"},
 		{"bad name", Spec{Name: "Bad Name"}, "invalid image name"},
+		{"dot name", Spec{Name: ".old-x"}, "must start with a lower-case letter or digit"},
+		{"dash name", Spec{Name: "-x"}, "must start with a lower-case letter or digit"},
 		{"bad version", Spec{Name: "x", Version: "nope"}, "version"},
 	}
 	for _, c := range cases {
@@ -301,8 +303,9 @@ func repoWithRootSkill(t *testing.T, name string) string {
 	repo := t.TempDir()
 	write(t, filepath.Join(repo, "SKILL.md"), skillDoc(name))
 	write(t, filepath.Join(repo, "scripts/run.sh"), "echo\n")
-	write(t, filepath.Join(repo, "images/x/Tariboyfile.yaml"), "schema_version: 3\n")
 	write(t, filepath.Join(repo, "prompts/pp.md"), "pp\n")
+	write(t, filepath.Join(repo, "workflows/w.md"), "w\n")
+	write(t, filepath.Join(repo, "evals/e.json"), "{}\n")
 	write(t, filepath.Join(repo, ".hidden/file"), "h\n")
 	return repo
 }
@@ -345,12 +348,12 @@ func TestCreateRootSkillOfDirStoreIsCopied(t *testing.T) {
 	if err != nil || file.Skills[0].Dir != "./skills/rootskill" {
 		t.Fatalf("%v %+v", err, file.Skills)
 	}
-	for _, rel := range []string{"SKILL.md", "scripts/run.sh"} {
+	for _, rel := range []string{"SKILL.md", "scripts/run.sh", "prompts/pp.md", "workflows/w.md"} {
 		if _, err := os.Stat(filepath.Join(dir, "skills/rootskill", rel)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for _, rel := range []string{"images", "prompts", ".hidden"} {
+	for _, rel := range []string{"evals", ".hidden"} {
 		if _, err := os.Stat(filepath.Join(dir, "skills/rootskill", rel)); err == nil {
 			t.Fatalf("%s was copied", rel)
 		}
@@ -467,5 +470,54 @@ func TestCreateFromSymlinkedDirStoreBuildsPaths(t *testing.T) {
 	}
 	if _, _, _, err := tfile.ResolvePromptFile(file.Prompts[0], file.SkillDirs()...); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCreateDuplicateSkillUsesFirstRow(t *testing.T) {
+	isolate(t)
+	home := paths.Home(t.TempDir())
+	root := t.TempDir()
+	write(t, filepath.Join(root, ".agents/skills/x/SKILL.md"), skillDoc("x"))
+	write(t, filepath.Join(root, ".claude/skills/x/SKILL.md"), skillDoc("x"))
+	reg := stores.Registry{Home: home, Cwd: t.TempDir()}
+	if _, err := reg.Add(context.Background(), "s", root, ""); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := Create(reg, home, Spec{Name: "demo", Skills: []stores.Selector{sel("s", "x")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := tfile.Parse(dir)
+	if err != nil || file.Skills[0].Dir != filepath.Join(root, ".agents/skills/x") {
+		t.Fatalf("%v %+v", err, file.Skills)
+	}
+}
+
+func TestCreateRefusesRootSkillOfStoreWithContent(t *testing.T) {
+	for _, extra := range []string{"images/x/Tariboyfile.yaml", "skills/other/SKILL.md"} {
+		t.Run(extra, func(t *testing.T) {
+			isolate(t)
+			home := paths.Home(t.TempDir())
+			repo := repoWithRootSkill(t, "rootskill")
+			write(t, filepath.Join(repo, extra), skillDoc("other"))
+			git(t, repo, "init", "-q", "-b", "main")
+			git(t, repo, "add", ".")
+			git(t, repo, "commit", "-q", "-m", "one")
+			reg := stores.Registry{Home: home, Git: gitx.Git{AllowLocal: true}, Cwd: t.TempDir()}
+			ctx := context.Background()
+			if _, err := reg.Add(ctx, "d", repo, ""); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := reg.Add(ctx, "g", "file://"+repo, ""); err != nil {
+				t.Fatal(err)
+			}
+			for _, store := range []string{"d", "g"} {
+				// A Store with skills/ lists no root skill at all.
+				_, err := Create(reg, home, Spec{Name: "x", Skills: []stores.Selector{sel(store, "rootskill")}})
+				if err == nil || !(strings.Contains(err.Error(), "holds Store content") || strings.Contains(err.Error(), "has no skill")) {
+					t.Fatalf("%s: %v", store, err)
+				}
+			}
+		})
 	}
 }

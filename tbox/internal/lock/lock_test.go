@@ -82,3 +82,25 @@ func TestPathForDoesNotWrite(t *testing.T) {
 		t.Fatalf("PathFor created %v", entries)
 	}
 }
+
+func TestReadRefusesSymlinkAndOversize(t *testing.T) {
+	dir := t.TempDir()
+	real := filepath.Join(dir, "real.json")
+	if err := os.WriteFile(real, []byte(`{"version":1,"entries":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, Filename)
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Read(link); err == nil {
+		t.Fatal("read a lock through a symlink")
+	}
+	big := filepath.Join(dir, "big.json")
+	if err := os.WriteFile(big, []byte(`{"version":1,"entries":{}}`+strings.Repeat(" ", 4<<20)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Read(big); err == nil {
+		t.Fatal("read a lock over 4 MiB")
+	}
+}

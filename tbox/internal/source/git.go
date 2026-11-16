@@ -161,6 +161,11 @@ func (r Resolver) exportTree(ctx context.Context, e tfile.SkillEntry, commit, na
 	if err := r.export(ctx, e, commit, dir); err != nil {
 		return "", "", err
 	}
+	if e.Path == "." {
+		if err := dropDotDirs(dir); err != nil {
+			return "", "", err
+		}
+	}
 	if name == "" {
 		if name, err = rootSkillName(dir); err != nil {
 			return "", "", err
@@ -181,6 +186,24 @@ func (r Resolver) exportTree(ctx context.Context, e tfile.SkillEntry, commit, na
 		return "", "", err
 	}
 	return name, sha, publish(stage, final)
+}
+
+// dropDotDirs removes the top-level dot-directories of a skill exported
+// from a repository root: like a root skill of any Store, it is the whole
+// root except those and evals/ (which the skill package skips).
+func dropDotDirs(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), ".") {
+			if err := os.RemoveAll(filepath.Join(dir, e.Name())); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // rootSkillName reads the skill name from the SKILL.md at the root of dir.

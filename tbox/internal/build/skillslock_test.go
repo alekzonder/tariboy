@@ -258,3 +258,37 @@ func TestV2LocalOnlyLockNeedsNoResolver(t *testing.T) {
 		t.Fatal("a local-only skills lock wrote tbox-lock.json")
 	}
 }
+
+func TestV2InstalledSkillUsedAsIsForPathBuild(t *testing.T) {
+	dir := source(t, "schema_version: 2\nskills:\n  - dir: ./.agents/skills/alpha\n")
+	write(t, filepath.Join(dir, ".agents/skills/alpha/SKILL.md"), skillBody("alpha", "installed"))
+	write(t, filepath.Join(dir, skillslock.Filename), `{"version":1,"skills":{"alpha":{"source":"./missing/alpha","sourceType":"local","computedHash":"x"}}}`)
+	store := imgstore.Store{Dir: t.TempDir()}
+	if _, err := Build(opts(dir, store)); err != nil {
+		t.Fatal(err)
+	}
+	img, err := store.Open(imgstore.Ref{Name: "demo", Tag: "latest"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, members, _ := img.Skill("alpha")
+	if len(members) == 0 || !strings.Contains(string(members[0].Body), "installed") {
+		t.Fatalf("members %+v", members)
+	}
+}
+
+func TestV2StoreBuildRestoresOverInstalledSkill(t *testing.T) {
+	env := newV2Env(t, "")
+	write(t, filepath.Join(env.img, ".agents/skills/b/SKILL.md"), skillBody("b", "installed b"))
+	if _, err := Build(env.opts); err != nil {
+		t.Fatal(err)
+	}
+	img, err := env.store.Open(imgstore.Ref{Name: "img", Tag: "latest"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, members, _ := img.Skill("b")
+	if len(members) == 0 || !strings.Contains(string(members[0].Body), "image b") {
+		t.Fatalf("members %+v", members)
+	}
+}

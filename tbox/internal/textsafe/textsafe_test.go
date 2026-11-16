@@ -20,6 +20,8 @@ func TestLine(t *testing.T) {
 		{"héllo wörld", 6, "héllo…"},
 		{"abcde", 5, "abcde"},
 		{"", 5, ""},
+		{"bidi\u202eevil\u202c end", 40, "bidi evil end"},
+		{"zero\u200bwidth\u200djoin\ufeff", 40, "zero width join"},
 	}
 	for _, c := range cases {
 		if got := Line(c.in, c.max); got != c.want {

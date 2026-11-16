@@ -3,6 +3,7 @@ package build
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 
@@ -31,12 +32,15 @@ type restorer struct {
 	sets []lockSet
 	pin  skillslock.Pin
 	// within confines local lock sources to the Store root; empty for none.
-	within   string
-	dirs     map[string]string
-	entries  map[string]lock.Entry
-	keys     map[string]string
-	warnings []string
-	err      error
+	within string
+	// installed, for a --path build, is the canonical image directory whose
+	// own .agents/skills/<name> directories are used as is when present.
+	installed string
+	dirs      map[string]string
+	entries   map[string]lock.Entry
+	keys      map[string]string
+	warnings  []string
+	err       error
 }
 
 // readSkillLocks reads skills-lock.json in the image directory and in the
@@ -83,6 +87,10 @@ func (rs *restorer) lookup(name string) (string, bool) {
 	if rs.err != nil {
 		return "", false
 	}
+	if dir, ok := rs.installedDir(name); ok {
+		rs.dirs[name] = dir
+		return dir, true
+	}
 	for _, set := range rs.sets {
 		s, ok := set.skills[name]
 		if !ok {
@@ -104,6 +112,18 @@ func (rs *restorer) lookup(name string) (string, bool) {
 		return got.Dirs[name], true
 	}
 	return "", false
+}
+
+// installedDir returns <image>/.agents/skills/<name> of a --path build when
+// it is a real directory: the author restored the lock already, as with
+// tariboy's --path builds. A Store build always restores from the lock.
+func (rs *restorer) installedDir(name string) (string, bool) {
+	if rs.installed == "" {
+		return "", false
+	}
+	dir := filepath.Join(rs.installed, ".agents", "skills", name)
+	fi, err := os.Lstat(dir)
+	return dir, err == nil && fi.IsDir()
 }
 
 // prime restores every skill entry of f now, so the job knows which
@@ -164,6 +184,9 @@ func (j *job) prepareRestore() error {
 	j.restore = &restorer{
 		ctx: context.Background(), r: j.opts.Resolver, roots: roots, sets: sets, pin: j.pin, within: j.opts.StoreRoot,
 		dirs: map[string]string{}, entries: map[string]lock.Entry{}, keys: map[string]string{},
+	}
+	if j.opts.StoreRoot == "" {
+		j.restore.installed = roots[len(roots)-1]
 	}
 	return nil
 }

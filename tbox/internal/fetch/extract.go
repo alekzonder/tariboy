@@ -39,15 +39,15 @@ var DefaultLimits = Limits{
 // is set. The tree is staged in a sibling temporary directory and renamed, so
 // dest never holds a partial extraction.
 func ExtractTar(r io.Reader, dest string, lim Limits) error {
-	return stageAndRename(dest, false, func(stage string) error {
+	return stageAndRename(dest, nil, func(stage string) error {
 		return extractTarInto(r, stage, lim)
 	})
 }
 
 // stageAndRename runs fill on a sibling temporary directory of dest and
-// renames it to dest. With flatten, a stage holding exactly one directory is
-// replaced by that directory.
-func stageAndRename(dest string, flatten bool, fill func(stage string) error) error {
+// renames it to dest. With flatten, a stage holding exactly one directory
+// whose name flatten accepts is replaced by that directory.
+func stageAndRename(dest string, flatten func(name string) bool, fill func(stage string) error) error {
 	dest = filepath.Clean(dest)
 	if _, err := os.Lstat(dest); err == nil {
 		return fmt.Errorf("destination %s already exists", dest)
@@ -66,8 +66,8 @@ func stageAndRename(dest string, flatten bool, fill func(stage string) error) er
 		return err
 	}
 	src := stage
-	if flatten {
-		src, err = singleTopDir(stage)
+	if flatten != nil {
+		src, err = singleTopDir(stage, flatten)
 		if err != nil {
 			return err
 		}
@@ -78,14 +78,14 @@ func stageAndRename(dest string, flatten bool, fill func(stage string) error) er
 	return os.Rename(src, dest)
 }
 
-// singleTopDir returns the only entry of stage when it is a directory, and
-// stage itself otherwise.
-func singleTopDir(stage string) (string, error) {
+// singleTopDir returns the only entry of stage when it is a directory whose
+// name strip accepts, and stage itself otherwise.
+func singleTopDir(stage string, strip func(name string) bool) (string, error) {
 	entries, err := os.ReadDir(stage)
 	if err != nil {
 		return "", err
 	}
-	if len(entries) == 1 && entries[0].IsDir() {
+	if len(entries) == 1 && entries[0].IsDir() && strip(entries[0].Name()) {
 		return filepath.Join(stage, entries[0].Name()), nil
 	}
 	return stage, nil
@@ -271,8 +271,23 @@ func ExtractArchive(data []byte, dest string) error {
 	return ExtractArchiveWith(data, dest, DefaultLimits)
 }
 
+// storeLayoutDirs are the top-level directories of a Store; an archive whose
+// only top-level entry is one of them keeps it.
+var storeLayoutDirs = map[string]bool{"skills": true, "images": true, "prompts": true, "workflows": true}
+
+// ExtractStoreArchive is ExtractArchive for a Store download: a single
+// top-level directory named skills, images, prompts or workflows is part of
+// the Store layout and is not stripped.
+func ExtractStoreArchive(data []byte, dest string) error {
+	return extractArchive(data, dest, DefaultLimits, func(name string) bool { return !storeLayoutDirs[name] })
+}
+
 // ExtractArchiveWith is ExtractArchive with explicit limits.
 func ExtractArchiveWith(data []byte, dest string, lim Limits) error {
+	return extractArchive(data, dest, lim, func(string) bool { return true })
+}
+
+func extractArchive(data []byte, dest string, lim Limits, strip func(name string) bool) error {
 	if int64(len(data)) > lim.MaxCompressed {
 		return errors.New("archive exceeds compressed size limit")
 	}
@@ -285,7 +300,7 @@ func ExtractArchiveWith(data []byte, dest string, lim Limits) error {
 	default:
 		return errors.New("unsupported archive format: want .tar.gz or .zip")
 	}
-	return stageAndRename(dest, true, fill)
+	return stageAndRename(dest, strip, fill)
 }
 
 func extractTarGz(data []byte, stage string, lim Limits) error {

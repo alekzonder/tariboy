@@ -132,8 +132,29 @@ func readSkills(root string) []Skill {
 	}
 	out = append(out, skillRows(filepath.Join(root, ".agents", "skills"))...)
 	out = append(out, skillRows(filepath.Join(root, ".claude", "skills"))...)
+	markDuplicates(out, root)
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+// markDuplicates turns every row after the first of one skill name into an
+// error row, so the first one found is the one used.
+func markDuplicates(rows []Skill, root string) {
+	first := map[string]string{}
+	for i, row := range rows {
+		if row.Name == "" {
+			continue
+		}
+		if dir, dup := first[row.Name]; dup {
+			rel, err := filepath.Rel(root, dir)
+			if err != nil {
+				rel = dir
+			}
+			rows[i].Err = fmt.Sprintf("duplicate skill name; the skill in %s is used", rel)
+			continue
+		}
+		first[row.Name] = row.Dir
+	}
 }
 
 func skillRows(dir string) []Skill {

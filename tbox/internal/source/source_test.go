@@ -449,6 +449,8 @@ func TestGitSkillAtRepositoryRoot(t *testing.T) {
 	git(t, repo, "init", "-q", "-b", "main")
 	write(t, repo, "SKILL.md", skillMD("rootskill", "one"))
 	write(t, repo, "scripts/run.sh", "echo\n")
+	write(t, repo, ".github/workflows/ci.yml", "on: push\n")
+	write(t, repo, "docs/.keep/x", "kept below the root\n")
 	git(t, repo, "add", ".")
 	git(t, repo, "commit", "-q", "-m", "first")
 	r := resolver(t)
@@ -461,6 +463,12 @@ func TestGitSkillAtRepositoryRoot(t *testing.T) {
 		t.Fatalf("%s %+v", dir, got)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "scripts/run.sh")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".github")); err == nil {
+		t.Fatal("a root dot-directory is part of the root skill")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "docs/.keep/x")); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.RemoveAll(repo); err != nil {
@@ -562,5 +570,17 @@ func TestGitSkillWithSymlinkSaysSo(t *testing.T) {
 	want := "repository " + repo + " contains a symbolic link at skills/alpha/link.md; tbox does not package symbolic links"
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("err %v", err)
+	}
+}
+
+func TestSkillNameValidatesFrontmatter(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "SKILL.md", "---\nname: alpha\n---\nno description\n")
+	if _, err := skillName(dir); err == nil {
+		t.Fatal("frontmatter without a description was accepted")
+	}
+	write(t, dir, "SKILL.md", skillMD("alpha", "x"))
+	if name, err := skillName(dir); err != nil || name != "alpha" {
+		t.Fatalf("%q %v", name, err)
 	}
 }
