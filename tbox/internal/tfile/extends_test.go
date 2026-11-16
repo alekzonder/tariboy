@@ -135,3 +135,25 @@ func TestLoadWithRemap(t *testing.T) {
 		t.Fatal("ResolveSkillDir without remap: no error")
 	}
 }
+
+// TestLoadKeepsTariboyOnlySkillDirsForPrompts pins what the build relies on
+// to explain its error: Load scopes a ../ prompt against every skill,
+// including one marked only: tariboy, and ForTbox drops that skill's
+// directory.
+func TestLoadKeepsTariboyOnlySkillDirsForPrompts(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "img/Tariboyfile.yaml", "schema_version: 3\nskills:\n  - dir: ../shared/beta\n    only: tariboy\nprompts:\n  - file: ../shared/beta/notes.md\n")
+	write(t, root, "shared/beta/SKILL.md", "---\nname: beta\ndescription: b\n---\n")
+	write(t, root, "shared/beta/notes.md", "notes")
+	f, err := Load(filepath.Join(root, "img"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.SkillDirs()) != 1 {
+		t.Fatalf("skill dirs %v", f.SkillDirs())
+	}
+	tb := f.ForTbox()
+	if len(tb.SkillDirs()) != 0 || len(tb.Prompts) != 1 {
+		t.Fatalf("tbox view: dirs %v prompts %+v", tb.SkillDirs(), tb.Prompts)
+	}
+}

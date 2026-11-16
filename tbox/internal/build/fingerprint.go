@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,28 +20,34 @@ import (
 	"github.com/alekzonder/tariboy/tbox/internal/tfile"
 )
 
-const (
-	fingerprintHeader = "tbox-source/1\n"
-	// racyWindow is how close to the moment of hashing a file's mtime may be
-	// before the cached hash is not trusted: a write in the same clock tick
-	// would leave size and mtime unchanged.
-	racyWindow = 2 * time.Second
-)
+const fingerprintHeader = "tbox-source/1\n"
+
+// racyWindow is how close to the moment of hashing a file's mtime or change
+// time may be before the cached hash is not trusted: a write in the same
+// clock tick would leave the stat unchanged. Tests lower it, since they
+// cannot set an old change time.
+var racyWindow = 2 * time.Second
 
 // hashHook, when set, is called with the path of every file body the
 // fingerprint reads. Tests count calls to prove a rebuild check does not
 // reread unchanged files.
 var hashHook func(path string)
 
+// cacheEntry is the stat of a file when it was hashed. An entry of the older
+// format has no inode and change time and never matches.
 type cacheEntry struct {
 	Size     int64  `json:"size"`
 	MtimeNS  int64  `json:"mtime_ns"`
+	CtimeNS  int64  `json:"ctime_ns"`
+	Inode    uint64 `json:"inode"`
 	SHA256   string `json:"sha256"`
 	HashedAt int64  `json:"hashed_at_ns"`
 }
 
-// statCache remembers the content hash of a file by absolute path, size and
-// mtime. A nil cache hashes every file.
+// statCache remembers the content hash of a file by absolute path, size,
+// mtime, change time and inode: a same-size edit that restores the mtime
+// (cp -p, rsync -t, tar extraction) still changes the change time or the
+// inode. A nil cache hashes every file.
 type statCache struct {
 	old  map[string]cacheEntry
 	used map[string]cacheEntry
@@ -56,12 +63,27 @@ func loadCache(path string) *statCache {
 	return c
 }
 
+// statOf returns the cache key fields of info; ok is false when the
+// platform gives no inode and change time.
+func statOf(info fs.FileInfo) (cacheEntry, bool) {
+	ino, ctime, ok := statID(info)
+	return cacheEntry{Size: info.Size(), MtimeNS: info.ModTime().UnixNano(), CtimeNS: ctime, Inode: ino}, ok && ino != 0 && ctime != 0
+}
+
+// trusted reports whether e describes the file whose stat is now and was
+// hashed long enough after its last change.
+func (e cacheEntry) trusted(now cacheEntry) bool {
+	if e.Size != now.Size || e.MtimeNS != now.MtimeNS || e.CtimeNS != now.CtimeNS || e.Inode != now.Inode {
+		return false
+	}
+	return e.HashedAt-max(now.MtimeNS, now.CtimeNS) >= int64(racyWindow)
+}
+
 // hash returns the SHA-256 of the file body at abs described by info.
 func (c *statCache) hash(abs string, info fs.FileInfo) (string, error) {
-	mtime := info.ModTime().UnixNano()
-	if c != nil {
-		if e, ok := c.old[abs]; ok && e.Size == info.Size() && e.MtimeNS == mtime &&
-			e.HashedAt-mtime >= int64(racyWindow) {
+	now, cacheable := statOf(info)
+	if c != nil && cacheable {
+		if e, ok := c.old[abs]; ok && e.trusted(now) {
 			c.used[abs] = e
 			return e.SHA256, nil
 		}
@@ -75,15 +97,17 @@ func (c *statCache) hash(abs string, info fs.FileInfo) (string, error) {
 	}
 	sum := sha256.Sum256(body)
 	hexSum := hex.EncodeToString(sum[:])
-	if c != nil {
-		c.used[abs] = cacheEntry{Size: info.Size(), MtimeNS: mtime, SHA256: hexSum, HashedAt: time.Now().UnixNano()}
+	if c != nil && cacheable {
+		now.SHA256, now.HashedAt = hexSum, time.Now().UnixNano()
+		c.used[abs] = now
 	}
 	return hexSum, nil
 }
 
-// save writes the entries used by the last fingerprint.
+// save writes the entries used by the last fingerprint. It writes nothing
+// when they are the entries it loaded.
 func (c *statCache) save(path string) error {
-	if c == nil {
+	if c == nil || maps.Equal(c.used, c.old) {
 		return nil
 	}
 	data, err := json.Marshal(c.used)

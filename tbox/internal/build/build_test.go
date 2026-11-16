@@ -244,7 +244,16 @@ func TestBuildImageReadsBack(t *testing.T) {
 	var _ archive.Image = img
 }
 
+// trustFreshFiles lets the stat cache trust files changed just now: age()
+// sets an old mtime, but the change time of every file is fresh.
+func trustFreshFiles(t *testing.T) {
+	prev := racyWindow
+	racyWindow = 0
+	t.Cleanup(func() { racyWindow = prev })
+}
+
 func TestBuildUnchangedIsFast(t *testing.T) {
+	trustFreshFiles(t)
 	dir := source(t, basic)
 	for i := 0; i < 200; i++ {
 		write(t, filepath.Join(dir, "skills/alpha/refs", fmt.Sprintf("f%03d.md", i)), fmt.Sprintf("file %d\n", i))

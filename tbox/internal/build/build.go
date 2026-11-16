@@ -167,6 +167,9 @@ func (j *job) load() error {
 		return err
 	}
 	j.f = loaded.ForTbox()
+	if err := checkTariboyOnlyScopes(loaded, j.f); err != nil {
+		return err
+	}
 	if err := j.confineEntries(); err != nil {
 		return err
 	}
