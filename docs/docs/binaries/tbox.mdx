@@ -1,0 +1,247 @@
+---
+title: tbox
+description: Run Tariboy agent images in ordinary Claude Code, Codex and OpenCode sessions, with no daemon.
+sidebar:
+  label: tbox
+  icon: box
+---
+
+`tbox` (`tbox/`, built to `bin/tbox`) is a standalone binary that builds a
+Tariboy agent image from a source directory and starts an ordinary interactive
+session of Claude Code, Codex or OpenCode with the image's prompt and skills.
+There is no daemon, mail, task loop, AI proxy, tmux or budget. It is a separate
+Go module with its own version (`tbox version`) and imports no Tariboy
+package.
+
+Stage 1, described here, covers local source directories. Stores, `git` and
+`url` sources, the image constructor and interactive selection are planned for
+stages 2 and 3 and do not exist yet.
+
+## Install
+
+```bash
+make build
+./bin/tbox version
+```
+
+`make install` copies `bin/tbox` next to the other binaries. `tbox` needs no
+Node.js and no running Tariboy. To run an image you need at least one
+supported harness on `PATH`: Claude Code 2.1.227 or newer, Codex 0.166.0 or
+newer, or OpenCode 1.19.5 or newer. An older version is reported with the
+minimum before anything starts.
+
+## Commands
+
+| Command | Does |
+| --- | --- |
+| `tbox build [--path DIR] [--name NAME] [--tag TAG]...` | Build the image of a source directory. |
+| `tbox images` | List the built images. |
+| `tbox image show REF`, `tbox image rm REF` | Show or remove a built image. |
+| `tbox image export REF [-o FILE] [--force]` | Write a portable archive. |
+| `tbox image import FILE` | Install a portable archive. |
+| `tbox run IMAGE HARNESS [-- ARGS...]` | Start a harness session. |
+| `tbox run --path DIR HARNESS [-- ARGS...]` | Build if changed, then start. |
+| `tbox clean [IMAGE]` | Remove run directories and harness files. |
+| `tbox skills`, `tbox skill NAME`, `tbox skill exec NAME SCRIPT [ARGS...]` | In-session commands. |
+| `tbox version` | Print the version. |
+
+## The `$TBOX_HOME` layout
+
+The root is `$TBOX_HOME`, by default `~/.tbox`.
+
+```text
+~/.tbox/
+  images/<name>/refs/<digest>.tar.gz   built images
+  images/<name>/tags/<tag>             pointer to a digest
+  run/<digest>/<harness>/              run directory
+```
+
+`images/` follows the layout of the Tariboy image store, so the tag rules and
+`latest` are the same. Besides the archives, `images/<name>/` keeps the source
+fingerprint of the last build. A run directory holds the unpacked image
+(`image/`), the joined prompt (`PROMPT.md`) and the files generated for that
+harness. `tbox` never writes into your working directory.
+
+## Build and change detection
+
+```bash
+tbox build --path ./my-image
+```
+
+The source is a directory with a `Tariboyfile.yaml` of `schema_version` 2 or 3.
+The name defaults to the directory name. Without `--tag` the image is published
+under its `image_version` and under `latest`. The archive uses the Tariboy
+schema v2 format byte for byte, so Tariboy imports it.
+
+`tbox` builds only when the source changed. Before each build it computes a
+fingerprint over the Tariboyfile, the `extends` layers and every local skill
+and prompt file that goes into the image. If it equals the fingerprint of the
+last build and the image is still stored under every requested tag, nothing is
+built and `tbox` prints `up to date`. The `image_version` number does not matter.
+When the content changed under an unchanged `image_version`, the version tag and
+`latest` move to the new build, and `tbox` prints one line saying so. This is
+different from Tariboy, which refuses to rebuild the same version with other
+content. The previous archive stays in `refs/` until `tbox image rm` removes it.
+
+## Run
+
+```bash
+tbox run my-image claude
+tbox run my-image:0.2.0 codex -- --model gpt-5
+tbox run --path ./my-image opencode
+```
+
+`IMAGE` is a built image, `name` or `name:tag`; the tag defaults to `latest`.
+`--path DIR` replaces it: `tbox` builds the directory if its content changed
+and runs the result. A name that contains `/` is a Store selector, which
+arrives with Stores in stage 2; it is an error for now. `HARNESS` is `claude`,
+`codex` or `opencode`. An unknown harness exits with code 2 and lists the known
+ones. A missing image exits with code 1 and lists the built images. Without both
+arguments `tbox run` exits with code 2 and prints its usage; interactive
+selection arrives in stage 3. Everything after `--` goes to the harness
+unchanged.
+
+`tbox run` unpacks the image into `run/<digest>/<harness>/image/` if that is not
+done yet, joins the static prompt layers into `PROMPT.md`, generates the
+harness files, prints notes to stderr, and then **replaces itself** with the
+harness process in the current directory and terminal. `tbox` does not stay in
+the process tree. The harness gets your full environment, with
+`TBOX_IMAGE_DIR=<run directory>/image` and `TBOX_IMAGE=<name>:<tag>` added; an
+entry of the same name in your environment is replaced.
+
+| Harness | Skills | Prompt | Written outside `$TBOX_HOME` |
+| --- | --- | --- | --- |
+| Claude Code | A generated plugin in the run directory, passed with `--plugin-dir` | `--append-system-prompt-file PROMPT.md` | Nothing |
+| Codex | A plugin in the Codex plugin cache, enabled by a profile | `developer_instructions` in the profile | The plugin cache entry and the profile file, see below |
+| OpenCode | `skills.paths` in a generated `opencode.json` | `instructions` in the same file | Nothing |
+
+An image with no skills gets no plugin or skill path, and an image with an empty
+prompt gets no prompt flag.
+
+### Claude Code
+
+`tbox` writes `plugin/.claude-plugin/plugin.json` and a copy of the skills into
+the run directory and starts `claude --plugin-dir <run>/plugin
+--append-system-prompt-file <run>/PROMPT.md` plus your arguments. Your Claude
+settings are not touched.
+
+### OpenCode
+
+`tbox` writes `opencode.json` into a config directory under the run directory
+and sets `OPENCODE_CONFIG_DIR` to it for the session. The file holds the
+absolute path of the image skills in `skills.paths` and the absolute path of
+`PROMPT.md` in `instructions`. OpenCode merges this directory with your global
+configuration; `tbox` does not edit it. If `OPENCODE_CONFIG_DIR` was already set,
+the launch replaces it and a note says so. Before starting, `tbox` runs
+`opencode debug config` against the generated directory and refuses to start if
+the skills path is not in the resolved configuration.
+
+### Codex
+
+`tbox` never modifies `$CODEX_HOME/config.toml` and never changes the
+`CODEX_HOME` of your session. Codex has no per-session flag for a plugin, so
+`tbox` writes exactly two things under `$CODEX_HOME` (default `~/.codex`):
+
+- `plugins/cache/tbox/<plugin>/<version>/`, a plugin with
+  `.codex-plugin/plugin.json` and a copy of the skills, next to a
+  `.tbox-digest` record of the image and digest it holds and a `.lock` file in
+  `plugins/cache/tbox/`;
+- `tbox-<plugin>.config.toml`, a profile that holds `developer_instructions`
+  with the prompt and enables the plugin with
+  `[plugins."<plugin>@tbox"] enabled = true`.
+
+`<plugin>` is the image name with every character outside `a-z0-9-` replaced
+by `-`; `<version>` is the image version. `tbox` starts `codex --profile
+tbox-<plugin>` plus your arguments. Without that flag Codex does not see the
+plugin, so your ordinary sessions are unaffected. Skills appear as
+`<plugin>:<skill>`. `developer_instructions` adds the image prompt to the
+developer message and keeps Codex's own instructions. A cache entry is reused
+when its record matches the image and digest, and replaced otherwise. Two image
+names that map to the same plugin name share one entry; `tbox` prints a note
+when it replaces the other image's entry. `tbox` refuses to write through a
+symlinked `plugins/cache/tbox`.
+
+### Clean up
+
+```bash
+tbox clean            # all images
+tbox clean my-image   # one image
+```
+
+`tbox clean` removes the run directories and, for Codex, the
+`plugins/cache/tbox/<plugin>` entry and `tbox-<plugin>.config.toml` that `tbox`
+created. It removes nothing else: `config.toml` and the rest of `$CODEX_HOME`
+stay byte for byte as they were. Built images stay too; remove those with
+`tbox image rm`.
+
+## Inside a session
+
+The harness environment carries `TBOX_IMAGE_DIR`. While it is set, `tbox`
+switches to agent mode and shows only the image of the session:
+
+```bash
+tbox skills                           # name and description of each skill
+tbox skill NAME                       # description, files and SKILL.md
+tbox skill exec NAME SCRIPT [ARGS...] # run a script inside the skill
+```
+
+`skill exec` runs a file inside the skill directory; the path cannot leave it.
+The working directory stays the current one, `TBOX_SKILL_DIR` is added to the
+environment, and the exit code and streams of the script pass through. Every
+other command, including build and run, exits with an error that explains why. If
+the directory named by `TBOX_IMAGE_DIR` is missing or broken, `tbox` fails
+instead of falling back to normal mode.
+
+## What `tbox` ignores
+
+`tbox` builds for use in a plain harness, so it drops what only the Tariboy
+daemon uses:
+
+- `plugins` in a Tariboyfile are accepted but not executed. The archive manifest
+  carries `"plugins": []`, otherwise Tariboy would require the skills of those
+  plugins on import.
+- Runtime prompt entries (`runtime: workdir`, `runtime: messages`, and so on) are
+  ignored and nothing replaces them. The session prompt is the static prompt
+  layers of the image. An imported image that holds runtime entries runs the
+  same way, with the entries skipped.
+- In schema v3, a skill or prompt entry with `only: tariboy` never enters the
+  archive or the fingerprint. One source therefore yields different archives in
+  `tbox` and in Tariboy.
+- A `$PLUGINS/...` path needs a plugin directory that `tbox` does not have. In
+  v3 it is accepted only with `only: tariboy`; in v2 the build fails and names
+  the entry.
+
+## Export and import with Tariboy
+
+```bash
+tbox image export my-image:1.0.0 -o my-image.tariboy-image.tar.gz
+tbox image import my-image.tariboy-image.tar.gz
+```
+
+The file is the `tariboy-portable` envelope that `tariboy image import`
+accepts, so an image built in `tbox` imports into Tariboy, and `tbox` imports
+the export of Tariboy. A portable image whose name differs from its envelope ref
+is rejected. An image imported from Tariboy runs as a whole; skills that need
+the daemon are still in it. Compatibility is covered by shared fixtures in
+`tbox/testdata/compat/`, and a format change in Tariboy breaks those tests.
+
+## Known limits
+
+- Global skills of the user stay visible to every harness next to the skills of
+  the image. `tbox` does not isolate the session.
+- Stage 1 builds only local `dir` and `file` entries. Stores, `git` and `url`
+  entries, `tbox-lock.json` and the commands `store`, `skills` and `prompts`
+  outside a session arrive in stage 2. `tbox image new` and interactive
+  `tbox run` arrive in stage 3.
+- Tariboy does not understand `schema_version: 3` yet, so a v3 source builds in
+  `tbox` only. The archive that `tbox` writes is schema v2.
+- The harness adapters were verified against Claude Code 2.1.325, Codex 0.166.0
+  and OpenCode 1.19.5 without a live session. Not yet verified in a live
+  session: that an interactive Claude Code session picks up
+  `--append-system-prompt-file` (if it turns out to be print-mode only, `tbox`
+  will pass the prompt text with `--append-system-prompt`); that OpenCode
+  resolves your credentials and loads the absolute `instructions` file into the
+  system prompt of a real session; that an interactive Codex session behaves
+  like `codex debug prompt-input`; and whether Codex ever prunes a plugin cache
+  entry that no marketplace lists.
+- Whether a skill is invoked depends on the harness and the model.
