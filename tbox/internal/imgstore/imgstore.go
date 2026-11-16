@@ -298,32 +298,63 @@ func (s Store) ImportArchive(name string, r io.Reader, tags []string) (archive.I
 type sourceRecord struct {
 	Fingerprint string `json:"fingerprint"`
 	Digest      string `json:"digest"`
+	// Source is the directory of the last build; absent in records written
+	// before it was kept.
+	Source string `json:"source,omitempty"`
 }
 
-// Fingerprint returns the source fingerprint and digest of the last build.
-func (s Store) Fingerprint(name string) (fingerprint, digest string, ok bool) {
+func (s Store) readRecord(name string) (sourceRecord, bool) {
 	if CheckName(name) != nil {
-		return "", "", false
+		return sourceRecord{}, false
 	}
 	data, err := os.ReadFile(filepath.Join(s.nameDir(name), sourceFile))
 	if err != nil {
-		return "", "", false
+		return sourceRecord{}, false
 	}
 	var rec sourceRecord
 	if json.Unmarshal(data, &rec) != nil || rec.Fingerprint == "" {
-		return "", "", false
+		return sourceRecord{}, false
 	}
-	return rec.Fingerprint, rec.Digest, true
+	return rec, true
 }
 
-// SetFingerprint records the fingerprint of the last build of name.
-func (s Store) SetFingerprint(name, fingerprint, digest string) error {
-	if err := CheckName(name); err != nil {
-		return err
-	}
-	data, err := json.Marshal(sourceRecord{Fingerprint: fingerprint, Digest: digest})
+func (s Store) writeRecord(name string, rec sourceRecord) error {
+	data, err := json.Marshal(rec)
 	if err != nil {
 		return err
 	}
 	return WriteFileAtomic(filepath.Join(s.nameDir(name), sourceFile), append(data, '\n'))
+}
+
+// Fingerprint returns the source fingerprint and digest of the last build.
+func (s Store) Fingerprint(name string) (fingerprint, digest string, ok bool) {
+	rec, ok := s.readRecord(name)
+	return rec.Fingerprint, rec.Digest, ok
+}
+
+// SetFingerprint records the fingerprint of the last build of name. The
+// recorded source directory is kept.
+func (s Store) SetFingerprint(name, fingerprint, digest string) error {
+	if err := CheckName(name); err != nil {
+		return err
+	}
+	old, _ := s.readRecord(name)
+	return s.writeRecord(name, sourceRecord{Fingerprint: fingerprint, Digest: digest, Source: old.Source})
+}
+
+// SourceDir returns the source directory of the last build of name.
+func (s Store) SourceDir(name string) (string, bool) {
+	rec, ok := s.readRecord(name)
+	return rec.Source, ok && rec.Source != ""
+}
+
+// SetSourceDir records the source directory of the last build of name. It
+// does nothing when name has no build record.
+func (s Store) SetSourceDir(name, dir string) error {
+	rec, ok := s.readRecord(name)
+	if !ok || rec.Source == dir {
+		return nil
+	}
+	rec.Source = dir
+	return s.writeRecord(name, rec)
 }

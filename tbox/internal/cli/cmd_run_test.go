@@ -99,7 +99,7 @@ func TestRunErrors(t *testing.T) {
 		t.Fatalf("missing args %d %q", code, errs)
 	}
 	code, errs, _ = runWithExec(t, home, "/", "run", "store/demo", "claude")
-	if code != 1 || !strings.Contains(errs, "stage 2") {
+	if code != 1 || !strings.Contains(errs, "store not found: store") {
 		t.Fatalf("selector %d %q", code, errs)
 	}
 	src := demoSource(t)
