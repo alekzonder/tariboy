@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"io/fs"
 	"text/tabwriter"
@@ -119,11 +120,18 @@ func runImage(env *Env, args []string) int {
 			return sub(env, args[1:])
 		}
 	}
-	if len(args) != 2 || (args[0] != "show" && args[0] != "rm") {
+	if len(args) == 0 || (args[0] != "show" && args[0] != "rm") {
 		fmt.Fprint(env.Stderr, imageUsage)
 		return 2
 	}
-	ref, err := imgstore.ParseRef(args[1])
+	pos, err := parseInterleaved(env, "image "+args[0], args[1:], func(*flag.FlagSet) {})
+	if err != nil || len(pos) != 1 {
+		fmt.Fprint(env.Stderr, imageUsage)
+		return 2
+	}
+	// An image named before the name rule was tightened can still be shown
+	// and removed.
+	ref, err := imgstore.ParseExistingRef(pos[0])
 	if err != nil {
 		return fail(env, err)
 	}

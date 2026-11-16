@@ -145,3 +145,38 @@ func TestCloseStopsSignals(t *testing.T) {
 		t.Fatalf("raised %v", f.raised)
 	}
 }
+
+// TestSignalQueuedAtCloseIsReraised checks that a signal that arrives while
+// Close runs is not lost when the watcher sees done first.
+func TestSignalQueuedAtCloseIsReraised(t *testing.T) {
+	for i := 0; i < 50; i++ {
+		in, out := pipeFiles(t)
+		f := newFakeSys(in.Fd(), out.Fd())
+		sys := f.sys()
+		stop := sys.stop
+		// The signal is delivered just before Close stops the notification.
+		sys.stop = func(c chan<- os.Signal) {
+			f.mu.Lock()
+			ch := f.ch
+			f.mu.Unlock()
+			select {
+			case ch <- syscall.SIGTERM:
+			default:
+			}
+			stop(c)
+		}
+		tt, err := openWith(in, out, sys)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = tt.Close()
+		select {
+		case s := <-f.raisedSig:
+			if s != syscall.SIGTERM {
+				t.Fatalf("raised %v", s)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("run %d: signal queued at Close was dropped", i)
+		}
+	}
+}

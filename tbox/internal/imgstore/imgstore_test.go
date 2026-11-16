@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/tbox/internal/archive"
+	"github.com/alekzonder/tariboy/tbox/internal/flock"
 )
 
 func image(t *testing.T, version, body string) archive.Image {
@@ -294,5 +295,116 @@ func TestPruneUntagged(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(s.refsDir("demo"), ".tmp-x")); err != nil {
 		t.Fatalf("temporary file touched: %v", err)
+	}
+}
+
+// legacyImage publishes img as demo and renames its directory to name, the
+// way an image built before CheckName was tightened sits on disk.
+func legacyImage(t *testing.T, s Store, name string, img archive.Image) {
+	t.Helper()
+	if _, err := s.Publish("demo", img, []string{"latest"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(s.nameDir("demo"), s.nameDir(name)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLegacyNamesStayListableAndRemovable(t *testing.T) {
+	for _, name := range []string{"_old", "-old", ".old"} {
+		s := Store{Dir: t.TempDir()}
+		img := image(t, "1.0.0", "one")
+		legacyImage(t, s, name, img)
+		entries, err := s.List()
+		if err != nil || len(entries) != 1 || entries[0].Name != name {
+			t.Fatalf("%s: list %+v %v", name, entries, err)
+		}
+		ref, err := ParseExistingRef(name)
+		if err != nil || ref != (Ref{name, "latest"}) {
+			t.Fatalf("%s: parse %v %v", name, ref, err)
+		}
+		if _, _, err := s.Resolve(ref); err != nil {
+			t.Fatalf("%s: resolve %v", name, err)
+		}
+		if removed, err := s.PruneUntagged(name); err != nil || len(removed) != 0 {
+			t.Fatalf("%s: prune %v %v", name, removed, err)
+		}
+		if pruned, err := s.PruneAllUntagged(); err != nil || len(pruned) != 0 {
+			t.Fatalf("%s: prune all %v %v", name, pruned, err)
+		}
+		if err := s.Remove(ref); err != nil {
+			t.Fatalf("%s: remove %v", name, err)
+		}
+		if _, err := os.Stat(s.nameDir(name)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("%s: dir left: %v", name, err)
+		}
+		if _, err := s.Publish(name, img, []string{"latest"}); err == nil {
+			t.Fatalf("%s: new image with a legacy name published", name)
+		}
+		if _, err := ParseRef(name); err == nil {
+			t.Fatalf("%s: ParseRef accepted a legacy name", name)
+		}
+	}
+	for _, in := range []string{".", "..", "a/b", "A", ".:latest", "x:.hidden"} {
+		if _, err := ParseExistingRef(in); err == nil {
+			t.Errorf("%q accepted", in)
+		}
+	}
+	s := Store{Dir: t.TempDir()}
+	for _, ref := range []Ref{{".", "latest"}, {"..", "latest"}} {
+		if err := s.Remove(ref); err == nil || errors.Is(err, ErrNotFound) {
+			t.Errorf("%v: err = %v", ref, err)
+		}
+	}
+}
+
+// heldName takes the lock of name in s and returns its release.
+func heldName(t *testing.T, s Store, name string) func() {
+	t.Helper()
+	unlock, err := flock.Lock(s.lockPath(name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return unlock
+}
+
+func TestStoreWritersWaitForTheNameLock(t *testing.T) {
+	one, two := image(t, "1.0.0", "one"), image(t, "1.0.0", "two")
+	var buf bytes.Buffer
+	if err := two.Write(&buf); err != nil {
+		t.Fatal(err)
+	}
+	ops := map[string]func(Store) error{
+		"publish": func(s Store) error { _, err := s.Publish("demo", two, []string{"latest"}); return err },
+		"import": func(s Store) error {
+			_, err := s.ImportArchive("demo", bytes.NewReader(buf.Bytes()), []string{"latest"})
+			return err
+		},
+		"remove": func(s Store) error { return s.Remove(Ref{"demo", "latest"}) },
+		"prune":  func(s Store) error { _, err := s.PruneUntagged("demo"); return err },
+	}
+	for name, op := range ops {
+		s := Store{Dir: t.TempDir()}
+		if _, err := s.Publish("demo", one, []string{"latest"}); err != nil {
+			t.Fatal(err)
+		}
+		unlock := heldName(t, s, "demo")
+		done := make(chan error, 1)
+		go func() { done <- op(s) }()
+		select {
+		case err := <-done:
+			unlock()
+			t.Fatalf("%s ran while the name was locked: %v", name, err)
+		case <-time.After(150 * time.Millisecond):
+		}
+		unlock()
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s never ran", name)
+		}
 	}
 }

@@ -130,7 +130,7 @@ func storeImageDir(env *Env, home paths.Home, arg, name string) (dir, root strin
 		return "", "", fmt.Errorf("store %s has no image %q", sel.Store, sel.Name)
 	}
 	if name == "" && imgstore.CheckName(sel.Name) != nil {
-		return "", "", fmt.Errorf("store image %q is not a valid image name (allowed: a-z 0-9 . _ -); build it with tbox build %s --name NAME", safe(sel.Name), safe(arg))
+		return "", "", fmt.Errorf("store image %q is not a valid image name (first character a-z or 0-9, then a-z 0-9 . _ -); build it with tbox build %s --name NAME", safe(sel.Name), safe(arg))
 	}
 	return dir, root, nil
 }

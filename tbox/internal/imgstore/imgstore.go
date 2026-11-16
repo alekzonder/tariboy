@@ -4,8 +4,8 @@
 //	<Dir>/<name>/tags/<tag>             the digest a tag points at
 //	<Dir>/<name>/source.json            fingerprint of the last build
 //
-// Writes are atomic (temporary file, fsync, rename). The store does no
-// locking.
+// Writes are atomic (temporary file, fsync, rename). Publish, ImportArchive,
+// Remove and PruneUntagged hold a per-name lock, <Dir>/<name>/.lock.
 package imgstore
 
 import (
@@ -20,9 +20,11 @@ import (
 	"strings"
 
 	"github.com/alekzonder/tariboy/tbox/internal/archive"
+	"github.com/alekzonder/tariboy/tbox/internal/flock"
 )
 
 const (
+	lockFile      = ".lock"
 	tmpPrefix     = ".tmp-"
 	refSuffix     = ".tar.gz"
 	sourceFile    = "source.json"
@@ -47,6 +49,12 @@ func (s Store) tagsDir(name string) string { return filepath.Join(s.Dir, name, "
 func (s Store) refPath(name, digest string) string {
 	return filepath.Join(s.refsDir(name), digest+refSuffix)
 }
+
+func (s Store) lockPath(name string) string { return filepath.Join(s.nameDir(name), lockFile) }
+
+// lock takes the lock of name, which keeps a prune from removing an archive
+// that a publish is about to tag.
+func (s Store) lock(name string) (func(), error) { return flock.Lock(s.lockPath(name)) }
 
 // StatCachePath is the file the build keeps its per-file hash cache in.
 func (s Store) StatCachePath(name string) string {
@@ -92,7 +100,7 @@ func WriteFileAtomic(path string, data []byte) error {
 }
 
 func (s Store) readTag(name, tag string) (string, error) {
-	if err := CheckName(name); err != nil {
+	if err := CheckExistingName(name); err != nil {
 		return "", err
 	}
 	if err := CheckTag(tag); err != nil {
@@ -152,6 +160,11 @@ func (s Store) Publish(name string, img archive.Image, tags []string) ([]string,
 	if !digestPattern.MatchString(digest) {
 		return nil, fmt.Errorf("image has no content digest")
 	}
+	unlock, err := s.lock(name)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	if _, err := os.Stat(s.refPath(name, digest)); errors.Is(err, fs.ErrNotExist) {
 		if err := writeAtomic(s.refsDir(name), digest+refSuffix, img.Write); err != nil {
 			return nil, err
@@ -251,7 +264,7 @@ func (s Store) List() ([]Entry, error) {
 	}
 	var out []Entry
 	for _, d := range dirs {
-		if !d.IsDir() || CheckName(d.Name()) != nil {
+		if !d.IsDir() || CheckExistingName(d.Name()) != nil {
 			continue
 		}
 		entries, err := s.listName(d.Name())
@@ -293,6 +306,22 @@ func (s Store) listName(name string) ([]Entry, error) {
 // Remove drops a tag, and the archive it pointed at when no other tag of the
 // image points there. When nothing is left of the image its directory goes.
 func (s Store) Remove(ref Ref) error {
+	if err := CheckExistingName(ref.Name); err != nil {
+		return err
+	}
+	if err := CheckTag(ref.Tag); err != nil {
+		return err
+	}
+	if _, err := os.Stat(s.nameDir(ref.Name)); errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("%w: %s", ErrNotFound, ref)
+	}
+	unlock, err := s.lock(ref.Name)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	// Taking the lock may have created the directory again.
+	defer s.prune(ref.Name)
 	digest, err := s.readTag(ref.Name, ref.Tag)
 	if err != nil {
 		return err
@@ -312,7 +341,6 @@ func (s Store) Remove(ref Ref) error {
 	if err := os.Remove(s.refPath(ref.Name, digest)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	s.prune(ref.Name)
 	return nil
 }
 
@@ -417,9 +445,19 @@ type Pruned struct {
 // returns their digests, sorted. Files that are not archives, such as the
 // temporary files of a write in progress, are left alone.
 func (s Store) PruneUntagged(name string) ([]string, error) {
-	if err := CheckName(name); err != nil {
+	if err := CheckExistingName(name); err != nil {
 		return nil, err
 	}
+	if _, err := os.Stat(s.nameDir(name)); errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	unlock, err := s.lock(name)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	// Taking the lock may have created the directory again.
+	defer s.prune(name)
 	tags, err := s.tags(name)
 	if err != nil {
 		return nil, err
@@ -451,7 +489,6 @@ func (s Store) PruneUntagged(name string) ([]string, error) {
 		}
 		removed = append(removed, digest)
 	}
-	s.prune(name)
 	return removed, nil
 }
 
@@ -466,7 +503,7 @@ func (s Store) PruneAllUntagged() ([]Pruned, error) {
 	}
 	var out []Pruned
 	for _, d := range dirs {
-		if !d.IsDir() || CheckName(d.Name()) != nil {
+		if !d.IsDir() || CheckExistingName(d.Name()) != nil {
 			continue
 		}
 		digests, err := s.PruneUntagged(d.Name())
