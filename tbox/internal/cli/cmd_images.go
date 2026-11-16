@@ -29,6 +29,7 @@ func short(digest string) string {
 var imageSubcommands = map[string]Command{
 	"export": runExport,
 	"import": runImport,
+	"new":    runImageNew,
 }
 
 func runImages(env *Env, args []string) int {
@@ -119,7 +120,7 @@ func runImage(env *Env, args []string) int {
 		}
 	}
 	if len(args) != 2 || (args[0] != "show" && args[0] != "rm") {
-		fmt.Fprintln(env.Stderr, "usage: tbox image show REF | rm REF | export REF [-o FILE] [--force] | import FILE")
+		fmt.Fprintln(env.Stderr, "usage: tbox image show REF | rm REF | export REF [-o FILE] [--force] | import FILE | new NAME")
 		return 2
 	}
 	ref, err := imgstore.ParseRef(args[1])
