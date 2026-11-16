@@ -77,7 +77,7 @@ case "$root:$home:$base:$runtime:$stage:$release" in
 esac
 HOME=$home sh "$stage/remote-install.sh" "$version" "$staging"
 test -d "$release"
-for name in tariboyd tariboy tariboy-tasks tariboy-shim tariboy-plugin-telegram; do
+for name in tariboyd tariboy tariboy-tasks tariboy-shim tariboy-plugin-telegram tbox; do
   test "$("$release/$name" --version)" = "$version"
   test "$(readlink "$home/.local/bin/$name")" = "$release/$name"
 done

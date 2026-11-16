@@ -192,7 +192,7 @@ for command in curl python3 tmux; do
 done
 
 HOME=$home sh "$stage/remote-install.sh" "$version" ".stage-alpha-$stamp"
-for name in tariboyd tariboy tariboy-tasks tariboy-mail tariboy-scripts tariboy-shim tariboy-plugin-telegram; do
+for name in tariboyd tariboy tariboy-tasks tariboy-mail tariboy-scripts tariboy-shim tariboy-plugin-telegram tbox; do
   test "$("$release/$name" --version)" = "$version"
   test "$(readlink "$home/.local/bin/$name")" = "$release/$name"
 done
