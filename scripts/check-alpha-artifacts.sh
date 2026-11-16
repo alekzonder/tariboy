@@ -21,7 +21,7 @@ for platform in $SERVER_PLATFORMS; do
   archive="tariboy_${VERSION}_${platform}.tar.gz"
   EXPECTED_SERVER_ARCHIVES="$EXPECTED_SERVER_ARCHIVES $archive"
 done
-SERVER_PAYLOAD="tariboyd tariboy tariboy-tasks tariboy-mail tariboy-scripts tariboy-shim tariboy-plugin-telegram"
+SERVER_PAYLOAD="tariboyd tariboy tariboy-tasks tariboy-mail tariboy-scripts tariboy-shim tariboy-plugin-telegram tbox"
 MOUNT=""
 STRING_DUMP=""
 ARCHIVE_DIR=""
