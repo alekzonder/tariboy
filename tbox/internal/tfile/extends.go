@@ -36,7 +36,9 @@ func Load(dir string) (*File, error) {
 	merged.ImageVersion = root.ImageVersion
 	merged.Plugins = uniquePlugins(merged.Plugins)
 	merged.Skills = uniqueSkills(merged.Skills)
-	merged.Prompts = uniquePrompts(merged.Prompts)
+	if merged.Prompts, err = uniquePrompts(merged.Prompts, merged.SkillDirs()); err != nil {
+		return nil, err
+	}
 	return merged, nil
 }
 
@@ -121,34 +123,44 @@ func uniqueSkills(skills []SkillEntry) []SkillEntry {
 }
 
 // promptKey identifies a prompt for de-duplication: a runtime name, a remote
-// source, or the SHA-256 of a readable local file. An unreadable local file
-// falls back to its declared location.
-func promptKey(p PromptEntry) string {
+// source, or the SHA-256 of a local file. An entry marked only: tariboy never
+// reaches the archive, so it is keyed by its declared location and its file
+// is not read. Any other unreadable local file is an error.
+func promptKey(p PromptEntry, skillDirs []string) (string, error) {
 	switch {
 	case p.Runtime != "":
-		return "runtime:" + p.Runtime
+		return "runtime:" + p.Runtime, nil
 	case p.Git != "":
-		return "git:" + p.Git + "|" + p.Path + "|" + p.Ref
+		return "git:" + p.Git + "|" + p.Path + "|" + p.Ref, nil
 	case p.URL != "":
-		return "url:" + p.URL
+		return "url:" + p.URL, nil
+	case p.Only == onlyTariboy:
+		return "path:" + filepath.Join(p.BaseDir, p.File), nil
 	}
-	if path, _, _, err := ResolvePromptFile(p); err == nil {
-		if body, err := os.ReadFile(path); err == nil {
-			sum := sha256.Sum256(body)
-			return "file:" + hex.EncodeToString(sum[:])
-		}
+	path, _, _, err := ResolvePromptFile(p, skillDirs...)
+	if err != nil {
+		return "", fmt.Errorf("prompt %q: %w", p.File, err)
 	}
-	return "path:" + filepath.Join(p.BaseDir, p.File)
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("prompt %q: %w", p.File, err)
+	}
+	sum := sha256.Sum256(body)
+	return "file:" + hex.EncodeToString(sum[:]), nil
 }
 
-func uniquePrompts(prompts []PromptEntry) []PromptEntry {
+func uniquePrompts(prompts []PromptEntry, skillDirs []string) ([]PromptEntry, error) {
 	seen := map[string]bool{}
 	out := []PromptEntry{}
 	for _, p := range prompts {
-		if key := promptKey(p); !seen[key] {
+		key, err := promptKey(p, skillDirs)
+		if err != nil {
+			return nil, err
+		}
+		if !seen[key] {
 			seen[key] = true
 			out = append(out, p)
 		}
 	}
-	return out
+	return out, nil
 }

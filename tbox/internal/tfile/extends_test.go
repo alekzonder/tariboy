@@ -65,3 +65,27 @@ func TestLoadDepth(t *testing.T) {
 		t.Fatalf("depth 17: %v", err)
 	}
 }
+
+func TestLoadDedupesDotDotPromptByContent(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "base/Tariboyfile.yaml", "schema_version: 2\nskills:\n  - dir: ./skills/x\nprompts:\n  - file: ./p.md\n")
+	write(t, root, "base/p.md", "same")
+	write(t, root, "base/skills/x/SKILL.md", "x")
+	write(t, root, "child/Tariboyfile.yaml", "schema_version: 2\nextends:\n  - ../base\nskills:\n  - dir: ../base/skills/x\nprompts:\n  - file: ../base/skills/x/p.md\n")
+	write(t, root, "base/skills/x/p.md", "same")
+	f, err := Load(root + "/child")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Prompts) != 1 || f.Prompts[0].File != "./p.md" {
+		t.Fatalf("prompts %+v", f.Prompts)
+	}
+}
+
+func TestLoadMissingPromptIsAnError(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "a/Tariboyfile.yaml", "schema_version: 2\nprompts:\n  - file: ./missing.md\n")
+	if _, err := Load(root + "/a"); err == nil {
+		t.Fatal("expected an error")
+	}
+}
