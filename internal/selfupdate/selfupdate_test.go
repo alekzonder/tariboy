@@ -141,7 +141,7 @@ func TestRunInstallsRelease(t *testing.T) {
 		t.Fatalf("Run: %v\n%s", err, out.String())
 	}
 
-	for name, payload := range map[string]string{"tariboyd": "tariboyd", "tariboy-scripts": "tariboy-scripts", "tscripts": "tariboy-scripts"} {
+	for name, payload := range map[string]string{"tariboyd": "tariboyd", "tariboy-scripts": "tariboy-scripts", "tscripts": "tariboy-scripts", "tbox": "tbox"} {
 		link, err := os.Readlink(filepath.Join(home, ".local", "bin", name))
 		if err != nil {
 			t.Fatalf("read %s link: %v", name, err)
@@ -367,8 +367,8 @@ func writeSums(t *testing.T, dir string) {
 	}
 }
 
-// buildArchive produces the same payload layout the release publishes: the six
-// binaries, VERSION, SHA256SUMS, and the installer script.
+// buildArchive produces the same payload layout the release publishes: the
+// payload binaries, VERSION, SHA256SUMS, and the installer script.
 func buildArchive(t *testing.T, version string) []byte {
 	t.Helper()
 	dir := t.TempDir()
@@ -456,5 +456,23 @@ func requireInstallTools(t *testing.T) {
 		if _, err := exec.LookPath(tool); err != nil {
 			t.Skipf("missing required tool: %s", tool)
 		}
+	}
+}
+
+// tbox ships in every release like the other payloads, so an archive without it
+// is incomplete and the installer never runs.
+func TestInstallRefusesArchiveWithoutTbox(t *testing.T) {
+	stage := t.TempDir()
+	for _, name := range append([]string{"VERSION", sumsName, installerName}, payloadBinaries...) {
+		if name == "tbox" {
+			continue
+		}
+		if err := os.WriteFile(filepath.Join(stage, name), []byte("x\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := install(context.Background(), testOptions(t, t.TempDir(), "", testVersion, "linux", "amd64"), stage, ".stage-test", testVersion)
+	if err == nil || !strings.Contains(err.Error(), "incomplete") || !strings.Contains(err.Error(), "tbox") {
+		t.Fatalf("expected an incomplete-archive error naming tbox, got %v", err)
 	}
 }
