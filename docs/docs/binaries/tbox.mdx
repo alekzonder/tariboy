@@ -10,8 +10,9 @@ sidebar:
 Tariboy agent image from a source directory and starts an ordinary interactive
 session of Claude Code, Codex or OpenCode with the image's prompt and skills.
 There is no daemon, mail, task loop, AI proxy, tmux or budget. It is a separate
-Go module with its own version (`tbox version`) and imports no Tariboy
-package.
+Go module and imports no Tariboy package, but it ships with every Tariboy
+release and carries the Tariboy version: `tbox version` prints the same value
+as `tariboy version`.
 
 Image sources are local directories or Stores, and a v3 Tariboyfile may pull
 skills and prompts from `git` and `url` sources. `tbox image new` assembles a
@@ -25,8 +26,14 @@ make build
 ./bin/tbox version
 ```
 
-`make install` copies `bin/tbox` next to the other binaries. `tbox` needs no
-Node.js and no running Tariboy. To run an image you need at least one
+`tbox` is installed together with `tariboy`, `ttasks` and `tmail`, at the same
+version. `make install` copies `bin/tbox` next to the other binaries. On a
+server, the release archive, `tariboy update`, the Desktop host install and
+`make server-install` put it in the versioned release directory under
+`~/.local/lib/tariboy/<version>` and link `~/.local/bin/tbox` to it, with the
+same checksums and rollback as the other binaries. The Desktop package carries
+it as well, and **Install/Update CLI** links it. `tbox` has no alias. It needs
+no Node.js and no running Tariboy. To run an image you need at least one
 supported harness on `PATH`:
 
 - Claude Code 2.1.227 or newer, the first version with `--plugin-dir`

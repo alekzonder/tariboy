@@ -407,9 +407,11 @@ cross-compiles one archive for each server platform into
 `dist/server-archives/<version>/`:
 `tariboy_<version>_linux-x86_64.tar.gz`,
 `tariboy_<version>_linux-aarch64.tar.gz` and
-`tariboy_<version>_darwin-arm64.tar.gz`. Each archive holds the seven
-binaries, `VERSION`, `SHA256SUMS` and `remote-install.sh` at its root. The
-release packager copies them into the release.
+`tariboy_<version>_darwin-arm64.tar.gz`. Each archive holds the eight
+binaries of the Desktop set (every binary except `tariboy-store`, `tbox`
+included), `VERSION`, `SHA256SUMS` and `remote-install.sh` at its root. Both
+targets build `tbox` from inside `tbox/` and the other binaries from the root
+module. The release packager copies the archives into the release.
 `make install` installs the resulting commands under `$HOME/.local/bin`; it is
 not required for normal unit-test work.
 
@@ -419,12 +421,15 @@ tests `tscripts` on the isolated agent: `run`, `logs`, `schedule` with the
 quiet exit `111`, `rerun`, `cancel`, `rm`, the refusal of
 `schedule --quiet-exit`, and the runtime `bin/tscripts` link.
 
-`make server-install` builds all eight real server binaries, stages and verifies
-their checksums, publishes a versioned release under
+`make server-install` builds all nine real server binaries, `tbox` included,
+stages and verifies their checksums, publishes a versioned release under
 `$HOME/.local/lib/tariboy/<version>`, and transactionally switches the matching
 `$HOME/.local/bin` links. `ttasks`, `tmail` and `tscripts` are additional
-aliases for `tariboy-tasks`, `tariboy-mail` and `tariboy-scripts`. It does not
-start or restart the daemon.
+aliases for `tariboy-tasks`, `tariboy-mail` and `tariboy-scripts`; `tbox` has
+no alias. It does not start or restart the daemon.
+`scripts/server-install-contract-test.sh` runs `make install` and
+`make server-install` with a fake `go` in a temporary `HOME` and checks every
+link, `tbox` included.
 
 Native Tasks changes normally need focused tests under `internal/tasks`, the
 operator route/OpenAPI registry tests under `internal/commands`, and the agent
@@ -532,7 +537,13 @@ alone with `make workflow-e2e`. Keep the current behavior documented in
 
 `tbox/` is a separate Go module (`tbox/go.mod`, module path
 `github.com/alekzonder/tariboy/tbox`) that builds the standalone `tbox` binary.
-`make build` writes it to `bin/tbox`. The root `go list ./...` does not
+`make build` writes it to `bin/tbox`. It is part of the released binary set
+like `tariboy-mail`: `BINARIES`, `MANAGED_LINKS` and `DESKTOP_BINARIES` in the
+`Makefile`, the Desktop bundle, the server archives, `remote-install.sh` and
+`tariboy update` all carry it. `tbox/internal/version/version.go` repeats the
+product version, `scripts/set-version.sh` moves it with the other pinned files,
+and `TestTboxVersionMatchesCanonicalVersion` in `scripts/` fails when it differs
+from `internal/version.Version`. The root `go list ./...` does not
 descend into it, and no file under `tbox/` may import a tariboy package
 outside `tbox/`; `TestNoTariboyImports` enforces this. `make tbox-check`
 runs `tbox-fmt-check`, `tbox-vet`, `tbox-staticcheck`, `tbox-complexity` (the

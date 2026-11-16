@@ -20,6 +20,12 @@ sidebar:
 | `tariboy-plugin-telegram` | The bundled Telegram mail and operator-surface plugin. |
 | `tbox` | A standalone [image runner](/docs/binaries/tbox): builds an image and starts an ordinary Claude Code, Codex or OpenCode session with it, with no daemon. |
 
+All of them carry the same version. A release ships every binary except
+`tariboy-store` in the Desktop package and in the server archives, so the
+Desktop CLI install, a remote host install and `tariboy update` provide
+`tariboy`, `ttasks`, `tmail`, `tbox` and the rest together. `make install` and
+`make server-install` install all nine.
+
 The daemon installs or refreshes the Telegram plugin from its sibling binary at
 startup. Optional external plugins are built and distributed independently.
 
