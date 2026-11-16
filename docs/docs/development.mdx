@@ -346,18 +346,6 @@ git clean -ndx
 
 ### Go control plane and plugins
 
-### tbox
-
-`tbox/` is a separate Go module (`tbox/go.mod`, module path
-`github.com/alekzonder/tariboy/tbox`) that builds the standalone `tbox` binary.
-`make build` writes it to `bin/tbox`. The root `go list ./...` does not
-descend into it, and no file under `tbox/` may import a tariboy package
-outside `tbox/`; `TestNoTariboyImports` enforces this. `make tbox-check`
-runs `tbox-fmt-check`, `tbox-vet`, `tbox-staticcheck`, `tbox-complexity` (the
-same `gocyclo` and `gocognit` limits as the root) and `tbox-test` inside
-`tbox/`, using the linters pinned in the root `tools.mod`. `backend-check`
-runs it as the `tbox-check` step.
-
 `make backend-check` covers this subsystem with `fmt-check`, `vet`,
 `staticcheck`, `gocyclo`, `gocognit`, and `test`. To run one of them from the
 repository root while iterating:
@@ -538,6 +526,18 @@ live in those packages. The isolated product path is
 alone with `make workflow-e2e`. Keep the current behavior documented in
 [Task workflows](/docs/task-workflows) and
 [Workflow images](/docs/workflow-images).
+
+### tbox
+
+`tbox/` is a separate Go module (`tbox/go.mod`, module path
+`github.com/alekzonder/tariboy/tbox`) that builds the standalone `tbox` binary.
+`make build` writes it to `bin/tbox`. The root `go list ./...` does not
+descend into it, and no file under `tbox/` may import a tariboy package
+outside `tbox/`; `TestNoTariboyImports` enforces this. `make tbox-check`
+runs `tbox-fmt-check`, `tbox-vet`, `tbox-staticcheck`, `tbox-complexity` (the
+same `gocyclo` and `gocognit` limits as the root) and `tbox-test` inside
+`tbox/`, using the linters pinned in the root `tools.mod`. `backend-check`
+runs it as the `tbox-check` step.
 
 ### Image skill bridge development
 
