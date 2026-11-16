@@ -1,0 +1,8 @@
+awaiting-replies
+context
+goal
+identity
+messages
+one-shot
+user-prompt
+workdir
