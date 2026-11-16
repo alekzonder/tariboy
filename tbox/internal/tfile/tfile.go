@@ -35,6 +35,11 @@ var runtimeNames = []string{
 	"awaiting-replies", "user-prompt", "one-shot",
 }
 
+// IsRuntime reports whether name is a runtime placeholder.
+func IsRuntime(name string) bool {
+	return slices.Contains(runtimeNames, name)
+}
+
 // Plugin is a plugin declaration. tbox keeps it and never runs it.
 type Plugin struct {
 	Name string `yaml:"name"`
@@ -243,7 +248,7 @@ func validatePrompt(schema int, p PromptEntry, seenRuntime map[string]bool) erro
 	if p.Runtime == "" {
 		return nil
 	}
-	if !slices.Contains(runtimeNames, p.Runtime) {
+	if !IsRuntime(p.Runtime) {
 		return fmt.Errorf("unknown runtime placeholder %q", p.Runtime)
 	}
 	if seenRuntime[p.Runtime] {

@@ -41,3 +41,9 @@ func validateSemVer(key, value string) error {
 	}
 	return fmt.Errorf("%s must be a SemVer version (e.g. 1.2.3), got %q", key, value)
 }
+
+// ValidImageVersion checks an image_version value: a complete SemVer 2.0.0
+// version without a v prefix (internal/imagefile ValidateImageVersion).
+func ValidImageVersion(value string) error {
+	return validateSemVer("image_version", value)
+}

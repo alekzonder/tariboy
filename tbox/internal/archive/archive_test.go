@@ -4,6 +4,9 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"os"
@@ -242,8 +245,7 @@ func TestReadRejects(t *testing.T) {
 			m[2].Body = []byte("tampered")
 			return m
 		}, "layer integrity mismatch"},
-		"wrong id":   {editManifest(t, func(f map[string]any) { f["id"] = strings.Repeat("0", 64) }), "id does not match content digest"},
-		"missing id": {editManifest(t, func(f map[string]any) { delete(f, "id") }), "id"},
+		"wrong id": {editManifest(t, func(f map[string]any) { f["id"] = strings.Repeat("0", 64) }), "id does not match content digest"},
 		"bad mode": {func(m []Member) []Member {
 			m[1].Mode = 0o644
 			return m
@@ -301,5 +303,77 @@ func TestReadAcceptsTariboyExtras(t *testing.T) {
 	}
 	if len(got.Manifest.Plugins) != 1 || got.Template.Entries[0].Kind != "runtime" {
 		t.Fatalf("image = %+v", got)
+	}
+}
+
+// TestReadAcceptsLegacyIDs reads the id forms tariboy still accepts: no id
+// and the RefID(name, image_version) id of older releases. Digest is the
+// recomputed content digest either way.
+func TestReadAcceptsLegacyIDs(t *testing.T) {
+	img := buildDir(t, filepath.Join(compatDir, "v2-basic"), "compat-basic", buildTime)
+	sum := sha256.Sum256([]byte("compat-basic\n1.0.0"))
+	refID := hex.EncodeToString(sum[:])
+	cases := map[string]func(map[string]any){
+		"empty id":  func(f map[string]any) { delete(f, "id") },
+		"legacy id": func(f map[string]any) { f["id"] = refID },
+	}
+	for name, edit := range cases {
+		t.Run(name, func(t *testing.T) {
+			got, err := Read(bytes.NewReader(rewrite(t, img, editManifest(t, edit))))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Manifest.Digest != img.Manifest.ID {
+				t.Fatalf("digest = %s, want content digest %s", got.Manifest.Digest, img.Manifest.ID)
+			}
+		})
+	}
+	// A legacy id needs image_version; without it the id must be the
+	// content digest.
+	noVersion := editManifest(t, func(f map[string]any) {
+		delete(f, "image_version")
+		f["id"] = refID
+	})
+	if _, err := Read(bytes.NewReader(rewrite(t, img, noVersion))); err == nil || !strings.Contains(err.Error(), "id does not match content digest") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// treeHashOf is the agentskills tree hash, for building archive fixtures.
+func treeHashOf(files []Member) string {
+	h := sha256.New()
+	for _, f := range files {
+		_ = binary.Write(h, binary.BigEndian, uint32(len(f.Name)))
+		h.Write([]byte(f.Name))
+		_ = binary.Write(h, binary.BigEndian, uint32(f.Mode))
+		_ = binary.Write(h, binary.BigEndian, uint64(len(f.Body)))
+		sum := sha256.Sum256(f.Body)
+		h.Write(sum[:])
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// TestReadAcceptsSkillEvalsMember reads an archive whose skill carries a
+// root-level evals member, which tariboy accepts when the metadata covers it.
+func TestReadAcceptsSkillEvalsMember(t *testing.T) {
+	img := buildDir(t, filepath.Join(compatDir, "v2-basic"), "compat-basic", buildTime)
+	evals := Member{Name: "skills/hello-skill/evals/case.md", Mode: 0o600, Body: []byte("case\n")}
+	members := append(append([]Member(nil), img.Members[:4]...), evals)
+	members = append(members, img.Members[4:]...)
+	man := img.Manifest
+	man.Skills = append([]skill.Metadata(nil), man.Skills...)
+	_, files, _ := Image{Manifest: man, Members: members}.Skill("hello-skill")
+	man.Skills[0].FileCount = len(files)
+	man.Skills[0].Size += int64(len(evals.Body))
+	man.Skills[0].TreeSHA256 = treeHashOf(files)
+	if err := sealManifest(&man, members); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Read(bytes.NewReader(rewrite(t, Image{Members: members}, func(m []Member) []Member { return m })))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Manifest.Skills[0].FileCount != 4 {
+		t.Fatalf("skills = %+v", got.Manifest.Skills)
 	}
 }

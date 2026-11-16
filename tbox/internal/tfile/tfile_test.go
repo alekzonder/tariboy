@@ -179,3 +179,27 @@ func TestRoleRead(t *testing.T) {
 		t.Fatal("expected a length error")
 	}
 }
+
+func TestValidImageVersion(t *testing.T) {
+	for _, v := range []string{"1.0.0", "0.3.0-rc.1", "1.2.3+build.5"} {
+		if err := ValidImageVersion(v); err != nil {
+			t.Fatalf("ValidImageVersion(%q) = %v", v, err)
+		}
+	}
+	for _, v := range []string{"", "v1.0.0", "1.0", "1.0.0-01", "01.0.0"} {
+		if err := ValidImageVersion(v); err == nil {
+			t.Fatalf("ValidImageVersion(%q) accepted", v)
+		}
+	}
+}
+
+func TestIsRuntime(t *testing.T) {
+	for _, name := range []string{"identity", "goal", "workdir", "context", "messages", "awaiting-replies", "user-prompt", "one-shot"} {
+		if !IsRuntime(name) {
+			t.Fatalf("IsRuntime(%q) = false", name)
+		}
+	}
+	if IsRuntime("mail") || IsRuntime("") {
+		t.Fatal("IsRuntime accepted an unknown name")
+	}
+}
