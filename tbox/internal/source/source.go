@@ -221,6 +221,15 @@ func leafName(p string) (string, error) {
 	return path.Base(c), nil
 }
 
+// checkRepoPath validates a directory inside a repository; "." is its root.
+func checkRepoPath(p string) error {
+	if p == "." {
+		return nil
+	}
+	_, err := leafName(p)
+	return err
+}
+
 // treeSHA validates the skill at dir and returns its tree hash. It fails with
 // the update hint when pinnedSHA is set and differs.
 func treeSHA(dir, src, pinnedSHA string) (string, error) {

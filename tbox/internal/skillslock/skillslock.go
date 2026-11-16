@@ -99,7 +99,9 @@ var githubSource = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 
 // Restore finds the directory of every skill. A github skill is the
 // directory of SkillPath in https://github.com/<source>.git at the remote
-// default branch, or at the commit pin returns, fetched through r. A local
+// default branch, or at the commit pin returns, fetched through r and cached
+// in a directory named after the skill; SkillPath "SKILL.md" makes the whole
+// repository the skill. A local
 // skill is Source relative to lockDir, used in place. Any other sourceType is
 // an error. A skill whose content hash differs from computedHash gets a
 // warning, not an error. pin may be nil.
@@ -154,9 +156,13 @@ func (out *Restored) github(ctx context.Context, r *source.Resolver, name string
 	if !githubSource.MatchString(s.Source) || strings.Contains(s.Source, "..") {
 		return "", fmt.Errorf("invalid github source %q", s.Source)
 	}
+	// The directory that holds SKILL.md is the skill, "." for the repository
+	// root. It is cached under the skill name, as the installer copies it to
+	// .agents/skills/<name>; skill.Prepare then requires the frontmatter name
+	// to equal it.
 	sub := path.Dir(s.SkillPath)
-	if path.Base(s.SkillPath) != skillFile || path.Base(sub) != name {
-		return "", fmt.Errorf("skillPath %q must be <dir>/%s/%s", s.SkillPath, name, skillFile)
+	if path.Base(s.SkillPath) != skillFile {
+		return "", fmt.Errorf("skillPath %q must end with %s", s.SkillPath, skillFile)
 	}
 	if r == nil {
 		return "", errors.New("github skills need a source resolver")
@@ -167,7 +173,7 @@ func (out *Restored) github(ctx context.Context, r *source.Resolver, name string
 	if pin != nil {
 		pinned = pin(key)
 	}
-	dir, got, err := r.SkillDir(ctx, entry, pinned)
+	dir, got, err := r.GitSkillAs(ctx, entry, name, pinned)
 	if err != nil {
 		return "", err
 	}

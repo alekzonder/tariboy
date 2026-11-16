@@ -141,6 +141,8 @@ func newRepo(t *testing.T) (string, *source.Resolver) {
 	repo := filepath.Join(t.TempDir(), "origin")
 	write(t, filepath.Join(repo, "skills/alpha/SKILL.md"), skillMD("alpha"))
 	write(t, filepath.Join(repo, "skills/alpha/notes.md"), "notes\n")
+	write(t, filepath.Join(repo, "pkg/alpha-skill/SKILL.md"), skillMD("alpha"))
+	write(t, filepath.Join(repo, "pkg/wrong/SKILL.md"), skillMD("beta"))
 	git(t, repo, "init", "-q", "-b", "main")
 	git(t, repo, "add", ".")
 	git(t, repo, "commit", "-q", "-m", "first")
@@ -216,7 +218,6 @@ func TestRestoreErrors(t *testing.T) {
 		`unsupported sourceType "npm"`:                 {Source: "x", SourceType: "npm"},
 		`invalid github source "o/../r"`:               {Source: "o/../r", SourceType: "github", SkillPath: "skills/alpha/SKILL.md"},
 		`skillPath "skills/alpha/README.md"`:           {Source: "o/r", SourceType: "github", SkillPath: "skills/alpha/README.md"},
-		`skillPath "skills/other/SKILL.md"`:            {Source: "o/r", SourceType: "github", SkillPath: "skills/other/SKILL.md"},
 		`local source "./missing/alpha"`:               {Source: "./missing/alpha", SourceType: "local"},
 		`local source "./elsewhere" must be directory`: {Source: "./elsewhere", SourceType: "local"},
 	}
@@ -253,5 +254,77 @@ func TestRemapper(t *testing.T) {
 		if got := m(in); got != want {
 			t.Errorf("%s: got %s, want %s", in, got, want)
 		}
+	}
+}
+
+// rootRepo makes a repository whose root is the skill alpha, as the
+// installer records with skillPath "SKILL.md", served for github.com/o/root.
+func rootRepo(t *testing.T, r *source.Resolver) string {
+	t.Helper()
+	repo := filepath.Join(t.TempDir(), "root")
+	write(t, filepath.Join(repo, "SKILL.md"), skillMD("alpha"))
+	write(t, filepath.Join(repo, "README.md"), "readme\n")
+	write(t, filepath.Join(repo, "evals/case.json"), "{}\n")
+	git(t, repo, "init", "-q", "-b", "main")
+	git(t, repo, "add", ".")
+	git(t, repo, "commit", "-q", "-m", "first")
+	inner := r.RewriteURL
+	r.RewriteURL = func(u string) string {
+		if u == "https://github.com/o/root.git" {
+			return repo
+		}
+		return inner(u)
+	}
+	return repo
+}
+
+func TestRestoreRepositoryRootSkill(t *testing.T) {
+	_, r := newRepo(t)
+	rootRepo(t, r)
+	dir := t.TempDir()
+	s := Skill{Source: "o/root", SourceType: "github", SkillPath: "SKILL.md"}
+	got, err := Restore(context.Background(), r, dir, map[string]Skill{"alpha": s}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(got.Dirs["alpha"]) != "alpha" {
+		t.Fatalf("dir %q is not named after the skill", got.Dirs["alpha"])
+	}
+	if body, err := os.ReadFile(filepath.Join(got.Dirs["alpha"], "README.md")); err != nil || string(body) != "readme\n" {
+		t.Fatalf("readme %q %v", body, err)
+	}
+	key := lock.Key("git", "https://github.com/o/root.git", ".", "")
+	if _, ok := got.Entries[key]; !ok || got.Keys[got.Dirs["alpha"]] != key {
+		t.Fatalf("entries %+v keys %+v", got.Entries, got.Keys)
+	}
+	// Pinned and cached: offline.
+	entry := got.Entries[key]
+	r.RewriteURL = func(string) string { return filepath.Join(t.TempDir(), "gone") }
+	again, err := Restore(context.Background(), r, dir, map[string]Skill{"alpha": s}, func(k string) *lock.Entry {
+		if k == key {
+			return &entry
+		}
+		return nil
+	})
+	if err != nil || again.Dirs["alpha"] != got.Dirs["alpha"] {
+		t.Fatalf("pinned %+v %v", again, err)
+	}
+}
+
+func TestRestoreDirectoryNamedOtherwise(t *testing.T) {
+	_, r := newRepo(t)
+	dir := t.TempDir()
+	s := Skill{Source: "o/r", SourceType: "github", SkillPath: "pkg/alpha-skill/SKILL.md"}
+	got, err := Restore(context.Background(), r, dir, map[string]Skill{"alpha": s}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(got.Dirs["alpha"]) != "alpha" {
+		t.Fatalf("dir %q is not named after the skill", got.Dirs["alpha"])
+	}
+	bad := Skill{Source: "o/r", SourceType: "github", SkillPath: "pkg/wrong/SKILL.md"}
+	_, err = Restore(context.Background(), r, dir, map[string]Skill{"alpha": bad}, nil)
+	if err == nil || !strings.Contains(err.Error(), `"beta"`) || !strings.Contains(err.Error(), `"alpha"`) {
+		t.Fatalf("name mismatch err %v", err)
 	}
 }
