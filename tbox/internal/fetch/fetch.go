@@ -105,7 +105,9 @@ func (c Client) checkURL(rawURL string) (*url.URL, error) {
 	return u, nil
 }
 
-func hostOf(u *url.URL) string { return u.Host }
+// hostOf is scheme, host and path of u; the query and fragment are left out
+// because they may carry tokens.
+func hostOf(u *url.URL) string { return u.Scheme + "://" + u.Host + u.EscapedPath() }
 
 // describe reduces a transport error to text that carries no URL.
 func describe(err error) string {

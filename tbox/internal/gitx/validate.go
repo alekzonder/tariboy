@@ -54,6 +54,9 @@ func checkRawURL(s string) error {
 	if strings.HasPrefix(s, "-") {
 		return errors.New("git URL must not start with -")
 	}
+	if strings.ContainsAny(s, "?#") {
+		return errors.New("git URL must not carry a query or fragment")
+	}
 	for _, r := range s {
 		if r < 0x20 || r == 0x7f || r == ' ' {
 			return errors.New("git URL holds a space or control character")

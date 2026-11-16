@@ -7,6 +7,7 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -246,5 +247,72 @@ func TestExtractArchiveExistingDest(t *testing.T) {
 	dest := t.TempDir()
 	if err := ExtractArchive(tarGz(t, []entry{{name: "a", body: "x"}}), dest); err == nil {
 		t.Error("existing dest accepted")
+	}
+}
+
+func TestGetErrorsOmitQuery(t *testing.T) {
+	srv, c := tlsServer(t, http.NotFoundHandler())
+	_, err := c.Get(context.Background(), srv.URL+"/p/q?token=SECRET#frag", 10)
+	if err == nil {
+		t.Fatal("want error")
+	}
+	if strings.Contains(err.Error(), "SECRET") || strings.Contains(err.Error(), "frag") || !strings.Contains(err.Error(), "/p/q") {
+		t.Errorf("error = %q", err)
+	}
+	srv.Close()
+	_, err = c.Get(context.Background(), srv.URL+"/p/q?token=SECRET", 10)
+	if err == nil || strings.Contains(err.Error(), "SECRET") {
+		t.Errorf("connect error = %v", err)
+	}
+}
+
+func globalHeaders(t *testing.T, n int, payload string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	for i := 0; i < n; i++ {
+		h := &tar.Header{Typeflag: tar.TypeXGlobalHeader, Name: "pax_global_header", PAXRecords: map[string]string{"comment": payload}}
+		if err := tw.WriteHeader(h); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tw.Close()
+	gz.Close()
+	return buf.Bytes()
+}
+
+func TestGlobalHeadersCountAsMembers(t *testing.T) {
+	lim := DefaultLimits
+	lim.MaxMembers = 10
+	if err := ExtractArchiveWith(globalHeaders(t, 50, "x"), filepath.Join(t.TempDir(), "o"), lim); err == nil || !strings.Contains(err.Error(), "too many") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestStreamIsCapped(t *testing.T) {
+	lim := DefaultLimits
+	lim.MaxExpanded = 1000
+	lim.MaxMembers = 2
+	r := capStream(strings.NewReader(strings.Repeat("x", 1<<20)), lim)
+	n, err := io.Copy(io.Discard, r)
+	if err == nil || !strings.Contains(err.Error(), "exceeds") || n > 1000+streamOverhead(lim)+1 {
+		t.Errorf("copied %d bytes, err = %v", n, err)
+	}
+	small := capStream(strings.NewReader("abc"), lim)
+	if b, err := io.ReadAll(small); err != nil || string(b) != "abc" {
+		t.Errorf("small stream = %q, %v", b, err)
+	}
+}
+
+func TestZipTooManyMembers(t *testing.T) {
+	var entries []entry
+	for i := 0; i < 20; i++ {
+		entries = append(entries, entry{name: fmt.Sprintf("f%d", i)})
+	}
+	lim := DefaultLimits
+	lim.MaxMembers = 10
+	if err := ExtractArchiveWith(zipData(t, entries), filepath.Join(t.TempDir(), "o"), lim); err == nil || !strings.Contains(err.Error(), "too many") {
+		t.Errorf("err = %v", err)
 	}
 }

@@ -13,13 +13,14 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/alekzonder/tariboy/tbox/internal/fetch"
 )
 
 const (
 	defaultTimeout = 120 * time.Second
-	maxStderr      = 1024
+	maxStderr      = 300
 )
 
 // ErrRefNotFound marks a ref that is no branch, tag or commit of the remote.
@@ -66,20 +67,43 @@ func (g Git) command(ctx context.Context, args ...string) *exec.Cmd {
 // credential: the subcommand, a timeout notice or masked stderr lines.
 func gitError(ctx context.Context, op string, err error, stderr []byte) error {
 	if ctx.Err() != nil {
-		return fmt.Errorf("git %s: %w", op, ctx.Err())
+		return &gitFail{msg: fmt.Sprintf("git %s: %v", op, ctx.Err()), err: ctx.Err()}
 	}
-	msg := strings.TrimSpace(maskCredentials(string(stderr)))
-	if len(msg) > maxStderr {
-		msg = msg[:maxStderr] + "..."
-	}
+	msg := lastLine(maskCredentials(string(stderr)))
 	if msg == "" {
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
-			return fmt.Errorf("git %s: exit status %d", op, ee.ExitCode())
+			msg = fmt.Sprintf("exit status %d", ee.ExitCode())
+		} else {
+			msg = err.Error()
 		}
-		return fmt.Errorf("git %s: %w", op, err)
 	}
-	return fmt.Errorf("git %s: %s", op, msg)
+	return &gitFail{msg: fmt.Sprintf("git %s: %s", op, msg), err: err}
+}
+
+// gitFail is a git failure whose text is safe to show and whose cause stays
+// reachable through errors.As.
+type gitFail struct {
+	msg string
+	err error
+}
+
+func (e *gitFail) Error() string { return e.msg }
+func (e *gitFail) Unwrap() error { return e.err }
+
+// lastLine returns the last non-empty line of s, cut to maxStderr bytes on a
+// rune boundary.
+func lastLine(s string) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	line := strings.TrimSpace(lines[len(lines)-1])
+	if len(line) <= maxStderr {
+		return line
+	}
+	cut := maxStderr
+	for cut > 0 && !utf8.RuneStart(line[cut]) {
+		cut--
+	}
+	return line[:cut] + "..."
 }
 
 // run runs git with args and returns its stdout.
@@ -142,14 +166,42 @@ func (g Git) Mirror(ctx context.Context, url, dir string) error {
 			_ = os.RemoveAll(dir)
 			return err
 		}
-		return nil
+		return g.syncHead(ctx, dir)
 	} else if err != nil {
 		return err
 	}
 	if _, err := g.run(ctx, "remote", gitDir(dir), "remote", "set-url", "origin", "--", url); err != nil {
 		return err
 	}
-	_, err = g.run(ctx, "remote update", gitDir(dir), "remote", "update", "--prune")
+	if _, err := g.run(ctx, "remote update", gitDir(dir), "remote", "update", "--prune"); err != nil {
+		return err
+	}
+	return g.syncHead(ctx, dir)
+}
+
+// syncHead points the mirror's HEAD at the branch the remote HEAD names, as
+// neither clone --mirror after the first time nor remote update follows a
+// renamed default branch. A remote without a symbolic HEAD, or one naming a
+// branch the mirror lacks, leaves HEAD alone.
+func (g Git) syncHead(ctx context.Context, dir string) error {
+	out, err := g.run(ctx, "ls-remote", gitDir(dir), "ls-remote", "--symref", "origin", "HEAD")
+	if err != nil {
+		return err
+	}
+	branch := ""
+	for _, line := range strings.Split(string(out), "\n") {
+		if rest, ok := strings.CutPrefix(line, "ref: "); ok {
+			branch, _, _ = strings.Cut(rest, "\t")
+			break
+		}
+	}
+	if !strings.HasPrefix(branch, "refs/heads/") || CheckRef(strings.TrimPrefix(branch, "refs/heads/")) != nil {
+		return nil
+	}
+	if _, err := g.run(ctx, "show-ref", gitDir(dir), "show-ref", "--verify", "--quiet", branch); err != nil {
+		return nil
+	}
+	_, err = g.run(ctx, "symbolic-ref", gitDir(dir), "symbolic-ref", "HEAD", branch)
 	return err
 }
 
@@ -186,17 +238,20 @@ func (g Git) resolve(ctx context.Context, gitArg, branchPrefix, defaultRef, ref 
 	return "", fmt.Errorf("%w: %s", ErrRefNotFound, ref)
 }
 
-// revParse peels name to a commit. A missing name is ErrRefNotFound.
+// revParse peels name to a commit. A miss (exit status 1 without output of
+// rev-parse --verify --quiet) is ErrRefNotFound; any other failure is
+// returned as its own error.
 func (g Git) revParse(ctx context.Context, gitArg, name string, isDefault bool) (string, error) {
 	out, err := g.run(ctx, "rev-parse", gitArg, "rev-parse", "--verify", "--quiet", name+"^{commit}")
 	if err != nil {
-		if ctx.Err() != nil {
-			return "", err
+		var ee *exec.ExitError
+		if errors.As(err, &ee) && ee.ExitCode() == 1 && ctx.Err() == nil && strings.HasSuffix(err.Error(), "exit status 1") {
+			if isDefault {
+				return "", fmt.Errorf("%w: default branch", ErrRefNotFound)
+			}
+			return "", fmt.Errorf("%w: %s", ErrRefNotFound, name)
 		}
-		if isDefault {
-			return "", fmt.Errorf("%w: default branch", ErrRefNotFound)
-		}
-		return "", fmt.Errorf("%w: %s", ErrRefNotFound, name)
+		return "", err
 	}
 	commit := strings.TrimSpace(string(out))
 	if !isHex(commit, 40, 40) {
