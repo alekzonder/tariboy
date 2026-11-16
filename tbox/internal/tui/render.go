@@ -24,14 +24,14 @@ type screen struct {
 	lines int
 }
 
-func (s *screen) draw(lines []string) error {
+func (s *screen) draw(lines []string, limit int) error {
 	var b bytes.Buffer
 	if s.lines > 0 {
 		fmt.Fprintf(&b, "\r\x1b[%dA", s.lines)
 	}
 	b.WriteString(clearDown)
 	for _, l := range lines {
-		b.WriteString(l)
+		b.WriteString(hardCut(l, limit))
 		b.WriteString("\r\n")
 	}
 	s.lines = len(lines)
@@ -42,13 +42,13 @@ func (s *screen) draw(lines []string) error {
 // clear removes the current frame, if any.
 func (s *screen) clear() {
 	if s.lines > 0 {
-		_ = s.draw(nil)
+		_ = s.draw(nil, 0)
 	}
 }
 
 // leave replaces the frame with one permanent line.
-func (s *screen) leave(line string) error {
-	err := s.draw([]string{line})
+func (s *screen) leave(line string, limit int) error {
+	err := s.draw([]string{line}, limit)
 	s.lines = 0
 	return err
 }
@@ -70,6 +70,47 @@ func truncate(s string, w int) string {
 		return "…"
 	}
 	return string(r[:w-1]) + "…"
+}
+
+// hardCut cuts s to at most limit runes with no ellipsis; a negative limit
+// means no cut.
+func hardCut(s string, limit int) string {
+	if limit < 0 || utf8.RuneCountInString(s) <= limit {
+		return s
+	}
+	return string([]rune(s)[:limit])
+}
+
+const (
+	minCols = 20
+	minRows = 5
+)
+
+// geometry returns the layout size and the longest line that may be written.
+// A terminal smaller than minCols x minRows, or of unknown size, is laid out
+// as if it had that minimum, but no line is longer than the real cols-1.
+func geometry(t Terminal) (cols, rows, limit int) {
+	c, r := t.Size()
+	cols, rows = max(c, minCols), max(r, minRows)
+	limit = cols - 1
+	if c > 0 {
+		limit = c - 1
+	}
+	return cols, rows, limit
+}
+
+func isControl(r rune) bool { return r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) }
+
+// display makes untrusted or typed text safe for one line without trimming
+// or collapsing spaces: control characters, C1 controls and invalid runes
+// become spaces.
+func display(s string) string {
+	return strings.Map(func(r rune) rune {
+		if isControl(r) || r == utf8.RuneError {
+			return ' '
+		}
+		return r
+	}, s)
 }
 
 // clean makes untrusted text one printable line.

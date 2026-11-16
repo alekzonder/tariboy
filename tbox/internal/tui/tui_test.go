@@ -178,9 +178,8 @@ func TestScrollWindow(t *testing.T) {
 			t.Fatalf("frame has %d item lines: %q", n, w)
 		}
 	}
-	last := f.writes[len(f.writes)-3] // last full frame before summary and show cursor
-	if !strings.Contains(string(last), "item099") {
-		t.Fatalf("last item not visible in %q", last)
+	if !strings.Contains(f.all(), "> item099") {
+		t.Fatal("last item never shown under the cursor")
 	}
 }
 
@@ -356,5 +355,134 @@ func TestDecodeKey(t *testing.T) {
 	}
 	if k, n := decodeKey([]byte("\xff")); n != 1 || k.Code != KeyRune || k.Rune != 0 {
 		t.Errorf("invalid utf8: %+v %d", k, n)
+	}
+}
+
+var upMove = regexp.MustCompile("^\r\x1b\\[(\\d+)A")
+
+// checkFrames asserts that every frame moves up by the line count of the
+// previous frame and that no line is longer than limit runes (limit < 0
+// disables the width check).
+func checkFrames(t *testing.T, f *fakeTerm, limit int) {
+	t.Helper()
+	prev := 0
+	for _, w := range f.writes {
+		s := string(w)
+		if s == hideCursor || s == showCursor {
+			continue
+		}
+		up := 0
+		if m := upMove.FindStringSubmatch(s); m != nil {
+			fmt.Sscan(m[1], &up)
+		}
+		if up != prev {
+			t.Fatalf("frame moves up %d, previous frame wrote %d lines: %q", up, prev, s)
+		}
+		body := upMove.ReplaceAllString(s, "")
+		body = ownEscapes.ReplaceAllString(body, "")
+		prev = strings.Count(body, "\r\n")
+		if limit < 0 {
+			continue
+		}
+		for _, line := range strings.Split(body, "\r\n") {
+			if n := len([]rune(line)); n > limit {
+				t.Fatalf("line of %d runes exceeds %d: %q", n, limit, line)
+			}
+		}
+	}
+}
+
+func TestInputSanitizesInitial(t *testing.T) {
+	initial := "a\x1b[2J\nb"
+	f := newFake(80, 10, ck(KeyEnter))
+	got, err := Input(f, "name", initial)
+	if err != nil || got != initial {
+		t.Fatalf("value changed: %q, %v", got, err)
+	}
+	for _, w := range f.writes {
+		s := upMove.ReplaceAllString(string(w), "")
+		s = strings.ReplaceAll(ownEscapes.ReplaceAllString(s, ""), "\r\n", "")
+		if strings.ContainsAny(s, "\x1b\n\x07") {
+			t.Fatalf("control bytes survived: %q", w)
+		}
+		if strings.Count(string(w), "\r\n") > 1 {
+			t.Fatalf("more than one line: %q", w)
+		}
+	}
+	checkFrames(t, f, -1)
+}
+
+func TestC1ControlsRejected(t *testing.T) {
+	f := newFake(80, 10, rk(0x9b), rk(0x85), ck(KeyEnter))
+	got, err := Select(f, "p", items(2))
+	if err != nil || got != 0 {
+		t.Fatalf("got %d, %v", got, err)
+	}
+	if strings.ContainsRune(f.all(), 0x9b) || strings.ContainsRune(f.all(), 0x85) {
+		t.Fatalf("C1 control written: %q", f.all())
+	}
+	f = newFake(80, 10, rk(0x9b), rk('x'), ck(KeyEnter))
+	if got, _ := Input(f, "n", ""); got != "x" {
+		t.Fatalf("input accepted C1: %q", got)
+	}
+}
+
+func TestTinyTerminals(t *testing.T) {
+	sizes := [][2]int{{1, 5}, {5, 0}, {0, 0}, {1, 1}, {19, 3}, {-1, -1}}
+	for _, sz := range sizes {
+		limit := sz[0] - 1
+		if sz[0] <= 0 {
+			limit = 19
+		}
+		mk := func() *fakeTerm {
+			return newFake(sz[0], sz[1], ck(KeyDown), rk('i'), rk('t'), ck(KeyBackspace), ck(KeySpace), ck(KeyEnter))
+		}
+		f := mk()
+		if _, err := Select(f, "a title", items(30)); err != nil {
+			t.Fatalf("%v select: %v", sz, err)
+		}
+		checkFrames(t, f, limit)
+		f = mk()
+		if _, err := MultiSelect(f, "a title", items(30), nil); err != nil {
+			t.Fatalf("%v multi: %v", sz, err)
+		}
+		checkFrames(t, f, limit)
+		f = newFake(sz[0], sz[1], rk('a'), rk('b'), ck(KeyEnter))
+		if _, err := Input(f, "a long prompt", "initial"); err != nil {
+			t.Fatalf("%v input: %v", sz, err)
+		}
+		checkFrames(t, f, limit)
+	}
+}
+
+func TestFilterShrinkAndGrowMoveUp(t *testing.T) {
+	its := []Item{{Label: "a1"}, {Label: "a2"}, {Label: "a3"}, {Label: "a4"}, {Label: "a5"}, {Label: "b1"}}
+	f := newFake(80, 10, rk('b'), ck(KeyBackspace), rk('a'), rk('3'), ck(KeyBackspace), ck(KeyBackspace), ck(KeyEnter))
+	if _, err := Select(f, "p", its); err != nil {
+		t.Fatal(err)
+	}
+	checkFrames(t, f, 79)
+}
+
+func TestNoMatchesLine(t *testing.T) {
+	f := newFake(80, 10, rk('z'), ck(KeyEnter), ck(KeyEsc))
+	if _, err := Select(f, "p", items(3)); !errors.Is(err, ErrCancelled) {
+		t.Fatalf("Enter on no match must do nothing: %v", err)
+	}
+	if !strings.Contains(f.all(), "no matches") {
+		t.Fatalf("no 'no matches' line: %q", f.all())
+	}
+	checkFrames(t, f, 79)
+}
+
+func TestDropIncomplete(t *testing.T) {
+	for _, in := range []string{"\x1b", "\x1b[", "\x1bO", "\x1b[1;5"} {
+		k, rest := dropIncomplete([]byte(in))
+		if k.Code != KeyEsc || len(rest) != 0 {
+			t.Errorf("%q: %+v %q", in, k, rest)
+		}
+	}
+	if k, rest := dropIncomplete([]byte("\xc3")); k != (Key{}) || len(rest) != 0 {
+		t.Errorf("broken rune: %+v %q", k, rest)
 	}
 }

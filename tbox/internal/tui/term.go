@@ -105,10 +105,10 @@ func (r *realTerm) ReadKey() (Key, error) {
 			if !got {
 				// An incomplete sequence that never finished: a lone ESC
 				// or a broken rune.
-				b := r.buf[0]
-				r.buf = r.buf[1:]
-				if b == 0x1b {
-					return Key{Code: KeyEsc}, nil
+				var k Key
+				k, r.buf = dropIncomplete(r.buf)
+				if k.Code == KeyEsc {
+					return k, nil
 				}
 			}
 			continue
@@ -185,4 +185,18 @@ func csiKey(seq string) Key {
 		return Key{Code: KeyPageDown}
 	}
 	return Key{}
+}
+
+// dropIncomplete gives up on an incomplete sequence at the start of b after
+// the wait ran out. A sequence that starts with ESC is a lone Esc and is
+// dropped whole, so a stray "[" or "O" is not read as a rune; a broken rune
+// loses one byte and is ignored.
+func dropIncomplete(b []byte) (Key, []byte) {
+	if len(b) > 0 && b[0] == 0x1b {
+		return Key{Code: KeyEsc}, nil
+	}
+	if len(b) > 0 {
+		return Key{}, b[1:]
+	}
+	return Key{}, b
 }
