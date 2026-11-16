@@ -1,6 +1,8 @@
 package skill
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -158,5 +160,68 @@ func TestTreeHashMatchesTariboy(t *testing.T) {
 	}
 	if got.Metadata.FileCount != 3 {
 		t.Fatalf("file count = %d", got.Metadata.FileCount)
+	}
+}
+
+// fileOf builds a File with its size and digest.
+func fileOf(rel, body string, executable bool) File {
+	sum := sha256.Sum256([]byte(body))
+	return File{RelativePath: rel, Size: int64(len(body)), SHA256: hex.EncodeToString(sum[:]), Executable: executable, Body: []byte(body)}
+}
+
+// preparedOf returns metadata that matches files, as an archive carries it.
+func preparedOf(t *testing.T, name string, files []File) Metadata {
+	t.Helper()
+	hash, err := treeHash(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var size int64
+	for _, f := range files {
+		size += f.Size
+	}
+	return Metadata{Name: name, Description: "A demo skill.", Source: "./skills/demo", Category: "source",
+		ArchiveRoot: "skills/" + name, FileCount: len(files), Size: size, TreeSHA256: hash}
+}
+
+func TestValidatePrepared(t *testing.T) {
+	good := []File{fileOf("SKILL.md", goodSkill, false), fileOf("scripts/run.sh", "#!/bin/sh\n", true)}
+	if err := ValidatePrepared(preparedOf(t, "demo", good), good); err != nil {
+		t.Fatalf("valid skill: %v", err)
+	}
+	// An archive skill is judged by its members: a root-level evals member
+	// is kept and hashed, not skipped.
+	withEvals := []File{fileOf("SKILL.md", goodSkill, false), fileOf("evals/case.md", "case", false)}
+	if err := ValidatePrepared(preparedOf(t, "demo", withEvals), withEvals); err != nil {
+		t.Fatalf("skill with evals: %v", err)
+	}
+	cases := map[string]struct {
+		edit func(*Metadata, []File) []File
+		want string
+	}{
+		"no files":         {func(m *Metadata, f []File) []File { return nil }, "invalid file count"},
+		"archive root":     {func(m *Metadata, f []File) []File { m.ArchiveRoot = "skills/other"; return f }, "invalid archive root"},
+		"bad path":         {func(m *Metadata, f []File) []File { f[1].RelativePath = "../run.sh"; return f }, "invalid member path"},
+		"unsorted":         {func(m *Metadata, f []File) []File { f[0], f[1] = f[1], f[0]; return f }, "duplicate or unsorted"},
+		"size":             {func(m *Metadata, f []File) []File { f[1].Size++; return f }, "invalid size"},
+		"digest":           {func(m *Metadata, f []File) []File { f[1].Body = []byte("#!/bin/xx\n"); return f }, "integrity mismatch"},
+		"missing SKILL.md": {func(m *Metadata, f []File) []File { return f[1:] }, "missing SKILL.md"},
+		"description":      {func(m *Metadata, f []File) []File { m.Description = "Other."; return f }, "frontmatter does not match manifest"},
+		"name":             {func(m *Metadata, f []File) []File { m.Name, m.ArchiveRoot = "other", "skills/other"; return f }, "frontmatter does not match manifest"},
+		"file count":       {func(m *Metadata, f []File) []File { m.FileCount = 3; return f }, "aggregate metadata mismatch"},
+		"tree hash":        {func(m *Metadata, f []File) []File { m.TreeSHA256 = strings.Repeat("0", 64); return f }, "tree integrity mismatch"},
+		"executable bit":   {func(m *Metadata, f []File) []File { f[1].Executable = false; return f }, "tree integrity mismatch"},
+		"bad frontmatter":  {func(m *Metadata, f []File) []File { f[0] = fileOf("SKILL.md", "no frontmatter", false); return f }, "frontmatter"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			files := append([]File(nil), good...)
+			meta := preparedOf(t, "demo", files)
+			files = tc.edit(&meta, files)
+			err := ValidatePrepared(meta, files)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v, want %q", err, tc.want)
+			}
+		})
 	}
 }

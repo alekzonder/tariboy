@@ -8,11 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path"
-	"path/filepath"
 	"regexp"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -31,11 +30,8 @@ const (
 )
 
 var (
-	pluginNamePattern   = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
-	imageVersionPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-([0-9A-Za-z-]+)(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$`)
-	// runtimeNames are the runtime placeholders of internal/imagecontract.
-	runtimeNames    = []string{"identity", "goal", "workdir", "context", "messages", "awaiting-replies", "user-prompt", "one-shot"}
-	skillCategories = []string{"current-store", "store", "plugin", "source", "absolute"}
+	pluginNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
+	skillCategories   = []string{"current-store", "store", "plugin", "source", "absolute"}
 )
 
 // strictManifest is the schema of manifest.json in a v2 archive, decoded
@@ -55,9 +51,10 @@ type strictManifest struct {
 
 // Read reads and validates a schema-v2 archive with the rules tariboy applies
 // to a portable image: member types, modes, paths and limits, a strict
-// manifest and template, layer and skill integrity, no unexpected member, and
-// an id equal to the recomputed content digest. Plugins and runtime entries
-// are accepted.
+// manifest and template, layer and skill integrity, no unexpected member,
+// and the manifest id rule of contentID. Manifest.Digest is always the
+// recomputed content digest. Plugins and runtime entries are accepted. Read
+// does not touch the filesystem.
 func Read(r io.Reader) (Image, error) {
 	compressed, err := io.ReadAll(io.LimitReader(r, maxCompressed+1))
 	if err != nil {
@@ -85,7 +82,7 @@ func Read(r io.Reader) (Image, error) {
 	if err := checkMembers(man, template, byName); err != nil {
 		return Image{}, err
 	}
-	if err := checkID(man, members); err != nil {
+	if man.Digest, err = contentID(man, members); err != nil {
 		return Image{}, err
 	}
 	return Image{Manifest: man, Template: template, Members: members}, nil
@@ -197,7 +194,6 @@ func readManifest(members map[string]Member) (Manifest, error) {
 		Skills:               append([]skill.Metadata{}, strict.Skills...),
 		PromptTemplateSHA256: strict.PromptTemplateSHA256,
 		Role:                 strict.Role,
-		Digest:               strict.ID,
 	}
 	return man, nil
 }
@@ -208,8 +204,10 @@ func checkManifestFields(m strictManifest, body []byte) error {
 	if m.SchemaVersion != 2 || m.Name == "" || m.PromptTemplateSHA256 == "" {
 		return errors.New("invalid schema-v2 manifest identity")
 	}
-	if m.ImageVersion != "" && !validSemVer(m.ImageVersion) {
-		return fmt.Errorf("image_version must be a SemVer version (e.g. 1.2.3), got %q", m.ImageVersion)
+	if m.ImageVersion != "" {
+		if err := tfile.ValidImageVersion(m.ImageVersion); err != nil {
+			return err
+		}
 	}
 	if _, err := time.Parse(time.RFC3339Nano, m.BuiltAt); err != nil {
 		return errors.New("invalid schema-v2 manifest built_at")
@@ -225,20 +223,6 @@ func checkManifestFields(m strictManifest, body []byte) error {
 		seen[p.Name] = true
 	}
 	return nil
-}
-
-// validSemVer is the image_version rule of internal/imagefile.
-func validSemVer(value string) bool {
-	match := imageVersionPattern.FindStringSubmatch(value)
-	if match == nil {
-		return false
-	}
-	for _, part := range strings.Split(strings.TrimPrefix(match[4], "-"), ".") {
-		if len(part) > 1 && part[0] == '0' && strings.Trim(part, "0123456789") == "" {
-			return false
-		}
-	}
-	return true
 }
 
 // checkRole is internal/rolefile Validate on the manifest role. The JSON
@@ -307,7 +291,7 @@ func validateTemplate(template Template) error {
 func validateEntry(i int, entry TemplateEntry, seen map[string]bool) error {
 	switch entry.Kind {
 	case "runtime":
-		if !slices.Contains(runtimeNames, entry.Runtime) || entry.ArchivePath != "" || seen["runtime:"+entry.Runtime] {
+		if !tfile.IsRuntime(entry.Runtime) || entry.ArchivePath != "" || seen["runtime:"+entry.Runtime] {
 			return fmt.Errorf("invalid runtime template entry %d", i)
 		}
 		seen["runtime:"+entry.Runtime] = true
@@ -363,103 +347,68 @@ func checkLayers(template Template, members map[string]Member, want map[string]b
 	return nil
 }
 
-// checkSkills rebuilds every manifest skill from its members and requires the
-// rebuilt metadata to equal the manifest's.
+// checkSkills rebuilds every manifest skill from its members, marks them in
+// want and validates the rebuilt set (internal/image checkV2PortableSkills).
 func checkSkills(skills []skill.Metadata, members map[string]Member, want map[string]bool) error {
-	tmp, err := os.MkdirTemp("", "tbox-archive-skills-")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(tmp)
 	prepared := make([]skill.Prepared, 0, len(skills))
 	roots := make(map[string]bool, len(skills))
 	for i, meta := range skills {
-		if meta.Source == "" || !slices.Contains(skillCategories, meta.Category) || !validSkillName(meta.Name) || meta.ArchiveRoot != skillsPrefix+meta.Name || roots[meta.ArchiveRoot] {
+		if meta.Source == "" || !slices.Contains(skillCategories, meta.Category) || meta.ArchiveRoot != skillsPrefix+meta.Name || roots[meta.ArchiveRoot] {
 			return fmt.Errorf("invalid schema-v2 skill metadata at index %d", i)
 		}
 		roots[meta.ArchiveRoot] = true
-		p, err := rebuildSkill(tmp, meta, members, want)
-		if err != nil {
+		files := skillFiles(meta, members, want)
+		if err := skill.ValidatePrepared(meta, files); err != nil {
 			return fmt.Errorf("invalid schema-v2 skill %q: %w", meta.Name, err)
 		}
-		prepared = append(prepared, p)
+		prepared = append(prepared, skill.Prepared{Metadata: meta, Files: files})
 	}
 	return skill.ValidateSet(prepared)
 }
 
-func validSkillName(name string) bool {
-	return name != "" && name != "." && name != ".." && !strings.ContainsAny(name, "/\\\x00")
-}
-
-// rebuildSkill writes the skill's members under tmp/<name> and prepares them
-// with skill.Prepare, which applies the frontmatter, size and tree-hash rules
-// of agentskills.ValidatePrepared. The result must equal meta.
-func rebuildSkill(tmp string, meta skill.Metadata, members map[string]Member, want map[string]bool) (skill.Prepared, error) {
-	dir := filepath.Join(tmp, meta.Name)
-	if err := os.Mkdir(dir, 0o700); err != nil {
-		return skill.Prepared{}, err
-	}
-	root, err := os.OpenRoot(dir)
-	if err != nil {
-		return skill.Prepared{}, err
-	}
-	defer root.Close()
+// skillFiles collects the members under the skill's archive root, sorted by
+// relative path, and marks them in want.
+func skillFiles(meta skill.Metadata, members map[string]Member, want map[string]bool) []skill.File {
 	prefix := meta.ArchiveRoot + "/"
+	files := make([]skill.File, 0, meta.FileCount)
 	for name, m := range members {
 		rel, ok := strings.CutPrefix(name, prefix)
 		if !ok {
 			continue
 		}
-		if err := writeRooted(root, rel, m); err != nil {
-			return skill.Prepared{}, err
-		}
+		files = append(files, skill.File{
+			RelativePath: rel,
+			Size:         int64(len(m.Body)),
+			SHA256:       sha256hex(m.Body),
+			Executable:   m.Mode == modeExecutable,
+			Body:         m.Body,
+		})
 		want[name] = true
 	}
-	p, err := skill.Prepare(dir, meta.Source, meta.Category)
-	if err != nil {
-		return skill.Prepared{}, err
-	}
-	got := p.Metadata
-	got.ClientVersion = meta.ClientVersion
-	if got != meta {
-		return skill.Prepared{}, errors.New("metadata does not match members")
-	}
-	p.Metadata = meta
-	return p, nil
+	sort.Slice(files, func(i, j int) bool { return files[i].RelativePath < files[j].RelativePath })
+	return files
 }
 
-func writeRooted(root *os.Root, rel string, m Member) error {
-	if parent := path.Dir(rel); parent != "." {
-		if err := root.MkdirAll(parent, 0o700); err != nil {
-			return err
-		}
-	}
-	f, err := root.OpenFile(rel, os.O_CREATE|os.O_EXCL|os.O_WRONLY, os.FileMode(m.Mode))
-	if err != nil {
-		return err
-	}
-	if _, err := f.Write(m.Body); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Chmod(os.FileMode(m.Mode)); err != nil {
-		f.Close()
-		return err
-	}
-	return f.Close()
-}
-
-// checkID requires the manifest id to be the content digest of the members.
-func checkID(man Manifest, members []Member) error {
-	if man.ID == "" {
-		return errors.New("image manifest id is missing")
-	}
+// contentID applies the id rule of internal/image archiveDigest and returns
+// the content digest of members, the identity tbox uses. An empty id (older
+// unversioned archives) and the legacy RefID(name, image_version) are
+// accepted as tariboy accepts them; any other id must equal the digest.
+func contentID(man Manifest, members []Member) (string, error) {
 	digest, err := ContentDigest(members)
 	if err != nil {
-		return err
+		return "", err
 	}
-	if digest != man.ID {
-		return errors.New("image manifest id does not match content digest")
+	if man.ID != "" && man.ID != legacyRefID(man.Name, man.ImageVersion) && man.ID != digest {
+		return "", errors.New("image manifest id does not match content digest")
 	}
-	return nil
+	return digest, nil
+}
+
+// legacyRefID is internal/image RefID: the id older releases derived from
+// the name and image_version. It is empty without an image_version.
+func legacyRefID(name, imageVersion string) string {
+	if imageVersion == "" {
+		return ""
+	}
+	return sha256hex([]byte(name + "\n" + imageVersion))
 }
