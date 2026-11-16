@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/alekzonder/tariboy/tbox/internal/version"
 )
 
 func run(args ...string) (int, string, string) {
@@ -15,7 +17,7 @@ func run(args ...string) (int, string, string) {
 func TestVersionCommand(t *testing.T) {
 	for _, a := range []string{"version", "--version"} {
 		code, out, _ := run(a)
-		if code != 0 || out != "0.1.0\n" {
+		if code != 0 || out != version.Version+"\n" {
 			t.Errorf("%s: code %d out %q", a, code, out)
 		}
 	}
@@ -52,7 +54,7 @@ func TestAgentModeGate(t *testing.T) {
 		t.Fatalf("skills with a broken directory: %d", code)
 	}
 	env.Args = []string{"version"}
-	if code := Main(env); code != 0 || out.String() != "0.1.0\n" {
+	if code := Main(env); code != 0 || out.String() != version.Version+"\n" {
 		t.Fatalf("version: %d %q", code, out.String())
 	}
 	env.Args = []string{"help"}
