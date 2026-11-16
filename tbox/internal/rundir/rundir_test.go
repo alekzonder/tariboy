@@ -107,3 +107,90 @@ func TestOpenRejectsBrokenDirectories(t *testing.T) {
 		t.Fatal("invalid manifest accepted")
 	}
 }
+
+func TestPrepareConcurrent(t *testing.T) {
+	home := paths.Home(t.TempDir())
+	img := fixtureImage(t, false)
+	ref := imgstore.Ref{Name: "demo", Tag: "latest"}
+	const n = 8
+	errs := make(chan error, n)
+	runs := make(chan Run, n)
+	for i := 0; i < n; i++ {
+		go func() {
+			run, err := Prepare(home, img, ref, "codex")
+			errs <- err
+			runs <- run
+		}()
+	}
+	var last Run
+	for i := 0; i < n; i++ {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+		last = <-runs
+	}
+	if !complete(last) {
+		t.Fatal("run is not complete")
+	}
+	first, err := os.Stat(filepath.Join(last.ImageDir, "manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Prepare(home, img, ref, "codex"); err != nil {
+		t.Fatal(err)
+	}
+	again, _ := os.Stat(filepath.Join(last.ImageDir, "manifest.json"))
+	if !os.SameFile(first, again) {
+		t.Fatal("complete run was replaced")
+	}
+}
+
+func TestPrepareSweepsStaleStages(t *testing.T) {
+	home := paths.Home(t.TempDir())
+	img := fixtureImage(t, false)
+	dir := home.RunDir(img.Manifest.Digest, "codex")
+	stale := filepath.Join(dir, ".stage-old")
+	if err := os.MkdirAll(stale, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Prepare(home, img, imgstore.Ref{Name: "demo", Tag: "latest"}, "codex"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("stale stage kept: %v", err)
+	}
+}
+
+func TestPromptNewlineRule(t *testing.T) {
+	img := fixtureImage(t, false)
+	for i := range img.Members {
+		switch img.Members[i].Name {
+		case img.Template.Entries[0].ArchivePath:
+			img.Members[i].Body = []byte("no newline")
+		case img.Template.Entries[1].ArchivePath:
+			img.Members[i].Body = []byte("with newline\n")
+		}
+	}
+	got, err := promptText(img)
+	if err != nil || string(got) != "no newline\n\nwith newline\n\n" {
+		t.Fatalf("%q %v", got, err)
+	}
+}
+
+func TestOpenRefusesSymlinkedSkillDir(t *testing.T) {
+	run, err := Prepare(paths.Home(t.TempDir()), fixtureImage(t, false), imgstore.Ref{Name: "demo", Tag: "latest"}, "codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	skillDir := filepath.Join(run.ImageDir, "skills", "hello-skill")
+	moved := filepath.Join(t.TempDir(), "elsewhere")
+	if err := os.Rename(skillDir, moved); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(moved, skillDir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(run.ImageDir); err == nil {
+		t.Fatal("symlinked skill directory accepted")
+	}
+}

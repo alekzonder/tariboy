@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/alekzonder/tariboy/tbox/internal/archive"
 	"github.com/alekzonder/tariboy/tbox/internal/fsafe"
@@ -68,6 +69,16 @@ func Prepare(home paths.Home, img archive.Image, ref imgstore.Ref, harness strin
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return Run{}, err
 	}
+	unlock, err := lockDir(dir)
+	if err != nil {
+		return Run{}, err
+	}
+	defer unlock()
+	// Another process may have finished the run while this one waited.
+	if complete(run) {
+		return run, nil
+	}
+	sweepStages(dir)
 	stage, err := os.MkdirTemp(dir, ".stage-")
 	if err != nil {
 		return Run{}, err
@@ -83,7 +94,9 @@ func Prepare(home paths.Home, img archive.Image, ref imgstore.Ref, harness strin
 	if err := os.WriteFile(filepath.Join(stage, promptName), prompt, 0o600); err != nil {
 		return Run{}, err
 	}
-	// The image directory is renamed last: its presence marks a complete run.
+	// Under the lock a run that is not complete is a leftover of a crash and
+	// is replaced; a complete run is never removed. The image directory is
+	// renamed last: its presence marks a complete run.
 	for _, name := range []string{promptName, "image"} {
 		target := filepath.Join(dir, name)
 		if err := os.RemoveAll(target); err != nil {
@@ -94,6 +107,28 @@ func Prepare(home paths.Home, img archive.Image, ref imgstore.Ref, harness strin
 		}
 	}
 	return run, nil
+}
+
+// lockDir takes an exclusive lock on <dir>/.lock and returns its release.
+func lockDir(dir string) (func(), error) {
+	f, err := os.OpenFile(filepath.Join(dir, ".lock"), os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		f.Close()
+		return nil, err
+	}
+	return func() { f.Close() }, nil
+}
+
+// sweepStages removes staging directories left by crashed runs. The caller
+// holds the lock, so none of them is in use.
+func sweepStages(dir string) {
+	stages, _ := filepath.Glob(filepath.Join(dir, ".stage-*"))
+	for _, s := range stages {
+		_ = os.RemoveAll(s)
+	}
 }
 
 func complete(run Run) bool {
@@ -172,7 +207,7 @@ func Open(imageDir string) (Run, error) {
 		if s.Name == "" || !filepath.IsLocal(s.ArchiveRoot) {
 			return Run{}, fmt.Errorf("image manifest has an invalid skill %q", s.Name)
 		}
-		if info, err := os.Stat(filepath.Join(imageDir, s.ArchiveRoot)); err != nil || !info.IsDir() {
+		if info, err := os.Lstat(filepath.Join(imageDir, s.ArchiveRoot)); err != nil || !info.IsDir() {
 			return Run{}, fmt.Errorf("skill %s is missing from the image directory", s.Name)
 		}
 	}
