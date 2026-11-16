@@ -122,6 +122,9 @@ func Import(r io.Reader) (archive.Image, imgstore.Ref, error) {
 	if err != nil {
 		return archive.Image{}, imgstore.Ref{}, fmt.Errorf("image portable: invalid runnable artifact: %w", err)
 	}
+	if img.Manifest.Name != ref.Name {
+		return archive.Image{}, imgstore.Ref{}, errors.New("image portable: invalid runnable artifact: name mismatch")
+	}
 	if img.Manifest.Digest != meta.Digest {
 		return archive.Image{}, imgstore.Ref{}, errors.New("image portable: image digest mismatch")
 	}

@@ -22,22 +22,22 @@ func inCwd(env *Env, p string) string {
 }
 
 func runExport(env *Env, args []string) int {
-	fs := newFlags("image export", env.Stderr)
-	out := fs.String("o", "", "output file (default: NAME-TAG.tariboy-image.tar.gz in the current directory)")
-	force := fs.Bool("force", false, "overwrite an existing output file")
+	flags := newFlags("image export", env.Stderr)
+	out := flags.String("o", "", "output file (default: NAME-TAG.tariboy-image.tar.gz in the current directory)")
+	force := flags.Bool("force", false, "overwrite an existing output file")
 	var refText string
 	for {
-		if err := fs.Parse(args); err != nil {
+		if err := flags.Parse(args); err != nil {
 			return 2
 		}
-		if fs.NArg() == 0 {
+		if flags.NArg() == 0 {
 			break
 		}
 		if refText != "" {
 			fmt.Fprintln(env.Stderr, "usage: tbox image export REF [-o FILE] [--force]")
 			return 2
 		}
-		refText, args = fs.Arg(0), fs.Args()[1:]
+		refText, args = flags.Arg(0), flags.Args()[1:]
 	}
 	if refText == "" {
 		fmt.Fprintln(env.Stderr, "usage: tbox image export REF [-o FILE] [--force]")
@@ -72,11 +72,11 @@ func runExport(env *Env, args []string) int {
 }
 
 func runImport(env *Env, args []string) int {
-	fs := newFlags("image import", env.Stderr)
-	if err := fs.Parse(args); err != nil {
+	flags := newFlags("image import", env.Stderr)
+	if err := flags.Parse(args); err != nil {
 		return 2
 	}
-	if fs.NArg() != 1 {
+	if flags.NArg() != 1 {
 		fmt.Fprintln(env.Stderr, "usage: tbox image import FILE")
 		return 2
 	}
@@ -84,7 +84,7 @@ func runImport(env *Env, args []string) int {
 	if err != nil {
 		return fail(env, err)
 	}
-	f, err := os.Open(inCwd(env, fs.Arg(0)))
+	f, err := os.Open(inCwd(env, flags.Arg(0)))
 	if err != nil {
 		return fail(env, err)
 	}
