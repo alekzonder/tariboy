@@ -1,5 +1,6 @@
 // Package tfile parses Tariboyfile.yaml (schema v2 and v3), flattens extends
-// and resolves local entries. It does not fetch remote sources.
+// and resolves local entries. Remote entries are fetched by the source
+// package.
 package tfile
 
 import (

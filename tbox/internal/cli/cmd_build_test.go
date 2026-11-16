@@ -3,10 +3,16 @@ package cli
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/alekzonder/tariboy/tbox/internal/gitx"
+	"github.com/alekzonder/tariboy/tbox/internal/paths"
+	"github.com/alekzonder/tariboy/tbox/internal/source"
 )
 
 func runIn(t *testing.T, home, cwd string, args ...string) (int, string, string) {
@@ -104,5 +110,56 @@ func TestBuildErrors(t *testing.T) {
 	}
 	if code, _, errs := runIn(t, home, "/", "build", "--path", demoSource(t), "--name", "My Image"); code != 1 || !strings.Contains(errs, "invalid image name") {
 		t.Fatalf("bad name %d %q", code, errs)
+	}
+}
+
+func TestBuildUpdatePrintsUpdatedLine(t *testing.T) {
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+	t.Setenv("GIT_AUTHOR_NAME", "t")
+	t.Setenv("GIT_AUTHOR_EMAIL", "t@example.com")
+	t.Setenv("GIT_COMMITTER_NAME", "t")
+	t.Setenv("GIT_COMMITTER_EMAIL", "t@example.com")
+	gitRun := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	repo := filepath.Join(t.TempDir(), "origin")
+	writeFile(t, filepath.Join(repo, "skills/gamma/SKILL.md"), "---\nname: gamma\ndescription: Gamma\n---\none\n")
+	gitRun(repo, "init", "-q", "-b", "main")
+	gitRun(repo, "add", ".")
+	gitRun(repo, "commit", "-q", "-m", "first")
+
+	prev := newResolver
+	newResolver = func(home paths.Home) *source.Resolver {
+		return &source.Resolver{Home: home, Git: gitx.Git{AllowLocal: true}}
+	}
+	t.Cleanup(func() { newResolver = prev })
+
+	dir := filepath.Join(t.TempDir(), "remote-demo")
+	writeFile(t, filepath.Join(dir, "Tariboyfile.yaml"), "schema_version: 3\nimage_version: 1.0.0\nskills:\n  - git: "+repo+"\n    path: skills/gamma\n")
+	home := t.TempDir()
+	if code, _, errs := runIn(t, home, "/", "build", "--path", dir); code != 0 {
+		t.Fatalf("first build %d %q", code, errs)
+	}
+	writeFile(t, filepath.Join(repo, "skills/gamma/SKILL.md"), "---\nname: gamma\ndescription: Gamma\n---\ntwo\n")
+	gitRun(repo, "commit", "-q", "-am", "second")
+	code, out, errs := runIn(t, home, "/", "build", "--path", dir, "--update")
+	if code != 0 {
+		t.Fatalf("update build %d %q", code, errs)
+	}
+	var line string
+	for _, l := range strings.Split(out, "\n") {
+		if strings.HasPrefix(l, "updated ") {
+			line = l
+		}
+	}
+	f := strings.Fields(line)
+	if len(f) != 3 || !strings.Contains(f[1], repo) || !regexp.MustCompile(`^[0-9a-f]{7}\.\.[0-9a-f]{7}$`).MatchString(f[2]) {
+		t.Fatalf("output %q", out)
 	}
 }

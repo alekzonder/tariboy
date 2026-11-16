@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/alekzonder/tariboy/tbox/internal/archive"
+	"github.com/alekzonder/tariboy/tbox/internal/flock"
 	"github.com/alekzonder/tariboy/tbox/internal/fsafe"
 	"github.com/alekzonder/tariboy/tbox/internal/imgstore"
 	"github.com/alekzonder/tariboy/tbox/internal/paths"
@@ -113,15 +113,7 @@ func Prepare(home paths.Home, img archive.Image, ref imgstore.Ref, harness strin
 // The directory must exist. Other packages use it to serialize their own
 // writes into a directory shared by simultaneous launches.
 func LockDir(dir string) (func(), error) {
-	f, err := os.OpenFile(filepath.Join(dir, ".lock"), os.O_RDWR|os.O_CREATE, 0o600)
-	if err != nil {
-		return nil, err
-	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		f.Close()
-		return nil, err
-	}
-	return func() { f.Close() }, nil
+	return flock.Lock(filepath.Join(dir, ".lock"))
 }
 
 // sweepStages removes staging directories left by crashed runs. The caller

@@ -11,8 +11,8 @@ import (
 
 const maxExtendsDepth = 16
 
-// ErrRemoteUnsupported is returned for git and url entries until remote
-// sources are implemented.
+// ErrRemoteUnsupported is returned by the local resolvers for git and url
+// entries; the source package fetches those.
 var ErrRemoteUnsupported = fmt.Errorf("remote sources are not supported yet")
 
 // Load parses the Tariboyfile in dir and flattens its extends chain. Parents
