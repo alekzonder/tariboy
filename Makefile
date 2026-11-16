@@ -56,7 +56,7 @@ build:
 	$(GO) build -trimpath -o $(BINDIR)/tariboy-tasks ./cmd/tariboy-tasks
 	$(GO) build -trimpath -o $(BINDIR)/tariboy-mail ./cmd/tariboy-mail
 	$(GO) build -trimpath -o $(BINDIR)/tariboy-scripts ./cmd/tariboy-scripts
-	cd tbox && $(GO) build -trimpath -o ../$(BINDIR)/tbox ./cmd/tbox
+	cd tbox && $(GO) build -trimpath -o $(abspath $(BINDIR))/tbox ./cmd/tbox
 
 install:
 	$(MAKE) build

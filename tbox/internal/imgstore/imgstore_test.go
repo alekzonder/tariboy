@@ -131,3 +131,31 @@ func TestFingerprintRoundTrip(t *testing.T) {
 		t.Fatal("bad name accepted")
 	}
 }
+
+func TestSourceDirIsKeptAcrossFingerprintUpdates(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	if _, ok := s.SourceDir("demo"); ok {
+		t.Fatal("source dir of an unbuilt image")
+	}
+	if err := s.SetSourceDir("demo", "/a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s.SourceDir("demo"); ok {
+		t.Fatal("source dir recorded without a fingerprint")
+	}
+	if err := s.SetFingerprint("demo", "fp1", "d1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetSourceDir("demo", "/a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetFingerprint("demo", "fp2", "d2"); err != nil {
+		t.Fatal(err)
+	}
+	if dir, ok := s.SourceDir("demo"); !ok || dir != "/a" {
+		t.Fatalf("source dir %q %v", dir, ok)
+	}
+	if fp, d, ok := s.Fingerprint("demo"); !ok || fp != "fp2" || d != "d2" {
+		t.Fatalf("fingerprint %q %q %v", fp, d, ok)
+	}
+}

@@ -16,6 +16,9 @@ import (
 // script calls it back with TBOX_E2E_CHILD=1.
 func TestMain(m *testing.M) {
 	if os.Getenv("TBOX_E2E_CHILD") == "1" {
+		if os.Getenv("TBOX_E2E_LOCAL") == "1" {
+			cli.UseLocalGit()
+		}
 		cwd, _ := os.Getwd()
 		os.Exit(cli.Main(cli.Env{
 			Args: os.Args[1:], Getenv: os.Getenv, Environ: os.Environ,

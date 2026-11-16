@@ -13,9 +13,9 @@ There is no daemon, mail, task loop, AI proxy, tmux or budget. It is a separate
 Go module with its own version (`tbox version`) and imports no Tariboy
 package.
 
-Stage 1, described here, covers local source directories. Stores, `git` and
-`url` sources, the image constructor and interactive selection are planned for
-stages 2 and 3 and do not exist yet.
+Image sources are local directories or Stores, and a v3 Tariboyfile may pull
+skills and prompts from `git` and `url` sources. The image constructor and
+interactive selection are planned for stage 3 and do not exist yet.
 
 ## Install
 
@@ -34,15 +34,20 @@ minimum before anything starts.
 
 | Command | Does |
 | --- | --- |
-| `tbox build [--path DIR] [--name NAME] [--tag TAG]...` | Build the image of a source directory. |
-| `tbox images` | List the built images. |
+| `tbox build [--path DIR] [--name NAME] [--tag TAG]... [--update]` | Build the image of a source directory. |
+| `tbox build STORE/IMAGE [--name NAME] [--tag TAG]... [--update]` | Build an image of a Store. |
+| `tbox images` | List the built images, then the images of the Stores. |
 | `tbox image show REF`, `tbox image rm REF` | Show or remove a built image. |
 | `tbox image export REF [-o FILE] [--force]` | Write a portable archive. |
 | `tbox image import FILE` | Install a portable archive. |
 | `tbox run IMAGE HARNESS [-- ARGS...]` | Start a harness session. |
+| `tbox run STORE/IMAGE HARNESS [-- ARGS...]` | Build if changed, then start. |
 | `tbox run --path DIR HARNESS [-- ARGS...]` | Build if changed, then start. |
+| `tbox store add NAME SOURCE [--ref REF]`, `list`, `show NAME`, `refresh NAME`, `ref NAME REF`, `remove NAME` | Manage Stores. |
+| `tbox skills`, `tbox skill STORE/SKILL` | List the skills of all Stores, or show one. |
+| `tbox prompts`, `tbox prompt STORE/PROMPT` | List the prompts of all Stores, or print one. |
 | `tbox clean [IMAGE]` | Remove run directories and harness files. |
-| `tbox skills`, `tbox skill NAME`, `tbox skill exec NAME SCRIPT [ARGS...]` | In-session commands. |
+| `tbox skills`, `tbox skill NAME`, `tbox skill exec NAME SCRIPT [ARGS...]` | In-session commands, see "Inside a session". |
 | `tbox version` | Print the version. |
 
 ## The `$TBOX_HOME` layout
@@ -51,6 +56,10 @@ The root is `$TBOX_HOME`, by default `~/.tbox`.
 
 ```text
 ~/.tbox/
+  stores.json                          registered Stores
+  stores/<name>/                       clone or unpacked archive of a Store
+  cache/sources/<hash of the address>/ cache of remote skills and prompts
+  locks/<hash>.json                    lock files of read-only sources
   images/<name>/refs/<digest>.tar.gz   built images
   images/<name>/tags/<tag>             pointer to a digest
   run/<digest>/<harness>/              run directory
@@ -58,9 +67,71 @@ The root is `$TBOX_HOME`, by default `~/.tbox`.
 
 `images/` follows the layout of the Tariboy image store, so the tag rules and
 `latest` are the same. Besides the archives, `images/<name>/` keeps the source
-fingerprint of the last build. A run directory holds the unpacked image
+fingerprint of the last build and the source directory it came from. A run directory holds the unpacked image
 (`image/`), the joined prompt (`PROMPT.md`) and the files generated for that
 harness. `tbox` never writes into your working directory.
+
+## Stores
+
+A Store is a place that holds images, skills and prompts. Its content is
+untrusted: `tbox` reads it and never executes anything from it, and never
+writes into a Store directory.
+
+```bash
+tbox store add tariboy https://github.com/alekzonder/tariboy-store.git
+tbox store add team git@github.com:team/store.git --ref v2
+tbox store add local ./my-store
+tbox store list
+tbox store show tariboy
+tbox store refresh tariboy
+tbox store ref tariboy main
+tbox store remove tariboy
+```
+
+| Source | `add` | `refresh` |
+| --- | --- | --- |
+| git: `https://`, `ssh://`, `user@host:path`, `owner/repo` (GitHub) | Clones into `stores/<name>/`. | Fetches the selected ref. |
+| `https://` archive, `.tar.gz`, `.tgz` or `.zip` | Downloads and unpacks. | Downloads again and swaps the tree. |
+| A directory, relative or absolute | Records the absolute path and reads it in place. | Changes nothing. |
+
+`--ref` (branch, tag or commit) and `tbox store ref` apply to git Stores only;
+`tbox store ref NAME ""` returns to the default branch. `store remove` deletes
+the clone or unpacked archive that `tbox` made, never a directory Store and
+never built images. A Store name is lower-case letters, digits, `.`, `_` and
+`-`.
+
+The inventory of a Store:
+
+- images: `images/<name>/Tariboyfile.yaml`;
+- skills: `skills/<name>/SKILL.md`. When there is no `skills/` directory,
+  `tbox` looks in `SKILL.md` at the Store root, `.agents/skills/` and
+  `.claude/skills/`;
+- prompts: `prompts/<name>.md`.
+
+`workflows/` and everything else is ignored. A broken image, skill or prompt
+is listed with its error and does not hide the others. Symlinks below the Store
+root are not followed.
+
+Items are addressed as `<store>/<name>`: `tbox build tariboy/developer`,
+`tbox skill tariboy/review`, `tbox prompt tariboy/process`. A bare name is an
+error that lists the matching `<store>/<name>` candidates. `tbox skill
+STORE/SKILL` prints the description, the sorted list of files and `SKILL.md`;
+`tbox prompt STORE/PROMPT` prints the file as it is (at most 4 MiB). All other
+text from a Store, such as names and descriptions, is printed with control
+characters replaced.
+
+`tbox images` ends with a table `STORE/IMAGE  VERSION  STATUS`. The status is
+`built` when a built image of that name has the same `image_version`,
+`not built`, or the error of the row.
+
+Security rules: a URL with user-info is rejected, as is a git ref that is empty,
+starts with `-`, holds `..`, a space or a control character, or is longer than
+255 characters. `git` runs with an argument array, a time limit, no prompts and
+no hooks. `http://`, `file://`, `ext::` and local paths are not accepted as git
+or archive addresses. An archive is unpacked with regular files and directories
+only, no symlinks, hardlinks, absolute or `..` paths, at most 4096 members, 64
+MiB compressed, 256 MiB unpacked and 512 bytes per path; a single top-level
+directory is stripped. Error messages never carry raw `git` output.
 
 ## Build and change detection
 
@@ -69,7 +140,9 @@ tbox build --path ./my-image
 ```
 
 The source is a directory with a `Tariboyfile.yaml` of `schema_version` 2 or 3.
-The name defaults to the directory name. Without `--tag` the image is published
+`tbox build STORE/IMAGE` uses `images/<image>` of the Store; `--path` and a
+selector exclude each other. The name defaults to the directory name, so to the
+image name for a Store image, not `store/image`. Without `--tag` the image is published
 under its `image_version` and under `latest`. The archive uses the Tariboy
 schema v2 format byte for byte, so Tariboy imports it.
 
@@ -83,18 +156,76 @@ When the content changed under an unchanged `image_version`, the version tag and
 different from Tariboy, which refuses to rebuild the same version with other
 content. The previous archive stays in `refs/` until `tbox image rm` removes it.
 
+Two Stores can hold an image of the same name. They build into the same image
+name, and the later build moves the tags. `tbox` then prints the `moved` line
+and `note: image <name> now comes from <store>/<image>`; use `--name` to keep
+both.
+
+### Remote entries and `tbox-lock.json`
+
+In a v3 Tariboyfile a skill is exactly one of `dir`, `git` or `url`, and a
+prompt one of `file`, `git`, `url` or `runtime`:
+
+```yaml
+schema_version: 3
+skills:
+  - git: https://github.com/obra/superpowers
+    path: skills/brainstorming
+    ref: v5.0.0
+  - url: https://example.com/some-skill.tar.gz
+prompts:
+  - git: https://github.com/company/prompts
+    path: process/review.md
+  - url: https://example.com/review.md
+```
+
+`git` needs `path`; `ref` is a branch, tag or commit, and without it the default
+branch is used. A skill `url` is an `https://` archive with the skill at its
+root; a prompt `url` is one Markdown file. Remote content is cached in
+`cache/sources/`.
+
+The first build pins every remote entry in `tbox-lock.json`: the address, the
+commit (git) and the content hash. Later builds take the commit from the file.
+The lock file is written next to the Tariboyfile when that directory is
+writable and is not inside `$TBOX_HOME/stores`; otherwise it goes to
+`$TBOX_HOME/locks/`. `tbox build --update` resolves every remote entry again,
+rewrites the lock file and prints an `updated <address> <old>..<new>` line per
+changed commit.
+
+The change check never uses the network: remote entries count by their lock
+records and the cache. The network is used only by `tbox build --update`,
+`tbox store add`, `tbox store refresh` and the first resolution of an entry
+that has no lock record. Offline, an unchanged image still runs; a build that
+needs an uncached remote entry fails with the entry named.
+
+### `skills-lock.json` in v2 images
+
+A schema v2 image can come from the `npx skills` tooling, with
+`skills-lock.json` next to the Tariboyfile or at the Store root and no
+`.agents/skills/` in the checkout. `tbox` restores those skills itself, in a
+temporary build directory, and does not change the Store. It supports `github`
+sources (`source` plus `skillPath`, fetched at the default branch since the v2
+lock holds no commit) and `local` sources. A computed hash that differs from
+the content is a warning naming the skill, not an error. An image that declares
+`plugins` also gets a warning, because some of its skills may need the Tariboy
+daemon.
+
+Warnings go to stderr, one per line, prefixed `warning: `.
+
 ## Run
 
 ```bash
 tbox run my-image claude
 tbox run my-image:0.2.0 codex -- --model gpt-5
+tbox run tariboy/developer claude
 tbox run --path ./my-image opencode
 ```
 
 `IMAGE` is a built image, `name` or `name:tag`; the tag defaults to `latest`.
 `--path DIR` replaces it: `tbox` builds the directory if its content changed
-and runs the result. A name that contains `/` is a Store selector, which
-arrives with Stores in stage 2; it is an error for now. `HARNESS` is `claude`,
+and runs the result. A name that contains `/` is a Store selector: `tbox` builds
+`STORE/IMAGE` if its content changed and runs the image under its image name.
+A second run without changes prints no `built` line. `HARNESS` is `claude`,
 `codex` or `opencode`. An unknown harness exits with code 2 and lists the known
 ones. A missing image exits with code 1 and lists the built images. Without both
 arguments `tbox run` exits with code 2 and prints its usage; interactive
@@ -229,10 +360,7 @@ the daemon are still in it. Compatibility is covered by shared fixtures in
 
 - Global skills of the user stay visible to every harness next to the skills of
   the image. `tbox` does not isolate the session.
-- Stage 1 builds only local `dir` and `file` entries. Stores, `git` and `url`
-  entries, `tbox-lock.json` and the commands `store`, `skills` and `prompts`
-  outside a session arrive in stage 2. `tbox image new` and interactive
-  `tbox run` arrive in stage 3.
+- `tbox image new` and interactive `tbox run` arrive in stage 3.
 - Tariboy does not understand `schema_version: 3` yet, so a v3 source builds in
   `tbox` only. The archive that `tbox` writes is schema v2.
 - The harness adapters were verified against Claude Code 2.1.325, Codex 0.166.0

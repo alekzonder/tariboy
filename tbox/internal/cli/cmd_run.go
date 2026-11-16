@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -18,7 +17,7 @@ import (
 
 func init() { commands["run"] = runRun }
 
-const runUsage = "usage: tbox run IMAGE HARNESS [-- ARGS...]\n       tbox run --path DIR HARNESS [-- ARGS...]\n"
+const runUsage = "usage: tbox run IMAGE|STORE/IMAGE HARNESS [-- ARGS...]\n       tbox run --path DIR HARNESS [-- ARGS...]\n"
 
 // runRun starts a harness session with an image. On success the process is
 // replaced by the harness, so tbox does not stay in the process tree.
@@ -51,7 +50,7 @@ func runRun(env *Env, args []string) int {
 		return fail(env, err)
 	}
 	store := imgstore.Store{Dir: home.ImagesDir()}
-	ref, code := resolveRunRef(env, home, store, *path, pos)
+	ref, code := resolveRunRef(env, home, *path, pos)
 	if code != 0 {
 		return code
 	}
@@ -71,6 +70,10 @@ func runRun(env *Env, args []string) int {
 		fmt.Fprintln(env.Stderr, note)
 	}
 	err = env.Exec(launch.Path, launch.Argv, mergeEnv(sessionEnviron(env), launch.Env))
+	if err == nil {
+		// Only a test fake returns nil; a real exec does not return.
+		return 0
+	}
 	return fail(env, fmt.Errorf("start %s: %w", harnessName, err))
 }
 
@@ -83,33 +86,48 @@ func splitDashDash(args []string) (own, extra []string) {
 	return args, nil
 }
 
-// resolveRunRef returns the image to run, building it first for --path.
-func resolveRunRef(env *Env, home paths.Home, store imgstore.Store, path string, pos []string) (imgstore.Ref, int) {
-	if path != "" {
-		dir := path
-		if !filepath.IsAbs(dir) {
-			dir = filepath.Join(env.Cwd, dir)
+// resolveRunRef returns the image to run, building it first for --path and
+// for a STORE/IMAGE selector.
+func resolveRunRef(env *Env, home paths.Home, path string, pos []string) (imgstore.Ref, int) {
+	opts := build.Options{Tags: []string{"latest"}}
+	label := ""
+	switch {
+	case path != "":
+		opts.SourceDir = absDir(env, path)
+	case strings.Contains(pos[0], "/"):
+		var err error
+		if opts.SourceDir, opts.StoreRoot, err = storeImageDir(env, home, pos[0]); err != nil {
+			return imgstore.Ref{}, fail(env, err)
 		}
-		res, err := build.Build(build.Options{SourceDir: dir, Tags: []string{"latest"}, Store: store, Now: env.Now, Resolver: newResolver(home)})
+		label = pos[0]
+	default:
+		ref, err := imgstore.ParseRef(pos[0])
 		if err != nil {
 			return imgstore.Ref{}, fail(env, err)
 		}
-		printWarnings(env, res)
-		if res.Built {
-			fmt.Fprintf(env.Stderr, "built %s:latest %s\n", res.Name, res.Digest)
-		} else {
-			fmt.Fprintf(env.Stderr, "up to date %s %s\n", res.Name, res.Digest)
-		}
-		return imgstore.Ref{Name: res.Name, Tag: "latest"}, 0
+		return ref, 0
 	}
-	if strings.Contains(pos[0], "/") {
-		return imgstore.Ref{}, fail(env, fmt.Errorf("%q looks like a Store selector; Stores arrive in stage 2, until then run a built image by name[:tag]", pos[0]))
-	}
-	ref, err := imgstore.ParseRef(pos[0])
+	res, err := buildImage(env, home, opts, label)
 	if err != nil {
 		return imgstore.Ref{}, fail(env, err)
 	}
-	return ref, 0
+	printWarnings(env, res.Result)
+	printRunBuild(env, res)
+	return imgstore.Ref{Name: res.Name, Tag: "latest"}, 0
+}
+
+func printRunBuild(env *Env, res builtResult) {
+	if res.Built {
+		fmt.Fprintf(env.Stderr, "built %s:latest %s\n", res.Name, res.Digest)
+	} else {
+		fmt.Fprintf(env.Stderr, "up to date %s %s\n", res.Name, res.Digest)
+	}
+	for _, tag := range res.Moved {
+		fmt.Fprintf(env.Stderr, "moved %s to new content\n", tag)
+	}
+	if res.note != "" {
+		fmt.Fprintln(env.Stderr, res.note)
+	}
 }
 
 // failMissing reports a missing image together with the built images.

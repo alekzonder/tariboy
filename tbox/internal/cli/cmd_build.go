@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -11,6 +12,8 @@ import (
 	"github.com/alekzonder/tariboy/tbox/internal/imgstore"
 	"github.com/alekzonder/tariboy/tbox/internal/paths"
 	"github.com/alekzonder/tariboy/tbox/internal/source"
+	"github.com/alekzonder/tariboy/tbox/internal/stores"
+	"github.com/alekzonder/tariboy/tbox/internal/textsafe"
 )
 
 func init() {
@@ -39,7 +42,7 @@ func openStore(env *Env) (imgstore.Store, error) {
 }
 
 func fail(env *Env, err error) int {
-	fmt.Fprintf(env.Stderr, "tbox: %v\n", err)
+	fmt.Fprintf(env.Stderr, "tbox: %s\n", textsafe.Line(err.Error(), 2000))
 	return 1
 }
 
@@ -50,38 +53,114 @@ func newFlags(name string, w io.Writer) *flag.FlagSet {
 }
 
 func runBuild(env *Env, args []string) int {
-	fs := newFlags("build", env.Stderr)
-	path := fs.String("path", "", "directory of the Tariboyfile")
-	name := fs.String("name", "", "image name (default: the directory name)")
+	var path, name string
 	var tags tagList
-	update := fs.Bool("update", false, "re-resolve remote entries and rewrite tbox-lock.json")
-	fs.Var(&tags, "tag", "tag to publish; repeatable (default: image_version and latest)")
-	if err := fs.Parse(args); err != nil {
+	var update bool
+	pos, err := parseInterleaved(env, "build", args, func(fs *flag.FlagSet) {
+		fs.StringVar(&path, "path", "", "directory of the Tariboyfile")
+		fs.StringVar(&name, "name", "", "image name (default: the directory name)")
+		fs.BoolVar(&update, "update", false, "re-resolve remote entries and rewrite tbox-lock.json")
+		fs.Var(&tags, "tag", "tag to publish; repeatable (default: image_version and latest)")
+	})
+	if err != nil {
 		return 2
 	}
-	if fs.NArg() > 0 {
-		fmt.Fprintf(env.Stderr, "tbox build: unexpected argument %q\n", fs.Arg(0))
+	if len(pos) > 1 || (len(pos) == 1 && path != "") {
+		fmt.Fprintln(env.Stderr, "usage: tbox build [STORE/IMAGE | --path DIR] [--name N] [--tag T]... [--update]")
 		return 2
 	}
 	home, err := paths.Resolve(env.Getenv)
 	if err != nil {
 		return fail(env, err)
 	}
-	store := imgstore.Store{Dir: home.ImagesDir()}
-	dir := *path
+	opts := build.Options{Name: name, Tags: tags, Update: update}
+	var label string
+	if len(pos) == 1 {
+		opts.SourceDir, opts.StoreRoot, err = storeImageDir(env, home, pos[0])
+		label = pos[0]
+	} else {
+		opts.SourceDir, label = absDir(env, path), ""
+	}
+	if err != nil {
+		return fail(env, err)
+	}
+	res, err := buildImage(env, home, opts, label)
+	if err != nil {
+		return fail(env, err)
+	}
+	printWarnings(env, res.Result)
+	printBuild(env, res.Result)
+	if res.note != "" {
+		fmt.Fprintln(env.Stdout, res.note)
+	}
+	return 0
+}
+
+// absDir makes dir absolute against the working directory; empty means ".".
+func absDir(env *Env, dir string) string {
 	if dir == "" {
 		dir = "."
 	}
 	if !filepath.IsAbs(dir) {
 		dir = filepath.Join(env.Cwd, dir)
 	}
-	res, err := build.Build(build.Options{SourceDir: dir, Name: *name, Tags: tags, Store: store, Now: env.Now, Update: *update, Resolver: newResolver(home)})
-	if err != nil {
-		return fail(env, err)
+	return dir
+}
+
+// storeImageDir returns the source directory of the image STORE/IMAGE and the
+// root of its Store. The directory is never reached through a symlink.
+func storeImageDir(env *Env, home paths.Home, arg string) (dir, root string, err error) {
+	sel, ok := stores.ParseSelector(arg)
+	if !ok {
+		return "", "", fmt.Errorf("%q is not STORE/IMAGE", arg)
 	}
-	printWarnings(env, res)
-	printBuild(env, res)
-	return 0
+	if err := imgstore.CheckName(sel.Name); err != nil {
+		return "", "", err
+	}
+	reg := newRegistry(home, env.Cwd)
+	s, err := reg.Get(sel.Store)
+	if err != nil {
+		return "", "", err
+	}
+	root = reg.Root(s)
+	dir = filepath.Join(root, "images", sel.Name)
+	if fi, lerr := os.Lstat(dir); lerr != nil || !fi.IsDir() {
+		return "", "", fmt.Errorf("store %s has no image %q", sel.Store, sel.Name)
+	}
+	return dir, root, nil
+}
+
+// builtResult is a build result with the note about a moved image name.
+type builtResult struct {
+	build.Result
+	note string
+}
+
+// buildImage builds opts, resolving remote entries with the production
+// resolver, and records the source directory beside the fingerprint. The note
+// is set when the previous build of the same image name came from another
+// directory; label names the new source in it, or is empty for the directory.
+func buildImage(env *Env, home paths.Home, opts build.Options, label string) (builtResult, error) {
+	opts.Store = imgstore.Store{Dir: home.ImagesDir()}
+	opts.Now = env.Now
+	opts.Resolver = newResolver(home)
+	res, err := build.Build(opts)
+	if err != nil {
+		return builtResult{}, err
+	}
+	out := builtResult{Result: res}
+	dir, rerr := filepath.Abs(opts.SourceDir)
+	if rerr != nil {
+		return out, nil
+	}
+	if prev, ok := opts.Store.SourceDir(res.Name); ok && prev != dir {
+		if label == "" {
+			label = dir
+		}
+		out.note = fmt.Sprintf("note: image %s now comes from %s", safe(res.Name), safe(label))
+	}
+	_ = opts.Store.SetSourceDir(res.Name, dir)
+	return out, nil
 }
 
 // printWarnings writes each build warning to stderr.
