@@ -1,0 +1,26 @@
+// Command tbox runs tariboy agent images in ordinary harness sessions.
+package main
+
+import (
+	"os"
+	"os/exec"
+	"syscall"
+	"time"
+
+	"github.com/alekzonder/tariboy/tbox/internal/cli"
+)
+
+func main() {
+	cwd, _ := os.Getwd()
+	os.Exit(cli.Main(cli.Env{
+		Args:     os.Args[1:],
+		Getenv:   os.Getenv,
+		Stdin:    os.Stdin,
+		Stdout:   os.Stdout,
+		Stderr:   os.Stderr,
+		Cwd:      cwd,
+		Exec:     syscall.Exec,
+		LookPath: exec.LookPath,
+		Now:      time.Now,
+	}))
+}

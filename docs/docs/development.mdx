@@ -172,7 +172,7 @@ make full-check      # heavy, tens of minutes, includes check
 Run `make backend-check` for backend-only changes and `make frontend-check` for
 frontend- or documentation-only changes. Run `make check` for mixed changes or
 when ownership is unclear. The backend target runs `fmt-check`, `vet`,
-`staticcheck`, `gocyclo`, `gocognit`, `test`, Go unit tests, `desktop-rust-check` and
+`staticcheck`, `gocyclo`, `gocognit`, `test`, `tbox-check`, Go unit tests, `desktop-rust-check` and
 smoke contracts. Its
 `test` and `tariboy-tasks-e2e` steps also check the HTTP API against the
 committed OpenAPI snapshot; see [Go control plane and plugins](#go-control-plane-and-plugins). The
@@ -345,6 +345,18 @@ git clean -ndx
 ```
 
 ### Go control plane and plugins
+
+### tbox
+
+`tbox/` is a separate Go module (`tbox/go.mod`, module path
+`github.com/alekzonder/tariboy/tbox`) that builds the standalone `tbox` binary.
+`make build` writes it to `bin/tbox`. The root `go list ./...` does not
+descend into it, and no file under `tbox/` may import a tariboy package
+outside `tbox/`; `TestNoTariboyImports` enforces this. `make tbox-check`
+runs `tbox-fmt-check`, `tbox-vet`, `tbox-staticcheck`, `tbox-complexity` (the
+same `gocyclo` and `gocognit` limits as the root) and `tbox-test` inside
+`tbox/`, using the linters pinned in the root `tools.mod`. `backend-check`
+runs it as the `tbox-check` step.
 
 `make backend-check` covers this subsystem with `fmt-check`, `vet`,
 `staticcheck`, `gocyclo`, `gocognit`, and `test`. To run one of them from the
