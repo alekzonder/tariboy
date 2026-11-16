@@ -2,7 +2,9 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -10,23 +12,6 @@ import (
 	"github.com/alekzonder/tariboy/tbox/internal/portable"
 	"github.com/alekzonder/tariboy/tbox/internal/version"
 )
-
-func init() {
-	// The image command is registered by cmd_images.go, which sorts first;
-	// export and import join it here and the rest stays with it.
-	rest := commands["image"]
-	commands["image"] = func(env *Env, args []string) int {
-		if len(args) > 0 {
-			switch args[0] {
-			case "export":
-				return runExport(env, args[1:])
-			case "import":
-				return runImport(env, args[1:])
-			}
-		}
-		return rest(env, args)
-	}
-}
 
 // inCwd resolves a user path against the working directory of env.
 func inCwd(env *Env, p string) string {
@@ -39,6 +24,7 @@ func inCwd(env *Env, p string) string {
 func runExport(env *Env, args []string) int {
 	fs := newFlags("image export", env.Stderr)
 	out := fs.String("o", "", "output file (default: NAME-TAG.tariboy-image.tar.gz in the current directory)")
+	force := fs.Bool("force", false, "overwrite an existing output file")
 	var refText string
 	for {
 		if err := fs.Parse(args); err != nil {
@@ -48,13 +34,13 @@ func runExport(env *Env, args []string) int {
 			break
 		}
 		if refText != "" {
-			fmt.Fprintln(env.Stderr, "usage: tbox image export REF [-o FILE]")
+			fmt.Fprintln(env.Stderr, "usage: tbox image export REF [-o FILE] [--force]")
 			return 2
 		}
 		refText, args = fs.Arg(0), fs.Args()[1:]
 	}
 	if refText == "" {
-		fmt.Fprintln(env.Stderr, "usage: tbox image export REF [-o FILE]")
+		fmt.Fprintln(env.Stderr, "usage: tbox image export REF [-o FILE] [--force]")
 		return 2
 	}
 	ref, err := imgstore.ParseRef(refText)
@@ -78,7 +64,7 @@ func runExport(env *Env, args []string) int {
 		name = fmt.Sprintf("%s-%s.tariboy-image.tar.gz", ref.Name, ref.Tag)
 	}
 	target := inCwd(env, name)
-	if err := os.WriteFile(target, buf.Bytes(), 0o644); err != nil {
+	if err := writeExport(target, buf.Bytes(), *force); err != nil {
 		return fail(env, err)
 	}
 	fmt.Fprintf(env.Stdout, "exported %s %s to %s\n", ref, img.Manifest.Digest, target)
@@ -116,4 +102,24 @@ func runImport(env *Env, args []string) int {
 		fmt.Fprintf(env.Stdout, "moved %s to new content\n", tag)
 	}
 	return 0
+}
+
+// writeExport writes data to target, which must not exist unless force is set.
+func writeExport(target string, data []byte, force bool) error {
+	flags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	if !force {
+		flags = os.O_WRONLY | os.O_CREATE | os.O_EXCL
+	}
+	f, err := os.OpenFile(target, flags, 0o644)
+	if errors.Is(err, fs.ErrExist) {
+		return fmt.Errorf("%s already exists (use --force to overwrite)", target)
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }

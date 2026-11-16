@@ -24,6 +24,13 @@ func short(digest string) string {
 	return digest
 }
 
+// imageSubcommands are the subcommands of image that parse their own
+// arguments; show and rm take a REF and are handled by runImage.
+var imageSubcommands = map[string]Command{
+	"export": runExport,
+	"import": runImport,
+}
+
 func runImages(env *Env, args []string) int {
 	if len(args) > 0 {
 		fmt.Fprintln(env.Stderr, "usage: tbox images")
@@ -53,8 +60,13 @@ func runImages(env *Env, args []string) int {
 }
 
 func runImage(env *Env, args []string) int {
+	if len(args) > 0 {
+		if sub, ok := imageSubcommands[args[0]]; ok {
+			return sub(env, args[1:])
+		}
+	}
 	if len(args) != 2 || (args[0] != "show" && args[0] != "rm") {
-		fmt.Fprintln(env.Stderr, "usage: tbox image show REF | tbox image rm REF")
+		fmt.Fprintln(env.Stderr, "usage: tbox image show REF | rm REF | export REF [-o FILE] [--force] | import FILE")
 		return 2
 	}
 	ref, err := imgstore.ParseRef(args[1])

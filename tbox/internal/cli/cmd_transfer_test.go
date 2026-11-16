@@ -58,3 +58,25 @@ func TestTransferUsageAndErrors(t *testing.T) {
 		t.Fatalf("delegated usage code %d", code)
 	}
 }
+
+func TestExportRefusesOverwrite(t *testing.T) {
+	home, src, work := t.TempDir(), demoSource(t), t.TempDir()
+	if code, _, errs := runIn(t, home, "/", "build", "--path", src); code != 0 {
+		t.Fatalf("build: %s", errs)
+	}
+	file := filepath.Join(work, "out.tar.gz")
+	writeFile(t, file, "keep")
+	code, _, errs := runIn(t, home, work, "image", "export", "demo", "-o", "out.tar.gz")
+	if code != 1 || !strings.Contains(errs, file) {
+		t.Fatalf("export over existing: %d %q", code, errs)
+	}
+	if b, _ := os.ReadFile(file); string(b) != "keep" {
+		t.Fatalf("file was overwritten: %q", b)
+	}
+	if code, _, errs := runIn(t, home, work, "image", "export", "demo", "-o", "out.tar.gz", "--force"); code != 0 {
+		t.Fatalf("export --force: %d %q", code, errs)
+	}
+	if b, _ := os.ReadFile(file); string(b) == "keep" {
+		t.Fatal("--force did not overwrite")
+	}
+}
