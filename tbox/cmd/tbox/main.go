@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/tbox/internal/cli"
+	"github.com/alekzonder/tariboy/tbox/internal/tui"
 )
 
 func main() {
@@ -23,5 +24,8 @@ func main() {
 		Exec:     syscall.Exec,
 		LookPath: exec.LookPath,
 		Now:      time.Now,
+		OpenTerminal: func() (tui.Terminal, error) {
+			return tui.Open(os.Stdin, os.Stderr)
+		},
 	}))
 }

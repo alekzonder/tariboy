@@ -14,8 +14,9 @@ Go module with its own version (`tbox version`) and imports no Tariboy
 package.
 
 Image sources are local directories or Stores, and a v3 Tariboyfile may pull
-skills and prompts from `git` and `url` sources. The image constructor and
-interactive selection are planned for stage 3 and do not exist yet.
+skills and prompts from `git` and `url` sources. `tbox image new` assembles a
+source from the skills and prompts of your Stores, and `tbox run` without
+arguments lets you pick the image and the harness from lists.
 
 ## Install
 
@@ -40,6 +41,8 @@ minimum before anything starts.
 | `tbox image show REF`, `tbox image rm REF` | Show or remove a built image. |
 | `tbox image export REF [-o FILE] [--force]` | Write a portable archive. |
 | `tbox image import FILE` | Install a portable archive. |
+| `tbox image new [NAME] [--skill STORE/SKILL]... [--prompt STORE/PROMPT]... [--new-prompt] [--version V] [--force] [--no-build]` | Create an image source from Store skills and prompts, then build it. |
+| `tbox run [IMAGE [HARNESS]] [-- ARGS...]` | Start a harness session; missing arguments are chosen from lists. |
 | `tbox run IMAGE HARNESS [-- ARGS...]` | Start a harness session. |
 | `tbox run STORE/IMAGE HARNESS [-- ARGS...]` | Build if changed, then start. |
 | `tbox run --path DIR HARNESS [-- ARGS...]` | Build if changed, then start. |
@@ -126,6 +129,78 @@ characters replaced.
 `tbox images` ends with a table `STORE/IMAGE  VERSION  STATUS`. The status is
 `built` when a built image of that name has the same `image_version`,
 `not built`, or the error of the row.
+
+### Official Store
+
+The public Tariboy Store was verified with `tbox`: all six of its images built.
+Two warnings appeared: one for images that declare `plugins`, and one for a
+skill whose upstream moved since `skills-lock.json` was written (its computed
+hash differs from the recorded one). These images contain skills that need the
+Tariboy daemon; they build and run in `tbox`, but those skills do nothing
+useful without it.
+
+## Create an image from Store skills
+
+`tbox image new` writes a source directory and builds it, so you can combine
+skills and prompts of different Stores without writing a Tariboyfile by hand.
+
+```bash
+tbox image new review --skill team/review --skill team/security --prompt team/process
+tbox image new notes --skill team/review --new-prompt --version 0.2.0
+tbox image new                 # interactive: name, skills, prompts
+```
+
+Flags: `--skill STORE/SKILL` and `--prompt STORE/PROMPT` repeat, in the order
+given; `--new-prompt` adds an empty `instructions.md` after the prompts (it is
+added anyway when no prompt is selected); `--version` sets `image_version`
+(default `0.1.0`); `--force` replaces an existing source; `--no-build` only
+writes the source. Without `--skill`, `--prompt` and `--new-prompt`, the
+command is interactive. Inside a session it is rejected like every other
+build command.
+
+The source is written to `$TBOX_HOME/sources/<name>/` and nowhere else; `tbox`
+never writes into a Store. The `Tariboyfile.yaml` is schema v3, and the source
+never names a Store, so it keeps building after the Store is removed or
+renamed. Each entry is addressed by where the Store keeps the item:
+
+| Store kind | Skill entry | Prompt entry |
+| --- | --- | --- |
+| git | `git` (the Store address) plus `path` and `ref` (the commit checked out) | the same |
+| directory | `dir`, the absolute path | `file`, the absolute path |
+| archive | a copy under `skills/<name>/` in the source | a copy under `prompts/<name>.md` |
+
+A skill at the root of a directory Store is copied into the source too.
+Copied files are checked with the same limits as a build. To change an image,
+edit the files in `sources/<name>/` and run `tbox build --path
+$TBOX_HOME/sources/<name>` (the default `~/.tbox/sources/<name>`). An entry
+from a git Store pins the commit the Store had checked out, in `ref`; edit
+`ref` to move it.
+
+### Interactive form
+
+With a terminal, `tbox image new` asks the name (when `NAME` is absent), then
+shows a checklist of every Store skill (`<store>/<skill>` and its
+description), then a checklist of every Store prompt whose first row is
+`new empty prompt (instructions.md)`. Rows with a problem are left out. When
+the Stores hold no skills and no prompts the command exits with code 1 and
+`no skills or prompts found; add a Store with: tbox store add NAME SOURCE`.
+
+Keys in every list:
+
+| Key | Does |
+| --- | --- |
+| Up, Down (or `k`, `j` while the filter is empty) | Move. |
+| PageUp, PageDown | Move by a page. |
+| Space | Toggle a row (checklists only). |
+| Enter | Confirm. |
+| Esc, `q` (while the filter is empty), Ctrl-C | Cancel. |
+| Any other character, Backspace | Type into the filter, or delete from it. |
+
+Cancelling exits with code 130 and writes nothing. The terminal is put back
+exactly as it was before any build output is printed and before the harness
+starts. Text from Stores shown in the lists has control characters replaced.
+Without a terminal on stdin, `tbox image new` without the flags exits with
+code 2 and names `--skill`, `--prompt` and `--new-prompt`; it never waits.
 
 Security rules: a URL with user-info is rejected, as is a git ref that is empty,
 starts with `-`, holds `..`, a space or a control character, or is longer than
@@ -230,10 +305,24 @@ and runs the result. A name that contains `/` is a Store selector: `tbox` builds
 `STORE/IMAGE` if its content changed and runs the image under its image name.
 A second run without changes prints no `built` line. `HARNESS` is `claude`,
 `codex` or `opencode`. An unknown harness exits with code 2 and lists the known
-ones. A missing image exits with code 1 and lists the built images. Without both
-arguments `tbox run` exits with code 2 and prints its usage; interactive
-selection arrives in stage 3. Everything after `--` goes to the harness
-unchanged.
+ones. A missing image exits with code 1 and lists the built images. Everything
+after `--` goes to the harness unchanged.
+
+With fewer arguments than it needs, `tbox run` asks for the rest on a terminal:
+
+- `tbox run` lists the built images (`<name>:<tag>`, with version and short
+  digest), then the images of the Stores (`<store>/<image>`, with version and
+  `built` or `not built`; rows with an error are left out), and then the
+  harnesses;
+- `tbox run IMAGE` asks only for the harness;
+- `tbox run --path DIR` asks only for the harness.
+
+The harness list shows the installed harnesses only. When exactly one is
+installed it is taken without a list and a line `using harness <name>` is
+printed. The keys are those of the lists above. Exit codes: 130 on cancel; 1
+when there is no image (`tbox build` and `tbox store add` are named) or no
+harness installed (the supported ones are listed); 2 without a terminal, with
+`tbox run: IMAGE and HARNESS are required when stdin is not a terminal`.
 
 `tbox run` unpacks the image into `run/<digest>/<harness>/image/` if that is not
 done yet, joins the static prompt layers into `PROMPT.md`, generates the
@@ -363,7 +452,6 @@ the daemon are still in it. Compatibility is covered by shared fixtures in
 
 - Global skills of the user stay visible to every harness next to the skills of
   the image. `tbox` does not isolate the session.
-- `tbox image new` and interactive `tbox run` arrive in stage 3.
 - Tariboy does not understand `schema_version: 3` yet, so a v3 source builds in
   `tbox` only. The archive that `tbox` writes is schema v2.
 - The harness adapters were verified against Claude Code 2.1.325, Codex 0.166.0
