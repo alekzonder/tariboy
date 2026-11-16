@@ -28,9 +28,11 @@ package harness
 //     own instructions. `experimental_instructions_file` has no effect.
 //     tbox uses `developer_instructions`.
 //
-// Not verified: that an interactive session behaves like `debug prompt-input`
-// (no session was started), and whether Codex ever prunes a cache entry that
-// no marketplace lists.
+// Verified live on 0.166.0 with `codex --profile tbox-<plugin> exec`: the
+// model quoted a marker from the prompt and named an image skill as
+// `<plugin>:<skill>`; config.toml stayed byte-identical. Not verified: the
+// interactive screen driven through tbox (it reads the same profile), and
+// whether Codex ever prunes a cache entry that no marketplace lists.
 
 import (
 	"context"

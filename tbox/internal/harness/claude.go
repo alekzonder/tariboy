@@ -12,10 +12,9 @@ package harness
 //     The help marks many options "only works with --print" and does not mark
 //     either append flag that way.
 //
-// Decision: use `--append-system-prompt-file`. Unverified: that an
-// interactive session actually loads the file; no session was started. If a
-// live check shows it is print-mode only, switch to `--append-system-prompt`
-// with the file text (mind the 128 KiB per-argument limit on Linux).
+// Decision: use `--append-system-prompt-file`. Verified live on 2.1.325: in an
+// interactive session and with `-p`, the model quoted a marker from the prompt
+// file and named an image skill as `<image>:<skill>`.
 
 import (
 	"context"

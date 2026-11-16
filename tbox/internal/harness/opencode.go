@@ -17,10 +17,10 @@ package harness
 //   - `opencode debug config` keeps the absolute `instructions` path as given
 //     and reports no error.
 //
-// Not verified: that credentials resolve in a real session (no credential
-// file was read and no session started; only the unchanged data path was
-// observed), and that a session loads the absolute `instructions` file into
-// the system prompt (`opencode debug agent build` does not show the prompt).
+// Verified live on 1.19.5 with `opencode run` under the generated
+// OPENCODE_CONFIG_DIR: the user's credentials resolved and the model quoted a
+// marker from the absolute `instructions` file. Not verified: the interactive
+// screen driven through tbox (it reads the same configuration).
 
 import (
 	"bytes"
