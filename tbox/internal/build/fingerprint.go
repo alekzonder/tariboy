@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/tbox/internal/fsafe"
+	"github.com/alekzonder/tariboy/tbox/internal/lock"
 	"github.com/alekzonder/tariboy/tbox/internal/skill"
 	"github.com/alekzonder/tariboy/tbox/internal/tfile"
 )
@@ -100,21 +101,23 @@ func (c *statCache) save(path string) error {
 // source directory do not enter it, and neither do plugins, runtime prompts
 // and only: tariboy entries, which f.ForTbox() has dropped.
 func Fingerprint(f *tfile.File) (string, error) {
-	return fingerprint(f, nil)
+	return fingerprint(f, nil, nil)
 }
 
-func fingerprint(f *tfile.File, cache *statCache) (string, error) {
+// fingerprint hashes the source. A remote entry is represented by its lock
+// key, commit and hash from lk; one without a record gives errUnknown.
+func fingerprint(f *tfile.File, cache *statCache, lk *lock.File) (string, error) {
 	var text strings.Builder
 	text.WriteString(fingerprintHeader)
 	fmt.Fprintf(&text, "schema %d\nimage_version %s\n", f.SchemaVersion, f.ImageVersion)
 	for _, s := range f.Skills {
-		if err := skillText(&text, s, cache); err != nil {
+		if err := skillText(&text, s, cache, lk); err != nil {
 			return "", err
 		}
 	}
 	skillDirs := f.SkillDirs()
 	for _, p := range f.Prompts {
-		if err := promptText(&text, p, skillDirs, cache); err != nil {
+		if err := promptText(&text, p, skillDirs, cache, lk); err != nil {
 			return "", err
 		}
 	}
@@ -139,7 +142,22 @@ func modeText(info fs.FileInfo) string {
 	return "0600"
 }
 
-func skillText(text *strings.Builder, s tfile.SkillEntry, cache *statCache) error {
+func remoteText(text *strings.Builder, kind, key string, lk *lock.File) error {
+	if lk == nil {
+		return errUnknown
+	}
+	e, ok := lk.Entries[key]
+	if !ok {
+		return errUnknown
+	}
+	fmt.Fprintf(text, "%s remote %q %s %s\n", kind, key, e.Commit, e.SHA256)
+	return nil
+}
+
+func skillText(text *strings.Builder, s tfile.SkillEntry, cache *statCache, lk *lock.File) error {
+	if remoteSkill(s) {
+		return remoteText(text, "skill", skillKey(s), lk)
+	}
 	abs, source, category, err := tfile.ResolveSkillDir(s)
 	if err != nil {
 		return err
@@ -178,7 +196,10 @@ func skillText(text *strings.Builder, s tfile.SkillEntry, cache *statCache) erro
 	})
 }
 
-func promptText(text *strings.Builder, p tfile.PromptEntry, skillDirs []string, cache *statCache) error {
+func promptText(text *strings.Builder, p tfile.PromptEntry, skillDirs []string, cache *statCache, lk *lock.File) error {
+	if remotePrompt(p) {
+		return remoteText(text, "prompt", promptKey(p), lk)
+	}
 	abs, source, category, err := tfile.ResolvePromptFile(p, skillDirs...)
 	if err != nil {
 		return err

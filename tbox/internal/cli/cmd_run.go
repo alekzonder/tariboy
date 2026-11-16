@@ -51,7 +51,7 @@ func runRun(env *Env, args []string) int {
 		return fail(env, err)
 	}
 	store := imgstore.Store{Dir: home.ImagesDir()}
-	ref, code := resolveRunRef(env, store, *path, pos)
+	ref, code := resolveRunRef(env, home, store, *path, pos)
 	if code != 0 {
 		return code
 	}
@@ -84,13 +84,13 @@ func splitDashDash(args []string) (own, extra []string) {
 }
 
 // resolveRunRef returns the image to run, building it first for --path.
-func resolveRunRef(env *Env, store imgstore.Store, path string, pos []string) (imgstore.Ref, int) {
+func resolveRunRef(env *Env, home paths.Home, store imgstore.Store, path string, pos []string) (imgstore.Ref, int) {
 	if path != "" {
 		dir := path
 		if !filepath.IsAbs(dir) {
 			dir = filepath.Join(env.Cwd, dir)
 		}
-		res, err := build.Build(build.Options{SourceDir: dir, Tags: []string{"latest"}, Store: store, Now: env.Now})
+		res, err := build.Build(build.Options{SourceDir: dir, Tags: []string{"latest"}, Store: store, Now: env.Now, Resolver: newResolver(home)})
 		if err != nil {
 			return imgstore.Ref{}, fail(env, err)
 		}
