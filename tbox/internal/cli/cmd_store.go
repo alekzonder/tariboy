@@ -10,6 +10,7 @@ import (
 	"github.com/alekzonder/tariboy/tbox/internal/gitx"
 	"github.com/alekzonder/tariboy/tbox/internal/paths"
 	"github.com/alekzonder/tariboy/tbox/internal/stores"
+	"github.com/alekzonder/tariboy/tbox/internal/textsafe"
 )
 
 func init() { commands["store"] = runStore }
@@ -108,10 +109,13 @@ func storeList(env *Env, r stores.Registry, args []string) int {
 		return 0
 	}
 	for _, s := range list {
-		fmt.Fprintf(env.Stdout, "%s\t%s\t%s\t%s\t%s\n", s.Name, s.Kind, s.Source, s.Ref, shortCommit12(s.Commit))
+		fmt.Fprintf(env.Stdout, "%s\t%s\t%s\t%s\t%s\n", safe(s.Name), s.Kind, safe(s.Source), safe(s.Ref), shortCommit12(safe(s.Commit)))
 	}
 	return 0
 }
+
+// safe makes untrusted text printable on one line.
+func safe(s string) string { return textsafe.Line(s, 300) }
 
 func shortCommit12(c string) string {
 	if len(c) > 12 {
@@ -132,7 +136,7 @@ func storeShow(env *Env, r stores.Registry, args []string) int {
 	if err != nil {
 		return fail(env, err)
 	}
-	fmt.Fprintf(env.Stdout, "name: %s\nkind: %s\nsource: %s\nref: %s\ncommit: %s\n", s.Name, s.Kind, s.Source, s.Ref, s.Commit)
+	fmt.Fprintf(env.Stdout, "name: %s\nkind: %s\nsource: %s\nref: %s\ncommit: %s\n", safe(s.Name), s.Kind, safe(s.Source), safe(s.Ref), safe(s.Commit))
 	printInventory(env.Stdout, inv)
 	return 0
 }
@@ -141,22 +145,26 @@ func printInventory(w io.Writer, inv stores.Inventory) {
 	fmt.Fprintln(w, "images:")
 	for _, i := range inv.Images {
 		if i.Err != "" {
-			fmt.Fprintf(w, "  %s\terror: %s\n", i.Name, i.Err)
+			fmt.Fprintf(w, "  %s\terror: %s\n", safe(i.Name), safe(i.Err))
 			continue
 		}
-		fmt.Fprintf(w, "  %s\t%s\tschema %d\n", i.Name, i.Version, i.Schema)
+		fmt.Fprintf(w, "  %s\t%s\tschema %d\n", safe(i.Name), safe(i.Version), i.Schema)
 	}
 	fmt.Fprintln(w, "skills:")
 	for _, s := range inv.Skills {
 		if s.Err != "" {
-			fmt.Fprintf(w, "  %s\terror: %s\n", s.Name, s.Err)
+			fmt.Fprintf(w, "  %s\terror: %s\n", safe(s.Name), safe(s.Err))
 			continue
 		}
-		fmt.Fprintf(w, "  %s\t%s\n", s.Name, s.Description)
+		fmt.Fprintf(w, "  %s\t%s\n", safe(s.Name), safe(s.Description))
 	}
 	fmt.Fprintln(w, "prompts:")
 	for _, p := range inv.Prompts {
-		fmt.Fprintf(w, "  %s\n", p.Name)
+		if p.Err != "" {
+			fmt.Fprintf(w, "  error: %s\n", safe(p.Err))
+			continue
+		}
+		fmt.Fprintf(w, "  %s\n", safe(p.Name))
 	}
 }
 
@@ -169,9 +177,9 @@ func storeRefresh(env *Env, r stores.Registry, args []string) int {
 		return fail(env, err)
 	}
 	if s.Commit != "" {
-		fmt.Fprintf(env.Stdout, "refreshed %s %s\n", s.Name, shortCommit12(s.Commit))
+		fmt.Fprintf(env.Stdout, "refreshed %s %s\n", safe(s.Name), shortCommit12(s.Commit))
 	} else {
-		fmt.Fprintf(env.Stdout, "refreshed %s\n", s.Name)
+		fmt.Fprintf(env.Stdout, "refreshed %s\n", safe(s.Name))
 	}
 	return 0
 }
@@ -188,7 +196,7 @@ func storeRef(env *Env, r stores.Registry, args []string) int {
 	if ref == "" {
 		ref = "default branch"
 	}
-	fmt.Fprintf(env.Stdout, "ref %s %s %s\n", s.Name, ref, shortCommit12(s.Commit))
+	fmt.Fprintf(env.Stdout, "ref %s %s %s\n", safe(s.Name), safe(ref), shortCommit12(s.Commit))
 	return 0
 }
 

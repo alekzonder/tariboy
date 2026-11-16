@@ -131,3 +131,24 @@ func TestStoreErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestStoreShowSanitizesUntrustedText(t *testing.T) {
+	localRegistry(t)
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "skills/hello/SKILL.md"), "---\nname: hello\ndescription: \"ok\\e[31m red\\nforged\\tline\"\n---\nbody\n")
+	writeFile(t, filepath.Join(dir, "skills/evil\nforged/SKILL.md"), "x")
+	writeFile(t, filepath.Join(dir, "prompts/p\x1b[2Jq.md"), "p")
+	writeFile(t, filepath.Join(dir, "images/v/Tariboyfile.yaml"), "schema_version: 3\nimage_version: 1.0.0\n")
+	home := t.TempDir()
+	if code, _, errs := runIn(t, home, "/", "store", "add", "s", dir); code != 0 {
+		t.Fatalf("add %d %q", code, errs)
+	}
+	code, out, _ := runIn(t, home, "/", "store", "show", "s")
+	if code != 0 || strings.ContainsRune(out, 0x1b) {
+		t.Fatalf("show %d %q", code, out)
+	}
+	// name, kind, source, ref, commit, 3 headers, 1 image, 2 skills, 1 prompt
+	if n := strings.Count(out, "\n"); n != 12 {
+		t.Fatalf("%d lines:\n%s", n, out)
+	}
+}

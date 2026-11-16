@@ -1,6 +1,7 @@
 package stores
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,6 +26,8 @@ func TestInventoryStandardLayout(t *testing.T) {
 	write(t, filepath.Join(root, "images/broken/Tariboyfile.yaml"), "schema_version: [\n")
 	write(t, filepath.Join(root, "skills/hello/SKILL.md"), goodSkill)
 	write(t, filepath.Join(root, "skills/bad/SKILL.md"), "no frontmatter\n")
+	write(t, filepath.Join(root, "skills/empty/note.txt"), "no SKILL.md here")
+	write(t, filepath.Join(root, "images/noyaml/readme.txt"), "x")
 	write(t, filepath.Join(root, "prompts/b.md"), "b")
 	write(t, filepath.Join(root, "prompts/a.md"), "a")
 	write(t, filepath.Join(root, "prompts/notes.txt"), "x")
@@ -129,5 +132,29 @@ func TestInventoryMissingDirs(t *testing.T) {
 	r, _ := newRegistry(t, nil)
 	if _, err := r.Inventory(Store{Name: "s", Kind: KindDir, Source: filepath.Join(t.TempDir(), "gone")}); err == nil {
 		t.Fatal("missing root accepted")
+	}
+}
+
+func TestInventorySkillNameMustMatchDirectory(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "skills/other/SKILL.md"), goodSkill)
+	got := inv(t, root)
+	if len(got.Skills) != 1 || got.Skills[0].Name != "other" || got.Skills[0].Err == "" {
+		t.Fatalf("%+v", got.Skills)
+	}
+}
+
+func TestInventoryCapsRows(t *testing.T) {
+	root := t.TempDir()
+	for i := 0; i < maxRows+5; i++ {
+		write(t, filepath.Join(root, fmt.Sprintf("prompts/p%04d.md", i)), "p")
+		write(t, filepath.Join(root, fmt.Sprintf("images/i%04d/Tariboyfile.yaml", i)), "schema_version: 3\n")
+	}
+	got := inv(t, root)
+	if len(got.Images) != maxRows+1 || got.Images[maxRows].Err != "… 5 more not shown" {
+		t.Fatalf("images %d %+v", len(got.Images), got.Images[maxRows])
+	}
+	if len(got.Prompts) != maxRows+1 || got.Prompts[maxRows].Err != "… 5 more not shown" {
+		t.Fatalf("prompts %d", len(got.Prompts))
 	}
 }

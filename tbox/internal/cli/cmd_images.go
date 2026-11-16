@@ -51,7 +51,7 @@ func runImages(env *Env, args []string) int {
 	tw := tabwriter.NewWriter(env.Stdout, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAME\tTAG\tVERSION\tDIGEST\tBUILT")
 	for _, e := range entries {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", e.Name, e.Tag, e.ImageVersion, short(e.Digest), e.BuiltAt)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", safe(e.Name), safe(e.Tag), safe(e.ImageVersion), safe(short(e.Digest)), safe(e.BuiltAt))
 	}
 	if err := tw.Flush(); err != nil {
 		return fail(env, err)
@@ -106,17 +106,17 @@ func showImage(env *Env, store imgstore.Store, ref imgstore.Ref) int {
 func printImage(env *Env, ref imgstore.Ref, img archive.Image) {
 	m := img.Manifest
 	w := env.Stdout
-	fmt.Fprintf(w, "ref: %s\nname: %s\ndigest: %s\n", ref, m.Name, m.Digest)
+	fmt.Fprintf(w, "ref: %s\nname: %s\ndigest: %s\n", ref, safe(m.Name), safe(m.Digest))
 	if m.ImageVersion != "" {
-		fmt.Fprintf(w, "version: %s\n", m.ImageVersion)
+		fmt.Fprintf(w, "version: %s\n", safe(m.ImageVersion))
 	}
-	fmt.Fprintf(w, "built: %s\nschema: %d\n", m.BuiltAt, m.SchemaVersion)
+	fmt.Fprintf(w, "built: %s\nschema: %d\n", safe(m.BuiltAt), m.SchemaVersion)
 	if m.Role != nil {
-		fmt.Fprintf(w, "role: %s\n", m.Role.Text)
+		fmt.Fprintf(w, "role: %s\n", safe(m.Role.Text))
 	}
 	fmt.Fprintf(w, "skills (%d):\n", len(m.Skills))
 	for _, s := range m.Skills {
-		fmt.Fprintf(w, "  %s: %s\n", s.Name, s.Description)
+		fmt.Fprintf(w, "  %s: %s\n", safe(s.Name), safe(s.Description))
 	}
 	fmt.Fprintf(w, "prompt layers (%d):\n", len(img.Template.Entries))
 	for _, e := range img.Template.Entries {
@@ -124,6 +124,6 @@ func printImage(env *Env, ref imgstore.Ref, img archive.Image) {
 		if e.Kind == "runtime" {
 			src = "runtime " + e.Runtime
 		}
-		fmt.Fprintf(w, "  %s (%s)\n", src, e.Category)
+		fmt.Fprintf(w, "  %s (%s)\n", safe(src), safe(e.Category))
 	}
 }

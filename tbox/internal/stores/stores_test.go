@@ -358,3 +358,92 @@ func TestParseSelector(t *testing.T) {
 		}
 	}
 }
+
+func TestPathLikeSourceNeverBecomesOwnerRepo(t *testing.T) {
+	r, _ := newRegistry(t, nil)
+	for _, src := range []string{"./nope", "../nope", "~/nope", "/nope/nope"} {
+		_, err := r.Add(context.Background(), "x", src, "")
+		if err == nil || !strings.Contains(err.Error(), "directory not found") {
+			t.Errorf("%q: %v", src, err)
+		}
+	}
+	if list, _ := r.List(); len(list) != 0 {
+		t.Fatalf("registered %+v", list)
+	}
+}
+
+func TestCorruptRegistryFailsAndStaysUntouched(t *testing.T) {
+	r, _ := newRegistry(t, nil)
+	file := filepath.Join(string(r.Home), "stores.json")
+	write(t, file, "{not json")
+	if _, err := r.List(); err == nil {
+		t.Fatal("List accepted corrupt registry")
+	}
+	if _, err := r.Add(context.Background(), "d", t.TempDir(), ""); err == nil {
+		t.Fatal("Add accepted corrupt registry")
+	}
+	if b, _ := os.ReadFile(file); string(b) != "{not json" {
+		t.Fatalf("registry rewritten: %q", b)
+	}
+}
+
+func TestConcurrentAddKeepsBoth(t *testing.T) {
+	r, _ := newRegistry(t, nil)
+	errs := make(chan error, 2)
+	for _, n := range []string{"one", "two"} {
+		go func() {
+			_, err := r.Add(context.Background(), n, t.TempDir(), "")
+			errs <- err
+		}()
+	}
+	for range 2 {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if list, _ := r.List(); len(list) != 2 {
+		t.Fatalf("%+v", list)
+	}
+}
+
+func TestFailedGitRefreshKeepsTreeAndRegistration(t *testing.T) {
+	r, _ := newRegistry(t, nil)
+	repo := gitRepo(t)
+	s, err := r.Add(context.Background(), "g", "file://"+repo, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(repo); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Refresh(context.Background(), "g"); err == nil {
+		t.Fatal("refresh of a deleted remote succeeded")
+	}
+	if _, err := os.Stat(filepath.Join(r.Root(s), "prompts/a.md")); err != nil {
+		t.Fatalf("tree lost: %v", err)
+	}
+	if got, _ := r.Get("g"); got != s {
+		t.Fatalf("registration changed: %+v", got)
+	}
+}
+
+func TestRemoveKeepsTreeWhenSaveFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("permissions are not enforced for root")
+	}
+	r, _ := newRegistry(t, nil)
+	s, err := r.Add(context.Background(), "g", "file://"+gitRepo(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(string(r.Home), 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(string(r.Home), 0o700) })
+	if err := r.Remove("g"); err == nil {
+		t.Fatal("remove succeeded with unwritable registry")
+	}
+	if _, err := os.Stat(filepath.Join(r.Root(s), "prompts/a.md")); err != nil {
+		t.Fatalf("tree deleted although registration remains: %v", err)
+	}
+}
