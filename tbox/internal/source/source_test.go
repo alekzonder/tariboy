@@ -434,3 +434,33 @@ func TestStaleStagesAreSwept(t *testing.T) {
 		t.Fatal("stale stage not swept")
 	}
 }
+
+func TestGitSkillAtRepositoryRoot(t *testing.T) {
+	isolate(t)
+	repo := filepath.Join(t.TempDir(), "origin")
+	os.MkdirAll(repo, 0o755)
+	git(t, repo, "init", "-q", "-b", "main")
+	write(t, repo, "SKILL.md", skillMD("rootskill", "one"))
+	write(t, repo, "scripts/run.sh", "echo\n")
+	git(t, repo, "add", ".")
+	git(t, repo, "commit", "-q", "-m", "first")
+	r := resolver(t)
+	e := tfile.SkillEntry{Git: repo, Path: ".", Ref: "main"}
+	dir, got, err := r.SkillDir(context.Background(), e, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(dir) != "rootskill" || got.Path != "." || got.SHA256 == "" {
+		t.Fatalf("%s %+v", dir, got)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "scripts/run.sh")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(repo); err != nil {
+		t.Fatal(err)
+	}
+	dir2, got2, err := r.SkillDir(context.Background(), e, &got)
+	if err != nil || dir2 != dir || got2 != got {
+		t.Fatalf("pinned offline: %s %+v %v", dir2, got2, err)
+	}
+}

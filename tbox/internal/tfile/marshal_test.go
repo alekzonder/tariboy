@@ -78,3 +78,29 @@ func TestMarshalEmptyListsParse(t *testing.T) {
 		t.Fatalf("%v\n%s", err, data)
 	}
 }
+
+func TestMarshalHostileValuesRoundTrip(t *testing.T) {
+	hostile := []string{"1.0", "true", "null", "~", "https://h.example/r.git#frag:x", "-lead", "has some  spaces", "./путь/файл.md", "line1\nline2", "yes", "0x1F", "- a", "k: v", "'q'", " pad "}
+	in := &File{SchemaVersion: 3, ImageVersion: "1.0.0"}
+	for _, h := range hostile {
+		in.Skills = append(in.Skills, SkillEntry{Git: h, Path: h, Ref: h})
+		in.Prompts = append(in.Prompts, PromptEntry{File: h})
+	}
+	data, err := Marshal(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, Filename), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := Parse(dir)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, data)
+	}
+	for i, h := range hostile {
+		if out.Skills[i].Git != h || out.Skills[i].Path != h || out.Skills[i].Ref != h || out.Prompts[i].File != h {
+			t.Fatalf("value %q changed: %+v %+v", h, out.Skills[i], out.Prompts[i])
+		}
+	}
+}

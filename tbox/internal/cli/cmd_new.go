@@ -54,6 +54,7 @@ func runImageNew(env *Env, args []string) int {
 	dir, err := construct.Create(newRegistry(home, env.Cwd), home, construct.Spec{
 		Name: pos[0], Version: version, Skills: skills.list, Prompts: prompts.list,
 		NewPrompt: newPrompt, Force: force,
+		Warn: func(m string) { fmt.Fprintf(env.Stderr, "warning: %s\n", safe(m)) },
 	})
 	if err != nil {
 		return fail(env, err)
