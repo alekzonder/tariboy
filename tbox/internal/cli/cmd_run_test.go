@@ -123,3 +123,11 @@ func TestRunPathBuildsOnce(t *testing.T) {
 		t.Fatalf("second run: %q", errs)
 	}
 }
+
+func TestRunPathPrintsWarnings(t *testing.T) {
+	home, src := t.TempDir(), pluginSource(t)
+	_, errs, call := runWithExec(t, home, "/", "run", "--path", src, "claude")
+	if call == nil || !strings.HasPrefix(errs, pluginWarning) {
+		t.Fatalf("run: %q", errs)
+	}
+}

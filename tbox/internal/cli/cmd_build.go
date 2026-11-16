@@ -79,8 +79,16 @@ func runBuild(env *Env, args []string) int {
 	if err != nil {
 		return fail(env, err)
 	}
+	printWarnings(env, res)
 	printBuild(env, res)
 	return 0
+}
+
+// printWarnings writes each build warning to stderr.
+func printWarnings(env *Env, res build.Result) {
+	for _, w := range res.Warnings {
+		fmt.Fprintf(env.Stderr, "warning: %s\n", w)
+	}
 }
 
 func printBuild(env *Env, res build.Result) {

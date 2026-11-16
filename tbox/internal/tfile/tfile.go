@@ -80,6 +80,9 @@ type File struct {
 	Plugins       []Plugin      `yaml:"plugins"`
 	Skills        []SkillEntry  `yaml:"skills"`
 	Prompts       []PromptEntry `yaml:"prompts"`
+	// Remap is the path remap LoadWith was given; nil for none. Resolvers of
+	// the file's entries pass it on.
+	Remap Remap `yaml:"-"`
 }
 
 // Parse reads and validates the Tariboyfile at path, or in path when it is a

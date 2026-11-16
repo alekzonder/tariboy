@@ -20,6 +20,12 @@ var ErrRemoteUnsupported = fmt.Errorf("remote sources are not supported yet")
 // skills keep the last one per skill identity, prompts are de-duplicated. The
 // result has no Extends; entries keep the BaseDir of their own layer.
 func Load(dir string) (*File, error) {
+	return LoadWith(dir, nil)
+}
+
+// LoadWith is Load with a path remap: prompt de-duplication reads the
+// remapped files, and the result carries remap in File.Remap.
+func LoadWith(dir string, remap Remap) (*File, error) {
 	layers, err := layers(dir)
 	if err != nil {
 		return nil, err
@@ -34,9 +40,10 @@ func Load(dir string) (*File, error) {
 	merged.Dir = root.Dir
 	merged.SchemaVersion = root.SchemaVersion
 	merged.ImageVersion = root.ImageVersion
+	merged.Remap = remap
 	merged.Plugins = uniquePlugins(merged.Plugins)
 	merged.Skills = uniqueSkills(merged.Skills)
-	if merged.Prompts, err = uniquePrompts(merged.Prompts, merged.SkillDirs()); err != nil {
+	if merged.Prompts, err = uniquePrompts(merged.Prompts, remap, merged.SkillDirs()); err != nil {
 		return nil, err
 	}
 	return merged, nil
@@ -126,7 +133,7 @@ func uniqueSkills(skills []SkillEntry) []SkillEntry {
 // source, or the SHA-256 of a local file. An entry marked only: tariboy never
 // reaches the archive, so it is keyed by its declared location and its file
 // is not read. Any other unreadable local file is an error.
-func promptKey(p PromptEntry, skillDirs []string) (string, error) {
+func promptKey(p PromptEntry, remap Remap, skillDirs []string) (string, error) {
 	switch {
 	case p.Runtime != "":
 		return "runtime:" + p.Runtime, nil
@@ -137,7 +144,7 @@ func promptKey(p PromptEntry, skillDirs []string) (string, error) {
 	case p.Only == onlyTariboy:
 		return "path:" + filepath.Join(p.BaseDir, p.File), nil
 	}
-	path, _, _, err := ResolvePromptFile(p, skillDirs...)
+	path, _, _, err := ResolvePromptFileWith(p, remap, skillDirs...)
 	if err != nil {
 		return "", fmt.Errorf("prompt %q: %w", p.File, err)
 	}
@@ -149,11 +156,11 @@ func promptKey(p PromptEntry, skillDirs []string) (string, error) {
 	return "file:" + hex.EncodeToString(sum[:]), nil
 }
 
-func uniquePrompts(prompts []PromptEntry, skillDirs []string) ([]PromptEntry, error) {
+func uniquePrompts(prompts []PromptEntry, remap Remap, skillDirs []string) ([]PromptEntry, error) {
 	seen := map[string]bool{}
 	out := []PromptEntry{}
 	for _, p := range prompts {
-		key, err := promptKey(p, skillDirs)
+		key, err := promptKey(p, remap, skillDirs)
 		if err != nil {
 			return nil, err
 		}

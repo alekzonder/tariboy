@@ -32,6 +32,9 @@ type Options struct {
 	Update bool
 	// Resolver fetches remote entries; nil makes a remote entry an error.
 	Resolver *srcpkg.Resolver
+	// StoreRoot is the root of the Store checkout that holds SourceDir, or
+	// empty. Its skills-lock.json applies to a schema v2 source.
+	StoreRoot string
 }
 
 // Result describes the image a build produced or found up to date.
@@ -44,6 +47,8 @@ type Result struct {
 	Moved        []string
 	// Updates lists the remote entries whose commit or hash changed.
 	Updates []Update
+	// Warnings are for the user; the build succeeded despite them.
+	Warnings []string
 }
 
 func writeAtomic(path string, data []byte) error {
@@ -61,9 +66,13 @@ func Build(opts Options) (Result, error) {
 		return Result{}, err
 	}
 	defer j.close()
-	res := Result{Name: j.name, ImageVersion: j.f.ImageVersion, Tags: j.tags}
+	res := Result{Name: j.name, ImageVersion: j.f.ImageVersion, Tags: j.tags, Warnings: j.warnings}
 	if !(opts.Update && j.remote) {
-		if done, err := j.upToDate(j.lock, &res); done || err != nil {
+		current := j.withRestored(j.lock)
+		if done, err := j.upToDate(current, &res); done || err != nil {
+			if done {
+				err = j.writeLock(current)
+			}
 			return res, err
 		}
 	}
@@ -72,15 +81,24 @@ func Build(opts Options) (Result, error) {
 		if rs, err = resolve(context.Background(), opts.Resolver, j.f, j.lock, opts.Update); err != nil {
 			return Result{}, err
 		}
+		j.recordRestored(rs)
 		res.Updates = rs.updates
 		if done, err := j.upToDate(rs.lock, &res); done || err != nil {
-			if done && lockChanged(j.lock, rs.lock) {
-				err = rs.lock.Write(j.lockPath)
+			if done {
+				err = j.writeLock(rs.lock)
 			}
 			return res, err
 		}
 	}
 	return j.publish(rs, res)
+}
+
+// writeLock stores lk when it differs from the lock file read at the start.
+func (j *job) writeLock(lk lock.File) error {
+	if j.lockPath == "" || !lockChanged(j.lock, lk) {
+		return nil
+	}
+	return lk.Write(j.lockPath)
 }
 
 // job is the state of one Build call.
@@ -95,6 +113,8 @@ type job struct {
 	lock     lock.File
 	lockPath string
 	unlock   func()
+	restore  *restorer
+	warnings []string
 }
 
 // close releases the lock-file lock.
@@ -116,41 +136,72 @@ func newJob(opts Options) (*job, error) {
 	if err := imgstore.CheckName(name); err != nil {
 		return nil, err
 	}
-	loaded, err := tfile.Load(dir)
-	if err != nil {
-		return nil, err
-	}
-	f := loaded.ForTbox()
-	tags, err := buildTags(opts.Tags, f.ImageVersion)
-	if err != nil {
-		return nil, err
-	}
-	j := &job{opts: opts, dir: dir, name: name, f: f, tags: tags, remote: firstRemote(f) != "",
+	j := &job{opts: opts, dir: dir, name: name,
 		cache: loadCache(opts.Store.StatCachePath(name)), lock: lock.File{Version: 1, Entries: map[string]lock.Entry{}}}
-	if j.remote {
-		if opts.Resolver == nil {
-			return nil, noResolverError(f)
-		}
-		j.lockPath = lock.PathFor(dir, opts.Resolver.Home)
-		// Hold the lock-file lock from the read to the write so two builds of
-		// one source cannot overwrite each other's records.
-		sum := sha256.Sum256([]byte(j.lockPath))
-		lockFile := filepath.Join(opts.Resolver.Home.CacheDir(), "locks", "lockfile-"+hex.EncodeToString(sum[:])+".lock")
-		if j.unlock, err = flock.Lock(lockFile); err != nil {
-			return nil, err
-		}
-		if j.lock, err = lock.Read(j.lockPath); err != nil {
-			j.close()
-			return nil, err
-		}
+	if err := j.load(); err != nil {
+		j.close()
+		return nil, err
 	}
 	return j, nil
+}
+
+// load reads the source, restoring its skills-lock.json skills, and opens
+// the lock file when the source has remote or restored entries.
+func (j *job) load() error {
+	if err := j.prepareRestore(); err != nil {
+		return err
+	}
+	loaded, err := tfile.LoadWith(j.dir, j.restore.remap())
+	if rerr := j.restore.failure(); rerr != nil {
+		return rerr
+	}
+	if err != nil {
+		return err
+	}
+	j.f = loaded.ForTbox()
+	if err := j.restore.prime(j.f); err != nil {
+		return err
+	}
+	if j.tags, err = buildTags(j.opts.Tags, j.f.ImageVersion); err != nil {
+		return err
+	}
+	j.warnings = j.sourceWarnings(loaded)
+	j.remote = firstRemote(j.f) != "" || len(j.restore.lockEntries()) > 0
+	if firstRemote(j.f) == "" {
+		return nil
+	}
+	if j.opts.Resolver == nil {
+		return noResolverError(j.f)
+	}
+	return j.openLock()
+}
+
+// openLock takes the lock-file lock and reads the lock file. It holds the
+// lock from the read to the write so two builds of one source cannot
+// overwrite each other's records. A second call does nothing.
+func (j *job) openLock() error {
+	if j.lockPath != "" {
+		return nil
+	}
+	lockPath := lock.PathFor(j.dir, j.opts.Resolver.Home)
+	sum := sha256.Sum256([]byte(lockPath))
+	lockFile := filepath.Join(j.opts.Resolver.Home.CacheDir(), "locks", "lockfile-"+hex.EncodeToString(sum[:])+".lock")
+	unlock, err := flock.Lock(lockFile)
+	if err != nil {
+		return err
+	}
+	j.unlock = unlock
+	if j.lock, err = lock.Read(lockPath); err != nil {
+		return err
+	}
+	j.lockPath = lockPath
+	return nil
 }
 
 // upToDate computes the fingerprint from lk and reports whether the stored
 // image already matches it. An unknown fingerprint is never up to date.
 func (j *job) upToDate(lk lock.File, res *Result) (bool, error) {
-	fp, err := fingerprint(j.f, j.cache, &lk)
+	fp, err := fingerprint(j.f, j.cache, &lk, j.restore.restoredKeys())
 	if errors.Is(err, errUnknown) {
 		return false, nil
 	}
@@ -172,7 +223,7 @@ func (j *job) publish(rs *resolution, res Result) (Result, error) {
 	if rs != nil {
 		lk = rs.lock
 	}
-	fp, err := fingerprint(j.f, j.cache, &lk)
+	fp, err := fingerprint(j.f, j.cache, &lk, j.restore.restoredKeys())
 	if err != nil {
 		return Result{}, err
 	}
@@ -186,8 +237,8 @@ func (j *job) publish(rs *resolution, res Result) (Result, error) {
 	if res.Moved, err = j.opts.Store.Publish(j.name, img, j.tags); err != nil {
 		return Result{}, err
 	}
-	if rs != nil && lockChanged(j.lock, rs.lock) {
-		if err := rs.lock.Write(j.lockPath); err != nil {
+	if rs != nil {
+		if err := j.writeLock(rs.lock); err != nil {
 			return Result{}, err
 		}
 	}
@@ -246,7 +297,7 @@ func buildTags(requested []string, imageVersion string) ([]string, error) {
 func assemble(f *tfile.File, name, dir string, builtAt time.Time, rs *resolution) (archive.Image, error) {
 	skills := make([]skill.Prepared, 0, len(f.Skills))
 	for _, entry := range f.Skills {
-		abs, source, category, err := rs.skillDir(entry)
+		abs, source, category, err := rs.skillDir(entry, f.Remap)
 		if err != nil {
 			return archive.Image{}, err
 		}
@@ -274,7 +325,7 @@ func promptLayers(f *tfile.File, rs *resolution) ([]archive.PromptLayer, error) 
 	var layers []archive.PromptLayer
 	skillDirs := f.SkillDirs()
 	for _, entry := range f.Prompts {
-		abs, source, category, err := rs.promptFile(entry, skillDirs)
+		abs, source, category, err := rs.promptFile(entry, f.Remap, skillDirs)
 		if err != nil {
 			return nil, err
 		}

@@ -101,23 +101,36 @@ func (c *statCache) save(path string) error {
 // source directory do not enter it, and neither do plugins, runtime prompts
 // and only: tariboy entries, which f.ForTbox() has dropped.
 func Fingerprint(f *tfile.File) (string, error) {
-	return fingerprint(f, nil, nil)
+	return fingerprint(f, nil, nil, nil)
 }
 
-// fingerprint hashes the source. A remote entry is represented by its lock
-// key, commit and hash from lk; one without a record gives errUnknown.
-func fingerprint(f *tfile.File, cache *statCache, lk *lock.File) (string, error) {
+// fpInput is what the text of one entry depends on besides the entry.
+type fpInput struct {
+	cache *statCache
+	lk    *lock.File
+	remap tfile.Remap
+	// restored maps the directory of a skill restored from github through
+	// skills-lock.json to its lock key.
+	restored map[string]string
+}
+
+// fingerprint hashes the source. A remote entry, and a skill restored from
+// github through skills-lock.json, is represented by its lock key, commit
+// and hash from lk; one without a record gives errUnknown. Local entries are
+// read through f.Remap.
+func fingerprint(f *tfile.File, cache *statCache, lk *lock.File, restored map[string]string) (string, error) {
+	in := fpInput{cache: cache, lk: lk, remap: f.Remap, restored: restored}
 	var text strings.Builder
 	text.WriteString(fingerprintHeader)
 	fmt.Fprintf(&text, "schema %d\nimage_version %s\n", f.SchemaVersion, f.ImageVersion)
 	for _, s := range f.Skills {
-		if err := skillText(&text, s, cache, lk); err != nil {
+		if err := in.skillText(&text, s); err != nil {
 			return "", err
 		}
 	}
 	skillDirs := f.SkillDirs()
 	for _, p := range f.Prompts {
-		if err := promptText(&text, p, skillDirs, cache, lk); err != nil {
+		if err := in.promptText(&text, p, skillDirs); err != nil {
 			return "", err
 		}
 	}
@@ -154,13 +167,17 @@ func remoteText(text *strings.Builder, kind, key string, lk *lock.File) error {
 	return nil
 }
 
-func skillText(text *strings.Builder, s tfile.SkillEntry, cache *statCache, lk *lock.File) error {
+func (in fpInput) skillText(text *strings.Builder, s tfile.SkillEntry) error {
 	if remoteSkill(s) {
-		return remoteText(text, "skill", skillKey(s), lk)
+		return remoteText(text, "skill", skillKey(s), in.lk)
 	}
-	abs, source, category, err := tfile.ResolveSkillDir(s)
+	abs, source, category, err := tfile.ResolveSkillDirWith(s, in.remap)
 	if err != nil {
 		return err
+	}
+	if key, ok := in.restored[abs]; ok {
+		fmt.Fprintf(text, "skill %q %s restored\n", source, category)
+		return remoteText(text, "skill", key, in.lk)
 	}
 	fmt.Fprintf(text, "skill %q %s\n", source, category)
 	return filepath.WalkDir(abs, func(path string, d fs.DirEntry, err error) error {
@@ -187,7 +204,7 @@ func skillText(text *strings.Builder, s tfile.SkillEntry, cache *statCache, lk *
 			fmt.Fprintf(text, "  special %q\n", rel)
 			return nil
 		}
-		sum, err := cache.hash(path, info)
+		sum, err := in.cache.hash(path, info)
 		if err != nil {
 			return err
 		}
@@ -196,11 +213,11 @@ func skillText(text *strings.Builder, s tfile.SkillEntry, cache *statCache, lk *
 	})
 }
 
-func promptText(text *strings.Builder, p tfile.PromptEntry, skillDirs []string, cache *statCache, lk *lock.File) error {
+func (in fpInput) promptText(text *strings.Builder, p tfile.PromptEntry, skillDirs []string) error {
 	if remotePrompt(p) {
-		return remoteText(text, "prompt", promptKey(p), lk)
+		return remoteText(text, "prompt", promptKey(p), in.lk)
 	}
-	abs, source, category, err := tfile.ResolvePromptFile(p, skillDirs...)
+	abs, source, category, err := tfile.ResolvePromptFileWith(p, in.remap, skillDirs...)
 	if err != nil {
 		return err
 	}
@@ -208,7 +225,7 @@ func promptText(text *strings.Builder, p tfile.PromptEntry, skillDirs []string, 
 	if err != nil {
 		return err
 	}
-	sum, err := cache.hash(abs, info)
+	sum, err := in.cache.hash(abs, info)
 	if err != nil {
 		return err
 	}

@@ -163,3 +163,21 @@ func TestBuildUpdatePrintsUpdatedLine(t *testing.T) {
 		t.Fatalf("output %q", out)
 	}
 }
+
+// pluginSource is a schema v2 source that declares a plugin.
+func pluginSource(t *testing.T) string {
+	t.Helper()
+	dir := demoSource(t)
+	writeFile(t, filepath.Join(dir, "Tariboyfile.yaml"), "schema_version: 2\nplugins:\n  - name: mail\nskills:\n  - dir: ./skills/hello\n")
+	return dir
+}
+
+const pluginWarning = "warning: image declares plugins; skills that need the tariboy daemon will not work here\n"
+
+func TestBuildPrintsWarnings(t *testing.T) {
+	home, src := t.TempDir(), pluginSource(t)
+	code, out, errs := runIn(t, home, "/", "build", "--path", src)
+	if code != 0 || errs != pluginWarning || strings.Contains(out, "warning") {
+		t.Fatalf("code %d out %q errs %q", code, out, errs)
+	}
+}

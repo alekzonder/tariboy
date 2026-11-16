@@ -2,6 +2,7 @@ package tfile
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -87,5 +88,50 @@ func TestLoadMissingPromptIsAnError(t *testing.T) {
 	write(t, root, "a/Tariboyfile.yaml", "schema_version: 2\nprompts:\n  - file: ./missing.md\n")
 	if _, err := Load(root + "/a"); err == nil {
 		t.Fatal("expected an error")
+	}
+}
+
+// TestLoadWithRemap restores ./.agents/skills paths elsewhere: resolution and
+// prompt de-duplication read the remapped files, while scope checks and the
+// returned source keep the path as written.
+func TestLoadWithRemap(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	img := filepath.Join(root, "img")
+	restored := filepath.Join(root, "cache", "a")
+	write(t, img, Filename, "schema_version: 2\nskills:\n  - dir: ./.agents/skills/a\nprompts:\n  - file: ./.agents/skills/a/a.md\n  - file: ./p.md\n")
+	write(t, img, "p.md", "same\n")
+	write(t, restored, "SKILL.md", "x")
+	write(t, restored, "a.md", "same\n")
+	prefix := filepath.Join(img, ".agents", "skills", "a")
+	remap := Remap(func(abs string) string {
+		if abs == prefix || strings.HasPrefix(abs, prefix+string(filepath.Separator)) {
+			return restored + strings.TrimPrefix(abs, prefix)
+		}
+		return abs
+	})
+	if _, err := Load(img); err == nil {
+		t.Fatal("Load without remap: no error")
+	}
+	f, err := LoadWith(img, remap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// a.md and p.md have the same content, so p.md is dropped.
+	if len(f.Prompts) != 1 || f.Prompts[0].File != "./.agents/skills/a/a.md" {
+		t.Fatalf("prompts %+v", f.Prompts)
+	}
+	dir, src, category, err := ResolveSkillDirWith(f.Skills[0], f.Remap)
+	if err != nil || dir != restored || src != "./.agents/skills/a" || category != "source" {
+		t.Fatalf("skill %s %s %s %v", dir, src, category, err)
+	}
+	file, src, _, err := ResolvePromptFileWith(f.Prompts[0], f.Remap, f.SkillDirs()...)
+	if err != nil || file != filepath.Join(restored, "a.md") || src != "./.agents/skills/a/a.md" {
+		t.Fatalf("prompt %s %s %v", file, src, err)
+	}
+	if _, _, _, err := ResolveSkillDir(f.Skills[0]); err == nil {
+		t.Fatal("ResolveSkillDir without remap: no error")
 	}
 }
