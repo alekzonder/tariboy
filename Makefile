@@ -2,8 +2,8 @@ GO      ?= go
 BINDIR  := bin
 PREFIX  ?= $(HOME)/.local
 INSTALLDIR := $(PREFIX)/bin
-BINARIES := tariboyd tariboy tariboy-tasks tariboy-mail tariboy-scripts tariboy-shim tariboy-store tariboy-plugin-telegram
-MANAGED_LINKS := tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-mail:tariboy-mail tmail:tariboy-mail tariboy-scripts:tariboy-scripts tscripts:tariboy-scripts tariboy-shim:tariboy-shim tariboy-store:tariboy-store tariboy-plugin-telegram:tariboy-plugin-telegram
+BINARIES := tariboyd tariboy tariboy-tasks tariboy-mail tariboy-scripts tariboy-shim tariboy-store tariboy-plugin-telegram tbox
+MANAGED_LINKS := tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-mail:tariboy-mail tmail:tariboy-mail tariboy-scripts:tariboy-scripts tscripts:tariboy-scripts tariboy-shim:tariboy-shim tariboy-store:tariboy-store tariboy-plugin-telegram:tariboy-plugin-telegram tbox:tbox
 SA := $(BINDIR)/tariboy
 LONG_SOCKET_TESTS := TestHostInstallDrainTimeoutRestartsRolledBackActiveVersion|TestStartupRefreshReadsCurrentWatchesAtDeliveryBoundary
 # Desktop E2E specs receive separate owner-only state from their fixture, so
@@ -45,7 +45,7 @@ endif
 export TARIBOY_VITEST_MAX_WORKERS ?= $(CHECK_JOBS)
 endif
 
-.PHONY: build install uninstall setup check backend-check frontend-check designer-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet staticcheck gocyclo gocyclo-report gocognit gocognit-report e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e compose-e2e tariboy-tasks-e2e smoke full-smoke ui ui-dev ui-fmt-check ui-complexity-report store-ui docs clean up start down attach a desktop desktop-mac desktop-android desktop-binaries server-archives desktop-version-check desktop-lock-check desktop-rust-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
+.PHONY: build install uninstall setup check backend-check frontend-check designer-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet staticcheck gocyclo gocyclo-report gocognit gocognit-report tbox-check tbox-fmt-check tbox-vet tbox-staticcheck tbox-complexity tbox-test e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e compose-e2e tariboy-tasks-e2e smoke full-smoke ui ui-dev ui-fmt-check ui-complexity-report store-ui docs clean up start down attach a desktop desktop-mac desktop-android desktop-binaries server-archives desktop-version-check desktop-lock-check desktop-rust-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
 
 build:
 	$(GO) build -trimpath -o $(BINDIR)/tariboyd ./cmd/tariboyd
@@ -56,6 +56,7 @@ build:
 	$(GO) build -trimpath -o $(BINDIR)/tariboy-tasks ./cmd/tariboy-tasks
 	$(GO) build -trimpath -o $(BINDIR)/tariboy-mail ./cmd/tariboy-mail
 	$(GO) build -trimpath -o $(BINDIR)/tariboy-scripts ./cmd/tariboy-scripts
+	cd tbox && $(GO) build -trimpath -o ../$(BINDIR)/tbox ./cmd/tbox
 
 install:
 	$(MAKE) build
@@ -208,6 +209,35 @@ gocognit:
 
 gocognit-report:
 	@$(GOTOOL) gocognit -top 30 -avg -ignore '$(GOCOGNIT_IGNORE)' . || true
+
+# tbox is a nested module (tbox/go.mod), so the root `go list ./...` never
+# descends into it and each tool runs inside tbox/. The linters come from the
+# root tools.mod. The root gocyclo and gocognit walk the directory tree and
+# therefore scan tbox/ as well; tbox-complexity repeats the same thresholds
+# from inside the module so the target is self-contained.
+tbox-fmt-check:
+	@files=$$(cd tbox && $$($(GO) env GOROOT)/bin/gofmt -l .) || exit $$?; \
+	if [ -n "$$files" ]; then \
+		echo "gofmt drift in tbox, these files are not formatted:"; \
+		echo "$$files"; \
+		exit 1; \
+	fi; \
+	echo "tbox gofmt clean"
+
+tbox-vet:
+	cd tbox && $(GO) vet ./...
+
+tbox-staticcheck:
+	cd tbox && $(GO) tool -modfile=../tools.mod staticcheck ./...
+
+tbox-complexity:
+	cd tbox && $(GO) tool -modfile=../tools.mod gocyclo -over $(GOCYCLO_OVER) -ignore '$(GOCYCLO_IGNORE)' .
+	cd tbox && $(GO) tool -modfile=../tools.mod gocognit -over $(GOCOGNIT_OVER) -ignore '$(GOCOGNIT_IGNORE)' .
+
+tbox-test:
+	cd tbox && $(GO) test ./...
+
+tbox-check: tbox-fmt-check tbox-vet tbox-staticcheck tbox-complexity tbox-test
 
 e2e: build
 	./scripts/e2e.sh
@@ -727,6 +757,7 @@ backend-check:
 	run_step "gocyclo"      '$(SUBMAKE) gocyclo'; \
 	run_step "gocognit"     '$(SUBMAKE) gocognit'; \
 	run_step "test"         '$(SUBMAKE) test'; \
+	run_step "tbox-check"   '$(SUBMAKE) tbox-check'; \
 	run_step "desktop-rust-check" '$(SUBMAKE) desktop-rust-check'; \
 	run_step "tariboy-tasks-e2e" '$(SUBMAKE) tariboy-tasks-e2e'; \
 	run_step "smoke-contract" '$(SUBMAKE) smoke-contract-test'; \
