@@ -71,7 +71,7 @@ type promptPlan struct {
 
 // Create writes the source for spec and returns its directory.
 func Create(reg stores.Registry, home paths.Home, spec Spec) (string, error) {
-	if err := imgstore.CheckName(spec.Name); err != nil {
+	if err := checkName(spec.Name); err != nil {
 		return "", err
 	}
 	if spec.Version == "" {
@@ -103,6 +103,19 @@ func Create(reg stores.Registry, home paths.Home, spec Spec) (string, error) {
 		return "", err
 	}
 	return dir, nil
+}
+
+// checkName accepts an image name that also starts with a lower-case letter
+// or digit: the sources directory keeps its own .new-* and .old-* entries,
+// and a leading - reads as an option.
+func checkName(name string) error {
+	if err := imgstore.CheckName(name); err != nil {
+		return err
+	}
+	if c := name[0]; (c < 'a' || c > 'z') && (c < '0' || c > '9') {
+		return fmt.Errorf("invalid image name %q: it must start with a lower-case letter or digit", name)
+	}
+	return nil
 }
 
 type loaded struct {
@@ -170,7 +183,9 @@ func (p *planner) skill(sel stores.Selector) (skillPlan, error) {
 			continue
 		}
 		names = append(names, s.Name)
-		if s.Name == sel.Name {
+		if s.Name == sel.Name && row == nil {
+			// The first row of a name is the one used; later ones are
+			// duplicates.
 			row = &l.inv.Skills[i]
 		}
 	}
@@ -179,6 +194,9 @@ func (p *planner) skill(sel stores.Selector) (skillPlan, error) {
 	}
 	if row.Err != "" {
 		return skillPlan{}, fmt.Errorf("skill %s is not usable: %s", label(sel), row.Err)
+	}
+	if row.Dir == p.reg.Root(l.store) && holdsStoreContent(row.Dir) {
+		return skillPlan{}, fmt.Errorf("skill %s sits at the root of a Store that also holds images or skills; that root holds Store content, not a single skill", label(sel))
 	}
 	sp := skillPlan{sel: sel, name: row.Name}
 	if err := p.address(&sp, l.store, row); err != nil {
@@ -404,12 +422,20 @@ func copyPrompt(dest, from string) error {
 	return os.WriteFile(dest, body, 0o644)
 }
 
-// rootSkipDirs are the top-level directories of a Store that are not part of
-// a skill that sits at the Store root.
-var rootSkipDirs = map[string]bool{"images": true, "skills": true, "prompts": true, "workflows": true}
+// holdsStoreContent reports whether root, which has a SKILL.md, is a Store
+// with content rather than a single-skill repository: it has an images/
+// directory or a skills/<name>/SKILL.md.
+func holdsStoreContent(root string) bool {
+	if fi, err := os.Lstat(filepath.Join(root, "images")); err == nil && fi.IsDir() {
+		return true
+	}
+	found, _ := filepath.Glob(filepath.Join(root, "skills", "*", "SKILL.md"))
+	return len(found) > 0
+}
 
-// prepare validates the skill of row. A skill at a Store root is first copied
-// without the Store's own directories into a directory named after the skill.
+// prepare validates the skill of row. A skill at a Store root is the whole
+// root except its dot-directories and evals/, as for every Store kind; it is
+// first copied into a directory named after the skill.
 func (p *planner) prepare(row *stores.Skill, atRoot bool) (skill.Prepared, error) {
 	if !atRoot {
 		return skill.Prepare(row.Dir, "constructor", "source")
@@ -426,7 +452,8 @@ func (p *planner) prepare(row *stores.Skill, atRoot bool) (skill.Prepared, error
 	return skill.Prepare(dest, "constructor", "source")
 }
 
-// copyRootSkill copies the skill's own files of the Store root src to dest.
+// copyRootSkill copies the Store root src to dest without its top-level
+// dot-directories and evals/.
 // Only regular files and directories are copied; anything else is an error.
 func copyRootSkill(src, dest string) error {
 	if err := os.MkdirAll(dest, 0o755); err != nil {
@@ -445,8 +472,7 @@ func copyRootSkill(src, dest string) error {
 			return errors.New("skill has too many entries")
 		}
 		if d.IsDir() {
-			top := strings.SplitN(filepath.ToSlash(rel), "/", 2)[0]
-			if strings.HasPrefix(d.Name(), ".") || (top == rel && rootSkipDirs[top]) {
+			if !strings.Contains(filepath.ToSlash(rel), "/") && (strings.HasPrefix(rel, ".") || rel == "evals") {
 				return filepath.SkipDir
 			}
 			return os.MkdirAll(filepath.Join(dest, rel), 0o755)

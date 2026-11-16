@@ -328,3 +328,10 @@ func TestRestoreDirectoryNamedOtherwise(t *testing.T) {
 		t.Fatalf("name mismatch err %v", err)
 	}
 }
+
+func TestRestoreGithubWithoutSkillPath(t *testing.T) {
+	_, err := Restore(context.Background(), nil, t.TempDir(), map[string]Skill{"x": {Source: "o/r", SourceType: "github"}}, nil)
+	if err == nil || err.Error() != "skill x: github entry has no skillPath" {
+		t.Fatalf("err %v", err)
+	}
+}

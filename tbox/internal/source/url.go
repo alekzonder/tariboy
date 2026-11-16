@@ -11,9 +11,10 @@ import (
 	"strings"
 
 	"github.com/alekzonder/tariboy/tbox/internal/fetch"
+	"github.com/alekzonder/tariboy/tbox/internal/fsafe"
 	"github.com/alekzonder/tariboy/tbox/internal/lock"
+	"github.com/alekzonder/tariboy/tbox/internal/skill"
 	"github.com/alekzonder/tariboy/tbox/internal/tfile"
-	"gopkg.in/yaml.v3"
 )
 
 func (r Resolver) urlPrefix(u string) string { return filepath.Join(r.sourcesDir(), hexSum([]byte(u))) }
@@ -97,32 +98,22 @@ func (r Resolver) storeArchive(body []byte, u, pinnedSHA string) (string, string
 	return filepath.Join(final, name), sha, nil
 }
 
-// skillName reads the name from the SKILL.md front matter in dir. The skill
-// package re-validates it against the directory name.
+// skillName reads the name from the SKILL.md frontmatter in dir, parsed and
+// validated like any skill. The skill package re-validates it against the
+// directory name.
 func skillName(dir string) (string, error) {
-	data, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
+	data, err := fsafe.ReadFileNoFollow(filepath.Join(dir, "SKILL.md"), 256<<10)
 	if err != nil {
 		return "", errors.New("archive has no SKILL.md at its root")
 	}
-	text := strings.ReplaceAll(string(data), "\r\n", "\n")
-	rest, ok := strings.CutPrefix(text, "---\n")
-	if !ok {
-		return "", errors.New("SKILL.md has no front matter")
+	name, _, err := skill.ReadMeta(data)
+	if err != nil {
+		return "", fmt.Errorf("SKILL.md: %w", err)
 	}
-	front, _, ok := strings.Cut(rest, "\n---")
-	if !ok {
-		return "", errors.New("SKILL.md front matter is not closed")
+	if name == "" || !filepath.IsLocal(name) || strings.ContainsAny(name, `/\`) {
+		return "", fmt.Errorf("invalid skill name %q", name)
 	}
-	var fm struct {
-		Name string `yaml:"name"`
-	}
-	if err := yaml.Unmarshal([]byte(front), &fm); err != nil || fm.Name == "" {
-		return "", errors.New("SKILL.md front matter has no name")
-	}
-	if !filepath.IsLocal(fm.Name) || strings.ContainsAny(fm.Name, `/\`) {
-		return "", fmt.Errorf("invalid skill name %q", fm.Name)
-	}
-	return fm.Name, nil
+	return name, nil
 }
 
 func (r Resolver) urlPrompt(ctx context.Context, e tfile.PromptEntry, pinned *lock.Entry) (string, lock.Entry, error) {

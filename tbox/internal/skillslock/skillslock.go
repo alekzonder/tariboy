@@ -178,6 +178,9 @@ func (out *Restored) github(ctx context.Context, r *source.Resolver, name string
 	// root. It is cached under the skill name, as the installer copies it to
 	// .agents/skills/<name>; skill.Prepare then requires the frontmatter name
 	// to equal it.
+	if s.SkillPath == "" {
+		return "", errors.New("github entry has no skillPath")
+	}
 	sub := path.Dir(s.SkillPath)
 	if path.Base(s.SkillPath) != skillFile {
 		return "", fmt.Errorf("skillPath %q must end with %s", s.SkillPath, skillFile)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -156,5 +157,16 @@ func TestInventoryCapsRows(t *testing.T) {
 	}
 	if len(got.Prompts) != maxRows+1 || got.Prompts[maxRows].Err != "… 5 more not shown" {
 		t.Fatalf("prompts %d", len(got.Prompts))
+	}
+}
+
+func TestInventoryDuplicateSkillKeepsFirst(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, ".agents/skills/x/SKILL.md"), "---\nname: x\ndescription: from agents\n---\n")
+	write(t, filepath.Join(root, ".claude/skills/x/SKILL.md"), "---\nname: x\ndescription: from claude\n---\n")
+	got := inv(t, root).Skills
+	if len(got) != 2 || got[0].Err != "" || got[0].Description != "from agents" ||
+		got[1].Name != "x" || !strings.Contains(got[1].Err, "duplicate skill name") {
+		t.Fatalf("%+v", got)
 	}
 }

@@ -174,6 +174,24 @@ func isArchiveURL(s string) bool {
 	return strings.HasSuffix(p, ".tar.gz") || strings.HasSuffix(p, ".tgz") || strings.HasSuffix(p, ".zip")
 }
 
+const sourceForms = "not a known form: want a git repository (https://, ssh://, user@host:path or owner/repo), " +
+	"an https:// archive URL ending in .tar.gz, .tgz or .zip, or an existing directory"
+
+// checkRemoteSource gives the specific error for a source that is meant as
+// a URL but cannot be one: http:// (https is required), or an archive URL
+// with a query or fragment.
+func checkRemoteSource(source string, allowLocal bool) error {
+	lower := strings.ToLower(source)
+	if strings.HasPrefix(lower, "http://") && !allowLocal {
+		return fmt.Errorf("store URL %s uses http://; https is required", gitx.DisplayAddress(source))
+	}
+	i := strings.IndexAny(source, "?#")
+	if strings.HasPrefix(lower, "https://") && i >= 0 && isArchiveURL(source[:i]) {
+		return fmt.Errorf("archive URL must not carry a query or fragment: %s", gitx.DisplayAddress(source))
+	}
+	return nil
+}
+
 // Add registers a Store after it has been cloned, downloaded or checked.
 func (r Registry) Add(ctx context.Context, name, source, ref string) (Store, error) {
 	if !ValidName(name) {
@@ -211,6 +229,9 @@ func (r Registry) materialize(ctx context.Context, name, source, ref string) (St
 		}
 		return Store{Name: name, Kind: KindDir, Source: dir}, nil
 	}
+	if err := checkRemoteSource(source, r.Git.AllowLocal); err != nil {
+		return Store{}, err
+	}
 	dest := filepath.Join(r.Home.StoresDir(), name)
 	if err := r.clearStale(dest); err != nil {
 		return Store{}, err
@@ -225,6 +246,9 @@ func (r Registry) materialize(ctx context.Context, name, source, ref string) (St
 		return Store{Name: name, Kind: KindURL, Source: source}, nil
 	}
 	url, err := gitx.NormalizeURL(source, r.Git.AllowLocal)
+	if err != nil && !strings.Contains(source, "://") {
+		return Store{}, fmt.Errorf("store source %q is %s", gitx.DisplayAddress(source), sourceForms)
+	}
 	if err != nil {
 		return Store{}, err
 	}
@@ -282,7 +306,7 @@ func (r Registry) download(ctx context.Context, url, dest string) error {
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return err
 	}
-	if err := fetch.ExtractArchive(data, dest); err != nil {
+	if err := fetch.ExtractStoreArchive(data, dest); err != nil {
 		_ = os.RemoveAll(dest)
 		return fmt.Errorf("extract %s: %w", gitx.DisplayAddress(url), err)
 	}

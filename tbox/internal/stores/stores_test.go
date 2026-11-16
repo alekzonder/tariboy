@@ -465,3 +465,49 @@ func TestAddSymlinkedDirIsStoredCanonical(t *testing.T) {
 		t.Fatalf("source %q root %q, want %q", s.Source, reg.Root(s), want)
 	}
 }
+
+func TestAddArchiveWithOnlyLayoutDirKeepsIt(t *testing.T) {
+	for _, top := range []string{"skills", "images", "prompts", "workflows"} {
+		t.Run(top, func(t *testing.T) {
+			body := tarGz(t, map[string]string{top + "/x/SKILL.md": "s"})
+			r, srvURL := newRegistry(t, archiveHandler(t, &body))
+			s, err := r.Add(context.Background(), "a", srvURL+"/s.tar.gz", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Stat(filepath.Join(r.Root(s), top, "x", "SKILL.md")); err != nil {
+				t.Fatalf("%s/ was stripped: %v", top, err)
+			}
+		})
+	}
+	body := tarGz(t, map[string]string{"repo-main/skills/x/SKILL.md": "s"})
+	r, srvURL := newRegistry(t, archiveHandler(t, &body))
+	s, err := r.Add(context.Background(), "a", srvURL+"/s.tar.gz", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(r.Root(s), "skills", "x", "SKILL.md")); err != nil {
+		t.Fatalf("top directory was not stripped: %v", err)
+	}
+}
+
+func TestAddSourceKindMessages(t *testing.T) {
+	isolate(t)
+	r := Registry{Home: paths.Home(t.TempDir()), Cwd: t.TempDir()}
+	ctx := context.Background()
+	for source, want := range map[string]string{
+		"not a store":                          "want a git repository",
+		"http://example.com/s.git":             "https is required",
+		"http://example.com/s.tar.gz":          "https is required",
+		"https://example.com/s.tar.gz?token=1": "archive URL must not carry a query",
+		"https://example.com/s.zip#frag":       "archive URL must not carry a query",
+	} {
+		_, err := r.Add(ctx, "s", source, "")
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v, want %q", source, err, want)
+		}
+		if err != nil && strings.Contains(err.Error(), "token=1") {
+			t.Errorf("%q: error echoes the query: %v", source, err)
+		}
+	}
+}
