@@ -36,7 +36,7 @@ switched=
 release_created=false
 committed=false
 sources="tariboyd tariboy tariboy-shim tariboy-plugin-telegram"
-managed_links="tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-mail:tariboy-mail tmail:tariboy-mail tariboy-scripts:tariboy-scripts tscripts:tariboy-scripts tariboy-shim:tariboy-shim tariboy-plugin-telegram:tariboy-plugin-telegram"
+managed_links="tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-mail:tariboy-mail tmail:tariboy-mail tariboy-scripts:tariboy-scripts tscripts:tariboy-scripts tariboy-shim:tariboy-shim tariboy-plugin-telegram:tariboy-plugin-telegram tbox:tbox"
 # macOS ships `shasum` instead of coreutils `sha256sum`; both read SHA256SUMS.
 verify_checksums() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -55,6 +55,10 @@ if test "$mode" != activate || test -e "$binary_source/tariboy-mail" || test -L 
 fi
 if test "$mode" != activate || test -e "$binary_source/tariboy-scripts" || test -L "$binary_source/tariboy-scripts"; then
   sources="$sources tariboy-scripts"
+fi
+# Releases before tbox shipped lack it; activating one of them removes the link.
+if test "$mode" != activate || test -e "$binary_source/tbox" || test -L "$binary_source/tbox"; then
+  sources="$sources tbox"
 fi
 if test -f "$binary_source/tariboy-store"; then
   sources="$sources tariboy-store"
