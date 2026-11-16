@@ -37,6 +37,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -143,6 +144,7 @@ func prepareCodexFiles(home string, run rundir.Run, launch *Launch) error {
 	}
 	defer unlock()
 	sweepStaging(root)
+	sweepTempProfiles(home, "*")
 	if len(run.Skills) > 0 {
 		note, err := writeCodexPlugin(root, run)
 		if err != nil {
@@ -318,10 +320,54 @@ func writeCodexProfile(home, image string, body []byte) error {
 	return nil
 }
 
+// codexProfileHeader starts the first line of every profile tbox writes.
+const codexProfileHeader = "# Written by tbox"
+
+// sweepTempProfiles removes the temporary profiles tbox-<plugin>.tmp-*.config.toml
+// of plugin, or of every plugin for "*", left by an interrupted launch.
+func sweepTempProfiles(home, plugin string) {
+	tmps, _ := filepath.Glob(filepath.Join(home, "tbox-"+plugin+".tmp-*.config.toml"))
+	for _, p := range tmps {
+		_ = removeIfExists(p)
+	}
+}
+
+// writtenByTbox reports whether path is a regular file whose first line is
+// the tbox profile header.
+func writtenByTbox(path string) bool {
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	head := make([]byte, len(codexProfileHeader))
+	_, err = io.ReadFull(f, head)
+	return err == nil && string(head) == codexProfileHeader
+}
+
+// removeProfile removes a profile that tbox wrote. A file of that name that
+// tbox did not write is kept and reported.
+func removeProfile(host Host, path string) error {
+	if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if !writtenByTbox(path) {
+		host.note("tbox: kept %s: it does not start with the %q header of a tbox profile", path, codexProfileHeader)
+		return nil
+	}
+	return removeIfExists(path)
+}
+
 // Clean removes plugins/cache/tbox/<plugin> and tbox-<plugin>.config.toml of
 // image, or with an empty image plugins/cache/tbox and every
-// tbox-*.config.toml. It never touches config.toml or another file. Without
-// CODEX_HOME and HOME there is nowhere tbox could have written.
+// tbox-*.config.toml, together with leftover temporary profiles. A profile
+// is removed only when its first line is the tbox header. It never touches
+// config.toml or another file. Without CODEX_HOME and HOME there is nowhere
+// tbox could have written.
 func (codex) Clean(host Host, image string) error {
 	home := codexHome(host)
 	if home == "" {
@@ -332,16 +378,18 @@ func (codex) Clean(host Host, image string) error {
 		return err
 	}
 	if image != "" {
+		sweepTempProfiles(home, pluginName(image))
 		return errors.Join(
 			os.RemoveAll(filepath.Join(root, pluginName(image))),
-			removeIfExists(codexProfilePath(home, image)),
+			removeProfile(host, codexProfilePath(home, image)),
 		)
 	}
+	sweepTempProfiles(home, "*")
 	errs := []error{os.RemoveAll(root)}
 	profiles, err := filepath.Glob(filepath.Join(home, "tbox-*.config.toml"))
 	errs = append(errs, err)
 	for _, p := range profiles {
-		errs = append(errs, removeIfExists(p))
+		errs = append(errs, removeProfile(host, p))
 	}
 	return errors.Join(errs...)
 }

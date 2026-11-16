@@ -20,11 +20,19 @@ import (
 
 // Host carries the process dependencies, so tests can fake them. Output runs
 // a command with the current environment plus env, extra KEY=VALUE entries
-// that may be nil, and returns its standard output.
+// that may be nil, and returns its standard output. Note receives a line for
+// the user about something clean left in place; nil drops it.
 type Host struct {
 	Getenv   func(string) string
 	LookPath func(string) (string, error)
 	Output   func(ctx context.Context, env []string, name string, args ...string) ([]byte, error)
+	Note     func(string)
+}
+
+func (h Host) note(format string, args ...any) {
+	if h.Note != nil {
+		h.Note(fmt.Sprintf(format, args...))
+	}
 }
 
 // Launch is the prepared harness start. Env holds additions to the current
@@ -106,28 +114,41 @@ func CleanAll(host Host, home paths.Home, image string) error {
 		errs = append(errs, err)
 	}
 	for _, d := range digests {
+		if !d.IsDir() {
+			continue
+		}
 		dir := filepath.Join(home.RunRoot(), d.Name())
-		if d.IsDir() && runOfImage(dir, image) {
+		mine, readable := runOfImage(dir, image)
+		switch {
+		case mine:
 			errs = append(errs, os.RemoveAll(dir))
+		case !readable:
+			host.note("tbox: kept run directory %s: its image cannot be read; tbox clean without an image removes it", dir)
 		}
 	}
 	return errors.Join(errs...)
 }
 
 // runOfImage reports whether any harness run under the digest directory dir
-// holds an unpacked image named image.
-func runOfImage(dir, image string) bool {
+// holds an unpacked image named image, and whether every run there could be
+// read.
+func runOfImage(dir, image string) (mine, readable bool) {
 	runs, _ := os.ReadDir(dir)
+	readable = true
 	for _, r := range runs {
 		if !r.IsDir() {
 			continue
 		}
 		run, err := rundir.Open(filepath.Join(dir, r.Name(), "image"))
-		if err == nil && run.Name == image {
-			return true
+		if err != nil {
+			readable = false
+			continue
+		}
+		if run.Name == image {
+			return true, true
 		}
 	}
-	return false
+	return false, readable
 }
 
 // lookPath resolves a harness binary with an error that names it.

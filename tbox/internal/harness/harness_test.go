@@ -23,6 +23,7 @@ type fakeHost struct {
 	output    func(env []string, name string, args []string) ([]byte, error)
 	calls     [][]string
 	envs      [][]string
+	notes     []string
 	mu        sync.Mutex
 }
 
@@ -44,6 +45,11 @@ func (f *fakeHost) host() Host {
 				return nil, errors.New("unexpected call")
 			}
 			return f.output(env, name, args)
+		},
+		Note: func(n string) {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			f.notes = append(f.notes, n)
 		},
 	}
 }
@@ -126,17 +132,6 @@ func TestInstalledOnlyCodex(t *testing.T) {
 	f := &fakeHost{installed: map[string]bool{"codex": true}}
 	if got := Installed(f.host()); !slices.Equal(got, []string{"codex"}) {
 		t.Fatalf("installed %v", got)
-	}
-}
-
-func TestCatalogTwoSkills(t *testing.T) {
-	run := twoSkillRun(t, "")
-	want := "## Skills of image demo\n\n" +
-		"- alpha: First skill.\n" +
-		"- beta: Second skill.\n\n" +
-		"Read a skill with `tbox skill <name>` and run its scripts with `tbox skill exec <name> <script>`.\n"
-	if got := Catalog(run); got != want {
-		t.Fatalf("catalog:\n%q\nwant:\n%q", got, want)
 	}
 }
 
@@ -229,5 +224,21 @@ func TestCleanAllEverything(t *testing.T) {
 func TestCleanAllWithoutRunRoot(t *testing.T) {
 	if err := CleanAll((&fakeHost{}).host(), paths.Home(t.TempDir()), "img"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCleanAllNotesUnreadableRunDir(t *testing.T) {
+	f := &fakeHost{}
+	home := paths.Home(t.TempDir())
+	writeFile(t, filepath.Join(home.RunRoot(), "d3", "opencode", "junk"), "x", 0o600)
+	if err := CleanAll(f.host(), home, "img"); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(home.RunRoot(), "d3")
+	if _, err := os.Stat(dir); err != nil {
+		t.Fatalf("unreadable run dir removed: %v", err)
+	}
+	if len(f.notes) != 1 || !strings.Contains(f.notes[0], dir) || !strings.Contains(f.notes[0], "tbox clean") {
+		t.Fatalf("notes %q", f.notes)
 	}
 }

@@ -382,3 +382,45 @@ func liveOutput(codexHome string) func(context.Context, []string, string, ...str
 		return cmd.Output()
 	}
 }
+
+func TestCodexCleanKeepsProfilesNotWrittenByTbox(t *testing.T) {
+	f, home := codexHost(t, "0.166.0")
+	prepareCodexImages(t, f, "img")
+	writeFile(t, filepath.Join(home, "tbox-mine.config.toml"), "model = \"x\"\n", 0o600)
+	writeFile(t, filepath.Join(home, "tbox-gone.tmp-123.config.toml"), "# Written by tbox for", 0o600)
+	if err := (codex{}).Clean(f.host(), ""); err != nil {
+		t.Fatal(err)
+	}
+	assertCodexHomeEntries(t, home, "plugins", "tbox-mine.config.toml")
+	if len(f.notes) != 1 || !strings.Contains(f.notes[0], filepath.Join(home, "tbox-mine.config.toml")) {
+		t.Fatalf("notes %q", f.notes)
+	}
+	f.notes = nil
+	writeFile(t, filepath.Join(home, "tbox-img.config.toml"), "user = 1\n", 0o600)
+	if err := (codex{}).Clean(f.host(), "img"); err != nil {
+		t.Fatal(err)
+	}
+	if readFile(t, filepath.Join(home, "tbox-img.config.toml")) != "user = 1\n" || len(f.notes) != 1 {
+		t.Fatalf("foreign profile of img: notes %q", f.notes)
+	}
+}
+
+func TestCodexSweepsStaleTempProfiles(t *testing.T) {
+	f, home := codexHost(t, "0.166.0")
+	writeFile(t, filepath.Join(home, "tbox-old.tmp-1.config.toml"), "", 0o600)
+	prepareCodexImages(t, f, "img")
+	if _, err := os.Lstat(filepath.Join(home, "tbox-old.tmp-1.config.toml")); !os.IsNotExist(err) {
+		t.Fatalf("prepare kept a stale temp profile: %v", err)
+	}
+	writeFile(t, filepath.Join(home, "tbox-img.tmp-2.config.toml"), "", 0o600)
+	writeFile(t, filepath.Join(home, "tbox-other.tmp-3.config.toml"), "", 0o600)
+	if err := (codex{}).Clean(f.host(), "img"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(filepath.Join(home, "tbox-img.tmp-2.config.toml")); !os.IsNotExist(err) {
+		t.Fatalf("clean kept the temp profile of img: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(home, "tbox-other.tmp-3.config.toml")); err != nil {
+		t.Fatalf("clean removed the temp profile of another image: %v", err)
+	}
+}

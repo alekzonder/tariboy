@@ -331,3 +331,34 @@ func TestBuildStoreImageWithInvalidDirectoryName(t *testing.T) {
 		t.Fatalf("dot-dot: %d %q", code, errs)
 	}
 }
+
+func TestBodiesOnTerminalShowControlCharacters(t *testing.T) {
+	localRegistry(t)
+	home, dir := t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(dir, "skills/k/SKILL.md"), "---\nname: k\ndescription: K\n---\nred \x1b[31m\tx\r\n")
+	writeFile(t, filepath.Join(dir, "prompts/p.md"), "title \x1b]0;pwn\x07\tend\n\u009b2J\n\x9b")
+	if code, _, errs := runIn(t, home, "/", "store", "add", "s", dir); code != 0 {
+		t.Fatal(errs)
+	}
+	show := func(tty bool, args ...string) string {
+		var out, errb bytes.Buffer
+		code := Main(Env{Args: args, Getenv: func(k string) string { return map[string]string{"TBOX_HOME": home}[k] },
+			Stdout: &out, Stderr: &errb, Cwd: "/", Now: time.Now, StdoutIsTerminal: func() bool { return tty }})
+		if code != 0 {
+			t.Fatalf("%v: %d %q", args, code, errb.String())
+		}
+		return out.String()
+	}
+	if got := show(true, "prompt", "s/p"); got != "title ^[]0;pwn^G\tend\n\uFFFD2J\n\uFFFD" {
+		t.Fatalf("prompt on a terminal: %q", got)
+	}
+	if got := show(false, "prompt", "s/p"); got != "title \x1b]0;pwn\x07\tend\n\u009b2J\n\x9b" {
+		t.Fatalf("prompt to a pipe: %q", got)
+	}
+	if got := show(true, "skill", "s/k"); !strings.HasSuffix(got, "red ^[[31m\tx^M\n") {
+		t.Fatalf("skill on a terminal: %q", got)
+	}
+	if got := show(false, "skill", "s/k"); !strings.HasSuffix(got, "red \x1b[31m\tx\r\n") {
+		t.Fatalf("skill to a pipe: %q", got)
+	}
+}

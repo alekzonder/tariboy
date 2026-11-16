@@ -26,6 +26,9 @@ type Env struct {
 	// OpenTerminal puts the terminal into raw mode for an interactive list.
 	// Nil, or tui.ErrNoTerminal, means there is no terminal.
 	OpenTerminal func() (tui.Terminal, error)
+	// StdoutIsTerminal reports whether stdout is a terminal. Nil means it
+	// is not.
+	StdoutIsTerminal func() bool
 }
 
 // Command runs one subcommand with the arguments after its name.

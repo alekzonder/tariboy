@@ -23,11 +23,11 @@ package harness
 // the system prompt (`opencode debug agent build` does not show the prompt).
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/alekzonder/tariboy/tbox/internal/rundir"
 )
@@ -102,6 +102,23 @@ func writeOpenCodeConfig(run rundir.Run, dir string) error {
 	return writeIfChanged(filepath.Join(dir, "opencode.json"), append(body, '\n'))
 }
 
+// mentionsPath reports whether the resolved config holds path, as it is or in
+// its JSON-escaped form (a path with a quote or a backslash is escaped in the
+// JSON that `opencode debug config` prints).
+func mentionsPath(out []byte, path string) bool {
+	if bytes.Contains(out, []byte(path)) {
+		return true
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(path); err != nil {
+		return false
+	}
+	quoted := bytes.TrimSpace(buf.Bytes())
+	return bytes.Contains(out, quoted)
+}
+
 // probeOpenCode runs `opencode debug config` with the generated config
 // directory and requires the skills path in the resolved config.
 func probeOpenCode(ctx context.Context, host Host, path, dir, skills string) error {
@@ -109,7 +126,7 @@ func probeOpenCode(ctx context.Context, host Host, path, dir, skills string) err
 	if err != nil {
 		return fmt.Errorf("probe opencode config: %w", err)
 	}
-	if strings.Contains(string(out), skills) {
+	if mentionsPath(out, skills) {
 		return nil
 	}
 	found := "unknown"

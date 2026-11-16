@@ -9,6 +9,7 @@ import (
 
 	"github.com/alekzonder/tariboy/tbox/internal/cli"
 	"github.com/alekzonder/tariboy/tbox/internal/tui"
+	"golang.org/x/term"
 )
 
 func main() {
@@ -27,5 +28,6 @@ func main() {
 		OpenTerminal: func() (tui.Terminal, error) {
 			return tui.Open(os.Stdin, os.Stderr)
 		},
+		StdoutIsTerminal: func() bool { return term.IsTerminal(int(os.Stdout.Fd())) },
 	}))
 }
