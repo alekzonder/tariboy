@@ -95,7 +95,7 @@ func TestRunErrors(t *testing.T) {
 		t.Fatalf("unknown harness %d %q", code, errs)
 	}
 	code, errs, _ = runWithExec(t, home, "/", "run", "demo")
-	if code != 2 || !strings.Contains(errs, "stage 3") {
+	if code != 2 || !strings.Contains(errs, "IMAGE and HARNESS are required") {
 		t.Fatalf("missing args %d %q", code, errs)
 	}
 	code, errs, _ = runWithExec(t, home, "/", "run", "store/demo", "claude")

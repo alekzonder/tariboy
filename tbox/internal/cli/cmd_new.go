@@ -43,9 +43,21 @@ func runImageNew(env *Env, args []string) int {
 	if err != nil {
 		return 2
 	}
-	if len(pos) != 1 {
+	flagged := hasContentFlags(skills, prompts, newPrompt)
+	if len(pos) > 1 || (len(pos) == 0 && flagged) {
 		fmt.Fprintln(env.Stderr, imageNewUsage)
 		return 2
+	}
+	if !flagged {
+		name := ""
+		if len(pos) == 1 {
+			name = pos[0]
+		}
+		pick, err := pickNew(env, name)
+		if err != nil {
+			return interactiveExit(env, err, newNoTerminalHint)
+		}
+		pos, skills.list, prompts.list, newPrompt = []string{pick.name}, pick.skills, pick.prompts, pick.newPrompt
 	}
 	home, err := paths.Resolve(env.Getenv)
 	if err != nil {
@@ -73,4 +85,8 @@ func runImageNew(env *Env, args []string) int {
 		fmt.Fprintln(env.Stdout, res.note)
 	}
 	return 0
+}
+
+func hasContentFlags(skills, prompts selectorList, newPrompt bool) bool {
+	return len(skills.list) > 0 || len(prompts.list) > 0 || newPrompt
 }

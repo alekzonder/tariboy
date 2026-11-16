@@ -33,11 +33,19 @@ func runRun(env *Env, args []string) int {
 	if *path != "" {
 		want = 1
 	}
-	if len(pos) != want {
-		// Interactive selection of the image and the harness arrives in
-		// stage 3; until then both arguments are required.
-		fmt.Fprint(env.Stderr, "tbox run: image and harness are required (interactive selection arrives in stage 3)\n"+runUsage)
+	if len(pos) > want {
+		fmt.Fprint(env.Stderr, runUsage)
 		return 2
+	}
+	if len(pos) < want {
+		var note string
+		var err error
+		if pos, note, err = completeRun(env, pos, want); err != nil {
+			return interactiveExit(env, err, runNoTerminalHint)
+		}
+		if note != "" {
+			fmt.Fprintln(env.Stderr, note)
+		}
 	}
 	harnessName := pos[want-1]
 	adapter, err := harness.Get(harnessName)

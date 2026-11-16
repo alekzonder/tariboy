@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/tbox/internal/agentmode"
+	"github.com/alekzonder/tariboy/tbox/internal/tui"
 	"github.com/alekzonder/tariboy/tbox/internal/version"
 )
 
@@ -23,6 +24,9 @@ type Env struct {
 	Exec     func(argv0 string, argv, env []string) error
 	LookPath func(string) (string, error)
 	Now      func() time.Time
+	// OpenTerminal puts the terminal into raw mode for an interactive list.
+	// Nil, or tui.ErrNoTerminal, means there is no terminal.
+	OpenTerminal func() (tui.Terminal, error)
 }
 
 // Command runs one subcommand with the arguments after its name.
