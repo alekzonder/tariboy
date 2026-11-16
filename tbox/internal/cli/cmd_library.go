@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -186,12 +187,13 @@ func promptNames(inv stores.Inventory) []string {
 }
 
 // storeInventoryOf reads the inventory of the Store a selector names.
-func storeInventoryOf(r stores.Registry, sel stores.Selector) (stores.Inventory, error) {
+func storeInventoryOf(r stores.Registry, sel stores.Selector) (stores.Inventory, string, error) {
 	s, err := r.Get(sel.Store)
 	if err != nil {
-		return stores.Inventory{}, err
+		return stores.Inventory{}, "", err
 	}
-	return r.Inventory(s)
+	inv, err := r.Inventory(s)
+	return inv, r.Root(s), err
 }
 
 func runSkill(env *Env, args []string) int {
@@ -203,7 +205,7 @@ func runSkill(env *Env, args []string) int {
 	if err != nil {
 		return failSelector(env, err)
 	}
-	inv, err := storeInventoryOf(r, sel)
+	inv, root, err := storeInventoryOf(r, sel)
 	if err != nil {
 		return fail(env, err)
 	}
@@ -214,23 +216,29 @@ func runSkill(env *Env, args []string) int {
 		if s.Err != "" {
 			return fail(env, fmt.Errorf("skill %s/%s: %s", sel.Store, sel.Name, s.Err))
 		}
-		return showSkill(env, s)
+		return showSkill(env, s, root)
 	}
 	return fail(env, fmt.Errorf("store %s has no skill %q", safe(sel.Store), safe(sel.Name)))
 }
 
-func showSkill(env *Env, s stores.Skill) int {
+func showSkill(env *Env, s stores.Skill, root string) int {
 	doc, err := fsafe.ReadFileNoFollow(filepath.Join(s.Dir, "SKILL.md"), skill.MaxFileBytes)
 	if err != nil {
 		return fail(env, fmt.Errorf("read SKILL.md of %s: %w", s.Name, err))
 	}
-	files, more := listSkillFiles(s.Dir)
+	var files []string
+	var more bool
+	if filepath.Clean(s.Dir) == filepath.Clean(root) {
+		files = listRootFiles(s.Dir)
+	} else {
+		files, more = listSkillFiles(s.Dir)
+	}
 	fmt.Fprintf(env.Stdout, "name: %s\ndescription: %s\nfiles:\n", safe(s.Name), safe(s.Description))
 	for _, f := range files {
 		fmt.Fprintf(env.Stdout, "  %s\n", safe(f))
 	}
 	if more {
-		fmt.Fprintln(env.Stdout, "  … more files not shown")
+		fmt.Fprintln(env.Stdout, "  ... more files not shown")
 	}
 	fmt.Fprintf(env.Stdout, "\n%s", doc)
 	return 0
@@ -270,6 +278,21 @@ func listSkillFiles(dir string) ([]string, bool) {
 	return files, more
 }
 
+// listRootFiles lists the regular files directly in the Store root, which is
+// the directory of a root-level skill; the Store's own content is not part
+// of the skill.
+func listRootFiles(root string) []string {
+	entries, _ := os.ReadDir(root)
+	var files []string
+	for _, e := range entries {
+		if e.Type().IsRegular() {
+			files = append(files, e.Name())
+		}
+	}
+	sort.Strings(files)
+	return files
+}
+
 func runPrompt(env *Env, args []string) int {
 	r, err := openRegistry(env)
 	if err != nil {
@@ -279,7 +302,7 @@ func runPrompt(env *Env, args []string) int {
 	if err != nil {
 		return failSelector(env, err)
 	}
-	inv, err := storeInventoryOf(r, sel)
+	inv, _, err := storeInventoryOf(r, sel)
 	if err != nil {
 		return fail(env, err)
 	}

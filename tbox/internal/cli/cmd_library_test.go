@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+
+	"github.com/alekzonder/tariboy/tbox/internal/build"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -261,5 +263,53 @@ func TestRunWithNilExecReturnIsSuccess(t *testing.T) {
 	code, errs, call := runWithExec(t, home, "/", "run", "demo", "claude")
 	if call == nil || code != 0 || strings.Contains(errs, "%!w") {
 		t.Fatalf("%d %q", code, errs)
+	}
+}
+
+func TestBuildOutputSanitizesUntrustedText(t *testing.T) {
+	var out, errb bytes.Buffer
+	env := &Env{Stdout: &out, Stderr: &errb}
+	res := build.Result{
+		Name: "demo", Digest: "d", Built: true, Tags: []string{"latest"},
+		Warnings: []string{"skill a\x1b[31m\nforged: content differs"},
+		Updates:  []build.Update{{Key: "git:https://x/\x1b[2J\nforged", Old: "a", New: "b"}},
+	}
+	printWarnings(env, res)
+	printBuild(env, res)
+	all := out.String() + errb.String()
+	if strings.Contains(all, "\x1b") || strings.Count(errb.String(), "\n") != 1 || strings.Count(out.String(), "\n") != 2 {
+		t.Fatalf("out %q err %q", out.String(), errb.String())
+	}
+}
+
+func TestBuildRefusesSymlinkedImagesDirectory(t *testing.T) {
+	localRegistry(t)
+	home, dir, other := t.TempDir(), t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(other, "demo/Tariboyfile.yaml"), "schema_version: 3\nimage_version: 1.0.0\n")
+	if err := os.Symlink(other, filepath.Join(dir, "images")); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, errs := runIn(t, home, "/", "store", "add", "s", dir); code != 0 {
+		t.Fatal(errs)
+	}
+	if code, _, errs := runIn(t, home, "/", "build", "s/demo"); code != 1 || !strings.Contains(errs, "no image") {
+		t.Fatalf("%d %q", code, errs)
+	}
+}
+
+func TestRootLevelSkillListsOnlyRootFiles(t *testing.T) {
+	localRegistry(t)
+	home, dir := t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: rooty\ndescription: Root skill\n---\nbody\n")
+	writeFile(t, filepath.Join(dir, "notes.txt"), "n")
+	writeFile(t, filepath.Join(dir, "images/demo/Tariboyfile.yaml"), "x")
+	writeFile(t, filepath.Join(dir, "prompts/p.md"), "x")
+	if code, _, errs := runIn(t, home, "/", "store", "add", "s", dir); code != 0 {
+		t.Fatal(errs)
+	}
+	code, out, errs := runIn(t, home, "/", "skill", "s/rooty")
+	want := "name: rooty\ndescription: Root skill\nfiles:\n  SKILL.md\n  notes.txt\n\n"
+	if code != 0 || !strings.HasPrefix(out, want) || strings.Contains(out, "images/") || strings.Contains(out, "prompts/") {
+		t.Fatalf("%d %q %q", code, out, errs)
 	}
 }
