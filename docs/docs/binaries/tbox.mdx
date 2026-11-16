@@ -27,15 +27,27 @@ make build
 
 `make install` copies `bin/tbox` next to the other binaries. `tbox` needs no
 Node.js and no running Tariboy. To run an image you need at least one
-supported harness on `PATH`: Claude Code 2.1.227 or newer, Codex 0.166.0 or
-newer, or OpenCode 1.19.5 or newer. An older version is reported with the
-minimum before anything starts.
+supported harness on `PATH`:
+
+- Claude Code 2.1.227 or newer, the first version with `--plugin-dir`
+  (verified on 2.1.325). `tbox` compares the output of `claude --version`.
+- Codex 0.166.0 or newer. `tbox` compares the output of `codex --version`.
+- OpenCode: there is no version comparison. Before each start `tbox` runs
+  `opencode debug config` against the generated configuration and requires
+  the image's skills path in the result. The contract was verified on
+  OpenCode 1.19.5, and a failed check reports that version as the minimum.
+
+An unsupported harness is an error that names the minimum version, before
+anything starts. `tbox` has no fallback route (such as a skill catalog in the
+prompt) for a harness whose native skill route does not work. Each version
+and configuration probe is stopped after 10 seconds, so a hanging harness
+binary cannot block `tbox run`.
 
 ## Commands
 
 | Command | Does |
 | --- | --- |
-| `tbox build [--path DIR] [--name NAME] [--tag TAG]... [--update]` | Build the image of a source directory. |
+| `tbox build [--path DIR] [--name NAME] [--tag TAG]... [--update]` | Build the image of a source directory; without `--path`, of the current directory. |
 | `tbox build STORE/IMAGE [--name NAME] [--tag TAG]... [--update]` | Build an image of a Store. |
 | `tbox images` | List the built images, then the images of the Stores. |
 | `tbox image show REF`, `tbox image rm REF` | Show or remove a built image. |
@@ -51,7 +63,15 @@ minimum before anything starts.
 | `tbox prompts`, `tbox prompt STORE/PROMPT` | List the prompts of all Stores, or print one. |
 | `tbox clean [IMAGE]` | Remove run directories and harness files. |
 | `tbox skills`, `tbox skill NAME`, `tbox skill exec NAME SCRIPT [ARGS...]` (inside a session) | List and show the skills of the session image, or run a script. |
-| `tbox version` | Print the version. |
+| `tbox version`, `tbox --version` | Print the version. |
+| `tbox help`, `tbox --help`, `tbox -h` | Print the list of commands. |
+
+`tbox help` prints the commands to stdout and exits with code 0; an unknown
+command prints the same list to stderr and exits with code 2. `-h` or
+`--help` after a command, for example `tbox run --help`, prints the usage of
+that command to stdout. Flags may come before or after the positional
+arguments, and `--` ends the flags of `tbox`: everything after it is
+positional, and in `tbox run` it goes to the harness unchanged.
 
 ## The `$TBOX_HOME` layout
 
@@ -63,6 +83,7 @@ The root is `$TBOX_HOME`, by default `~/.tbox`.
   stores/<name>/                       clone or unpacked archive of a Store
   cache/sources/<hash of the address>/ cache of remote skills and prompts
   locks/<hash>.json                    lock files of read-only sources
+  sources/<name>/                      image sources written by tbox image new
   images/<name>/refs/<digest>.tar.gz   built images
   images/<name>/tags/<tag>             pointer to a digest
   run/<digest>/<harness>/              run directory
@@ -72,7 +93,11 @@ The root is `$TBOX_HOME`, by default `~/.tbox`.
 `latest` are the same. Besides the archives, `images/<name>/` keeps the source
 fingerprint of the last build and the source directory it came from. A run directory holds the unpacked image
 (`image/`), the joined prompt (`PROMPT.md`) and the files generated for that
-harness. `tbox` never writes into your working directory.
+harness. `tbox` never writes into your working directory, with two
+exceptions: `tbox image export` without `-o` writes the archive there, and a
+build writes `tbox-lock.json` next to a Tariboyfile that has remote entries
+(see [Remote entries](#remote-entries-and-tbox-lockjson)), which is your
+working directory when you build it with a bare `tbox build`.
 
 ## Stores
 
@@ -122,9 +147,16 @@ Items are addressed as `<store>/<name>`: `tbox build team/demo`,
 `tbox skill team/review`, `tbox prompt team/process`. A bare name is an
 error that lists the matching `<store>/<name>` candidates. `tbox skill
 STORE/SKILL` prints the description, the sorted list of files and `SKILL.md` (for a skill at the Store root, only the files directly in the root);
-`tbox prompt STORE/PROMPT` prints the file as it is (at most 4 MiB). All other
-text from a Store, such as names and descriptions, is printed with control
-characters replaced.
+`tbox prompt STORE/PROMPT` prints the file (at most 4 MiB). When stdout is a
+terminal, control characters in `SKILL.md` and in the prompt other than
+newline and tab are shown in caret notation (`^[`), and C1 controls and
+invalid UTF-8 as `�`; written to a pipe or a file, the bytes are unchanged.
+All other text from a Store, such as names and descriptions, is printed with
+control characters replaced.
+
+An image directory whose name is not a valid image name (for example one with
+upper-case letters) is listed, but `tbox build STORE/IMAGE` then needs
+`--name`.
 
 `tbox images` ends with a table `STORE/IMAGE  VERSION  STATUS`. The status is
 `built` when a built image of that name has the same `image_version`,
@@ -169,7 +201,10 @@ renamed. Each entry is addressed by where the Store keeps the item:
 | directory | `dir`, the absolute path | `file`, the absolute path |
 | archive | a copy under `skills/<name>/` in the source | a copy under `prompts/<name>.md` |
 
-A skill at the root of a directory Store is copied into the source too.
+A skill at the root of a directory Store is copied into the source too. A
+root-level skill is the whole Store root except dot-directories and a root
+`evals/` directory, so `tbox image new` refuses it when the root also holds
+`images/` or other skills.
 Copied files are checked with the same limits as a build. To change an image,
 edit the files in `sources/<name>/` and run `tbox build --path
 $TBOX_HOME/sources/<name>` (the default `~/.tbox/sources/<name>`). An entry
@@ -178,7 +213,9 @@ from a git Store pins the commit the Store had checked out, in `ref`; edit
 
 ### Interactive form
 
-With a terminal, `tbox image new` asks the name (when `NAME` is absent), then
+With a terminal, `tbox image new` asks the name (when `NAME` is absent; an
+invalid name, or the name of an existing source without `--force`, is asked
+again with the reason), then
 shows a checklist of every Store skill (`<store>/<skill>` and its
 description), then a checklist of every Store prompt whose first row is
 `new empty prompt (instructions.md)`. Rows with a problem are left out. When
@@ -198,18 +235,23 @@ Keys in every list:
 
 Cancelling exits with code 130 and writes nothing. The terminal is put back
 exactly as it was before any build output is printed and before the harness
-starts. Text from Stores shown in the lists has control characters replaced.
-Without a terminal on stdin, `tbox image new` without the flags exits with
-code 2 and names `--skill`, `--prompt` and `--new-prompt`; it never waits.
+starts, and also when `tbox` is ended by `SIGTERM`, `SIGHUP`, `SIGQUIT` or
+`SIGINT` while a list is shown. Text from Stores shown in the lists has
+control characters replaced. The lists need a terminal on both stdin and
+stderr. Without one, `tbox image new` without the flags exits with code 2
+and names `--skill`, `--prompt` and `--new-prompt`; it never waits. A `NAME`
+given on the command line is checked before any list is shown.
 
 Security rules: a URL with user-info is rejected, as is a git ref that is empty,
 starts with `-`, holds `..`, a space or a control character, or is longer than
 255 characters. `git` runs with an argument array, a time limit, no prompts and
-no hooks. `http://`, `file://`, `ext::` and local paths are not accepted as git
+no hooks; the time limit is `TBOX_GIT_TIMEOUT` seconds, 120 by default.
+`http://`, `file://`, `ext::` and local paths are not accepted as git
 or archive addresses. An archive is unpacked with regular files and directories
 only, no symlinks, hardlinks, absolute or `..` paths, at most 4096 members, 64
 MiB compressed, 256 MiB unpacked and 512 bytes per path; a single top-level
-directory is stripped. Error messages never carry raw `git` output.
+directory is stripped. A failed `git` command is reported with the last line
+of its stderr, with credentials masked; no other `git` output is shown.
 
 ## Build and change detection
 
@@ -218,8 +260,11 @@ tbox build --path ./my-image
 ```
 
 The source is a directory with a `Tariboyfile.yaml` of `schema_version` 2 or 3.
-`tbox build STORE/IMAGE` uses `images/<image>` of the Store; `--path` and a
-selector exclude each other. The name defaults to the directory name, so to the
+`tbox build` without arguments builds the current directory. `tbox build
+STORE/IMAGE` uses `images/<image>` of the Store; `--path` and a selector
+exclude each other. A Store image is confined to its Store: an absolute path,
+or a path that leads outside the Store root, in a Store image is a build
+error. The name defaults to the directory name, so to the
 image name for a Store image, not `store/image`. Without `--tag` the image is published
 under its `image_version` and under `latest`. The archive uses the Tariboy
 schema v2 format byte for byte, so Tariboy imports it.
@@ -234,10 +279,16 @@ When the content changed under an unchanged `image_version`, the version tag and
 different from Tariboy, which refuses to rebuild the same version with other
 content. The previous archive stays in `refs/` until `tbox image rm` removes it.
 
+A source that uses `extends` builds to a different digest in `tbox` and in
+Tariboy: Tariboy copies the layers into one directory, while `tbox` resolves
+each entry in its own layer. In a child layer, an `only: tariboy` skill
+replaces a parent skill of the same name, so `tbox` then packages neither.
+
 Two Stores can hold an image of the same name. They build into the same image
 name, and the later build moves the tags. `tbox` then prints the `moved` line
 and `note: image <name> now comes from <store>/<image>`; use `--name` to keep
-both.
+both. A build that runs while `tbox store refresh` replaces the same Store may
+fail; run it again after the refresh.
 
 ### Remote entries and `tbox-lock.json`
 
@@ -280,8 +331,12 @@ needs an uncached remote entry fails with the entry named.
 
 A schema v2 image can come from the `npx skills` tooling, with
 `skills-lock.json` next to the Tariboyfile or at the Store root and no
-`.agents/skills/` in the checkout. `tbox` restores those skills itself, in a
-temporary build directory, and does not change the Store. It supports `github`
+`.agents/skills/` in the checkout. `tbox` restores those skills itself into
+its cache (`cache/`) and does not change the Store. For a `--path` build, an
+`.agents/skills/<name>` directory that is present on disk is used as it is;
+for a Store build the skills are always restored from the lock. An `extends`
+layer outside the image directory gets no `.agents/skills` remapping. It
+supports `github`
 sources (`source` plus `skillPath`, fetched at the default branch since the v2
 lock holds no commit) and `local` sources. A computed hash that differs from
 the content is a warning naming the skill, not an error. An image that declares
@@ -317,12 +372,14 @@ With fewer arguments than it needs, `tbox run` asks for the rest on a terminal:
 - `tbox run IMAGE` asks only for the harness;
 - `tbox run --path DIR` asks only for the harness.
 
-The harness list shows the installed harnesses only. When exactly one is
-installed it is taken without a list and a line `using harness <name>` is
-printed. The keys are those of the lists above. Exit codes: 130 on cancel; 1
-when there is no image (`tbox build` and `tbox store add` are named) or no
-harness installed (the supported ones are listed); 2 without a terminal, with
-`tbox run: IMAGE and HARNESS are required when stdin is not a terminal`.
+The harness list shows the installed harnesses only. Whether one is installed
+is checked before the image list is shown. When exactly one is installed it is
+taken without a list and a line `using harness <name>` is printed. The keys
+are those of the lists above. Exit codes: 130 on cancel; 1 when there is no
+image (`tbox build` and `tbox store add` are named) or no harness installed
+(the supported ones are listed); 2 without a terminal on stdin and stderr,
+with `tbox run: IMAGE and HARNESS are required when stdin or stderr is not a
+terminal`.
 
 `tbox run` unpacks the image into `run/<digest>/<harness>/image/` if that is not
 done yet, joins the static prompt layers into `PROMPT.md`, generates the
@@ -374,7 +431,8 @@ the skills path is not in the resolved configuration.
   `[plugins."<plugin>@tbox"] enabled = true`.
 
 `<plugin>` is the image name with every character outside `a-z0-9-` replaced
-by `-`; `<version>` is the image version. `tbox` starts `codex --profile
+by `-`; `<version>` is the image version, or the first 12 characters of the
+digest when the image has no version. `tbox` starts `codex --profile
 tbox-<plugin>` plus your arguments. Without that flag Codex does not see the
 plugin, so your ordinary sessions are unaffected. Skills appear as
 `<plugin>:<skill>`. `developer_instructions` adds the image prompt to the
@@ -384,6 +442,23 @@ names that map to the same plugin name share one entry; `tbox` prints a note
 when it replaces the other image's entry. `tbox` refuses to write through a
 symlinked `plugins/cache/tbox`.
 
+While a launch prepares these files, it also creates short-lived staging
+entries under `$CODEX_HOME`: `plugins/cache/tbox/.plugin-*` directories and
+`tbox-<plugin>.tmp-*.config.toml` files. They are renamed into place or
+removed; ones left by an interrupted launch are removed by the next launch and
+by `tbox clean`.
+
+Consequences of the shared cache:
+
+- A Codex session started from an older build of an image loses its skills
+  path when a newer build of the same image is run, because the cache entry is
+  replaced.
+- Image names that differ only in `.`, `_` and `-` (`a.b`, `a_b`, `a-b`) map
+  to the same `<plugin>` and share the cache entry and the profile, and
+  `tbox clean a.b` removes the Codex files of `a-b` too.
+- `tbox` passes its own `--profile tbox-<plugin>`; a `--profile` of yours after
+  `--` conflicts with it.
+
 ### Clean up
 
 ```bash
@@ -392,10 +467,16 @@ tbox clean my-image   # one image
 ```
 
 `tbox clean` removes the run directories and, for Codex, the
-`plugins/cache/tbox/<plugin>` entry and `tbox-<plugin>.config.toml` that `tbox`
-created. It removes nothing else: `config.toml` and the rest of `$CODEX_HOME`
-stay byte for byte as they were. Built images stay too; remove those with
-`tbox image rm`.
+`plugins/cache/tbox/<plugin>` entry, the leftover temporary profiles, and the
+`tbox-<plugin>.config.toml` profiles whose first line is the
+`# Written by tbox` header. A `tbox-*.config.toml` without that header is kept,
+and a note names it. It removes nothing else: `config.toml` and the rest of
+`$CODEX_HOME` stay byte for byte as they were. Built images stay too; remove
+those with `tbox image rm`.
+
+`tbox clean IMAGE` finds the run directories of the image by the manifest of
+the unpacked image. A run directory whose image cannot be read is kept, and a
+note names it; `tbox clean` without an image removes it.
 
 ## Inside a session
 
@@ -406,12 +487,19 @@ switches to agent mode and shows only the image of the session:
 tbox skills                           # name and description of each skill
 tbox skill NAME                       # description, files and SKILL.md
 tbox skill exec NAME SCRIPT [ARGS...] # run a script inside the skill
+tbox version                          # the tbox version
+tbox help                             # these commands
 ```
+
+Names, descriptions and file names in the output have control characters
+replaced; the `SKILL.md` text is printed as it is.
 
 `skill exec` runs a file inside the skill directory; the path cannot leave it.
 The working directory stays the current one, `TBOX_SKILL_DIR` is added to the
 environment, and the exit code and streams of the script pass through. Every
-other command, including build and run, exits with an error that explains why. If
+other command, including build and run, exits with code 2 and an error that
+names the image of the session (or its directory when `TBOX_IMAGE` is not set)
+and lists the commands above. If
 the directory named by `TBOX_IMAGE_DIR` is missing or broken, `tbox` fails
 instead of falling back to normal mode.
 

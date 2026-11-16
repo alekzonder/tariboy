@@ -86,7 +86,8 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
   apt, cargo and staticcheck caches; see "Pull request CI" in
   `docs/docs/development.mdx`. Backend checks cover
   `fmt-check`, `go vet`, `staticcheck`, the `gocyclo` and `gocognit` complexity thresholds,
-  Go unit tests, the desktop crate compile (`desktop-rust-check`, `cargo
+  Go unit tests, the `tbox` module checks (`tbox-check`: format, vet,
+  staticcheck, complexity and tests under `tbox/`), the desktop crate compile (`desktop-rust-check`, `cargo
   check`), Store skills, the Tasks mode E2E (`tariboy-tasks-e2e`), and
   smoke contracts; the `test` and `tariboy-tasks-e2e` steps also check the
   HTTP API against the committed OpenAPI snapshot;
