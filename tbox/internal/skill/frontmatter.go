@@ -152,3 +152,13 @@ func normalizeFrontmatter(out frontmatter) (frontmatter, error) {
 	}
 	return out, nil
 }
+
+// ReadMeta parses and validates the frontmatter of a SKILL.md body and returns
+// its name and description. It reads nothing but the bytes it is given.
+func ReadMeta(body []byte) (name, description string, err error) {
+	fm, err := parseFrontmatter(body)
+	if err != nil {
+		return "", "", err
+	}
+	return fm.Name, fm.Description, nil
+}
