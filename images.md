@@ -710,6 +710,19 @@ rejects unknown fields in `role`. A daemon older than this feature does not
 know the field: its strict check rejects an image with `role`. Images built
 before this feature have no `role` field.
 
+## Schema version 3
+
+[`tbox`](/docs/binaries/tbox) builds `schema_version: 3` sources. Version 3 adds
+the `only: tariboy` field to a skill or prompt entry, which `tbox` leaves out of
+its archive and fingerprint, and remote entries: a skill is one of `dir`, `git`
+or `url`, a prompt one of `file`, `git`, `url` or `runtime`. `git` needs `path`
+and takes an optional `ref`; `url` is an `https://` archive for a skill and a
+single Markdown file for a prompt. `tbox` pins remote entries in
+`tbox-lock.json` next to the Tariboyfile (see
+[tbox](/docs/binaries/tbox#remote-entries-and-tbox-lockjson)). Tariboy does not
+build or accept schema v3 yet: it still understands only version 2. The archive
+`tbox` writes is a schema v2 image that Tariboy imports.
+
 ## Packaged Agent Skills
 
 Each `skills` entry explicitly packages one Agent Skill directory into the

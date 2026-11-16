@@ -15,7 +15,7 @@ sidebar:
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.115.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.116.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -122,13 +122,13 @@ Repository owner and alpha incident lead: GitHub user
 2. Quit Tariboy from its menu-bar item.
 3. Move the current app out of Applications without deleting its support data.
 4. Reinstall the previously verified DMG.
-5. Relaunch, choose **Install/Update CLI** to repoint all six local links and
+5. Relaunch, choose **Install/Update CLI** to repoint all eleven local links and
    restart the local daemon, then update remote hosts to the version bundled by
    that app.
 
 Local link switching is preflighted and transactional. Remote activation also
 attempts to restore the previous release if verification/restart fails. Do not
-manually repoint only one of the six local or remote managed symlinks.
+manually repoint only one of the local or remote managed symlinks.
 
 ## Uninstall
 
@@ -142,7 +142,7 @@ app=/Applications/Tariboy.app
 identifier=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")
 test "$identifier" = app.tariboy.desktop
 bundle_bin=$app/Contents/Resources/bin/darwin-arm64
-for managed in tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-shim:tariboy-shim tariboy-plugin-telegram:tariboy-plugin-telegram; do
+for managed in tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-mail:tariboy-mail tmail:tariboy-mail tariboy-scripts:tariboy-scripts tscripts:tariboy-scripts tariboy-shim:tariboy-shim tariboy-plugin-telegram:tariboy-plugin-telegram tbox:tbox; do
   name=${managed%%:*}
   source=${managed#*:}
   link="$HOME/.local/bin/$name"
@@ -160,7 +160,7 @@ for managed in tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks tta
   fi
 done
 "$bundle_bin/tariboy" daemon stop || true
-for name in tariboyd tariboy tariboy-tasks ttasks tariboy-shim tariboy-plugin-telegram; do
+for name in tariboyd tariboy tariboy-tasks ttasks tariboy-mail tmail tariboy-scripts tscripts tariboy-shim tariboy-plugin-telegram tbox; do
   link="$HOME/.local/bin/$name"
   test ! -L "$link" || rm -- "$link"
 done

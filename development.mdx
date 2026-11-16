@@ -172,7 +172,7 @@ make full-check      # heavy, tens of minutes, includes check
 Run `make backend-check` for backend-only changes and `make frontend-check` for
 frontend- or documentation-only changes. Run `make check` for mixed changes or
 when ownership is unclear. The backend target runs `fmt-check`, `vet`,
-`staticcheck`, `gocyclo`, `gocognit`, `test`, Go unit tests, `desktop-rust-check` and
+`staticcheck`, `gocyclo`, `gocognit`, `test`, `tbox-check`, Go unit tests, `desktop-rust-check` and
 smoke contracts. Its
 `test` and `tariboy-tasks-e2e` steps also check the HTTP API against the
 committed OpenAPI snapshot; see [Go control plane and plugins](#go-control-plane-and-plugins). The
@@ -181,7 +181,7 @@ typecheck, lint with the complexity and size thresholds, the unused-code check, 
 which fail when Vitest finishes fewer test files than it found, the Storybook build (`ui-storybook`), branding, the bundle budget, and the documentation checks. The documentation
 step restores the last build from a host cache when no input of the site
 changed; see [Documentation build cache](#documentation-build-cache). Before checking, `backend-check` runs `go mod download`
-for the module and for `tools.mod`. `frontend-check` uses
+for the module, for `tools.mod` and for the `tbox/` module. `frontend-check` uses
 `scripts/npm-ci-locked.sh` for locked installs under `ui/`, `ui/tools/api-types/`
 and `docs/`.
 They do not write into
@@ -390,8 +390,9 @@ lower the limit in the same change. Test files, `node_modules` and hidden
 directories such as `.worktrees` are not measured. `make gocognit-report`
 prints the 30 most complex functions and the average, and it never fails.
 
-`make fmt` is not a check: it rewrites files. Only `fmt-check` is part of
-`backend-check`; run `make fmt` yourself when it reports drift.
+`make fmt` is not a check: it rewrites files, in the root module and in
+`tbox/`. Only `fmt-check` and `tbox-fmt-check` are part of `backend-check`;
+run `make fmt` yourself when either reports drift.
 
 `make build` produces the core binaries. It is not part of `check`, which
 writes nothing into `bin/`, and it is the first build step of `full-check`.
@@ -406,9 +407,11 @@ cross-compiles one archive for each server platform into
 `dist/server-archives/<version>/`:
 `tariboy_<version>_linux-x86_64.tar.gz`,
 `tariboy_<version>_linux-aarch64.tar.gz` and
-`tariboy_<version>_darwin-arm64.tar.gz`. Each archive holds the seven
-binaries, `VERSION`, `SHA256SUMS` and `remote-install.sh` at its root. The
-release packager copies them into the release.
+`tariboy_<version>_darwin-arm64.tar.gz`. Each archive holds the eight
+binaries of the Desktop set (every binary except `tariboy-store`, `tbox`
+included), `VERSION`, `SHA256SUMS` and `remote-install.sh` at its root. Both
+targets build `tbox` from inside `tbox/` and the other binaries from the root
+module. The release packager copies the archives into the release.
 `make install` installs the resulting commands under `$HOME/.local/bin`; it is
 not required for normal unit-test work.
 
@@ -418,12 +421,15 @@ tests `tscripts` on the isolated agent: `run`, `logs`, `schedule` with the
 quiet exit `111`, `rerun`, `cancel`, `rm`, the refusal of
 `schedule --quiet-exit`, and the runtime `bin/tscripts` link.
 
-`make server-install` builds all eight real server binaries, stages and verifies
-their checksums, publishes a versioned release under
+`make server-install` builds all nine real server binaries, `tbox` included,
+stages and verifies their checksums, publishes a versioned release under
 `$HOME/.local/lib/tariboy/<version>`, and transactionally switches the matching
 `$HOME/.local/bin` links. `ttasks`, `tmail` and `tscripts` are additional
-aliases for `tariboy-tasks`, `tariboy-mail` and `tariboy-scripts`. It does not
-start or restart the daemon.
+aliases for `tariboy-tasks`, `tariboy-mail` and `tariboy-scripts`; `tbox` has
+no alias. It does not start or restart the daemon.
+`scripts/server-install-contract-test.sh` runs `make install` and
+`make server-install` with a fake `go` in a temporary `HOME` and checks every
+link, `tbox` included.
 
 Native Tasks changes normally need focused tests under `internal/tasks`, the
 operator route/OpenAPI registry tests under `internal/commands`, and the agent
@@ -526,6 +532,26 @@ live in those packages. The isolated product path is
 alone with `make workflow-e2e`. Keep the current behavior documented in
 [Task workflows](/docs/task-workflows) and
 [Workflow images](/docs/workflow-images).
+
+### tbox
+
+`tbox/` is a separate Go module (`tbox/go.mod`, module path
+`github.com/alekzonder/tariboy/tbox`) that builds the standalone `tbox` binary.
+`make build` writes it to `bin/tbox`. It is part of the released binary set
+like `tariboy-mail`: `BINARIES`, `MANAGED_LINKS` and `DESKTOP_BINARIES` in the
+`Makefile`, the Desktop bundle, the server archives, `remote-install.sh` and
+`tariboy update` all carry it. `tbox/internal/version/version.go` repeats the
+product version, `scripts/set-version.sh` moves it with the other pinned files,
+and `TestTboxVersionMatchesCanonicalVersion` in `scripts/` fails when it differs
+from `internal/version.Version`. The root `go list ./...` does not
+descend into it, and no file under `tbox/` may import a tariboy package
+outside `tbox/`; `TestNoTariboyImports` enforces this. `make tbox-check`
+runs `tbox-fmt-check`, `tbox-vet`, `tbox-staticcheck`, `tbox-complexity` (the
+same `gocyclo` and `gocognit` limits as the root) and `tbox-test` inside
+`tbox/`, using the linters pinned in the root `tools.mod`. Like the other
+aggregate targets it runs every sub-step, prints a summary table and fails at
+the end if any sub-step failed. `backend-check` runs it as the `tbox-check`
+step.
 
 ### Image skill bridge development
 

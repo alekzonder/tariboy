@@ -6,13 +6,13 @@ sidebar:
   icon: rocket
 ---
 
-This path is for the `0.115.0` alpha on an Apple Silicon Mac.
+This path is for the `0.116.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.115.0_aarch64.dmg`;
+- a verified `Tariboy_0.116.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -60,9 +60,11 @@ them with **Option-Command-I** on macOS or choose **Inspect Element** from the
 WebView context menu.
 
 To expose the bundled local commands on your shell `PATH`, choose
-**Install/Update CLI** from the Tariboy menu-bar item. It updates six Tariboy
-command links under `~/.local/bin` and restarts the local daemon. The bundle
-has five real payload files; `ttasks` is the alias for `tariboy-tasks`. Running
+**Install/Update CLI** from the Tariboy menu-bar item. It updates eleven
+Tariboy command links under `~/.local/bin` and restarts the local daemon. The
+bundle has eight real payload files, `tbox` among them; `ttasks`, `tmail` and
+`tscripts` are the aliases for `tariboy-tasks`, `tariboy-mail` and
+`tariboy-scripts`. Running
 agent shims continue; their harnesses retry through the brief proxy outage.
 When upgrading a running daemon older than `0.10.1`, Desktop first verifies
 that it is idle and refuses to change links or restart it while work is active.

@@ -178,8 +178,10 @@ fails, the step **Download release** fails with the URL in the message.
 Desktop removes the staging directory, and the active release on the host
 does not change. Desktop does not fall back to an upload.
 
-The archive holds the seven binaries, a version marker, checksums, and a copy
-of the installer. Desktop does not run that copy. It runs its own built-in
+The archive holds the eight binaries (`tariboyd`, `tariboy`, `tariboy-tasks`,
+`tariboy-mail`, `tariboy-scripts`, `tariboy-shim`, `tariboy-plugin-telegram`
+and the standalone [`tbox`](/docs/binaries/tbox)), a version marker, checksums,
+and a copy of the installer. Desktop does not run that copy. It runs its own built-in
 `remote-install.sh`, which:
 
 - validates checksums;
@@ -191,8 +193,9 @@ of the installer. Desktop does not run that copy. It runs its own built-in
 - rolls back the previous release on activation failure.
 
 Reactivating a release that predates `tariboy-tasks` removes both newer Tasks
-links transactionally. Selecting the newer release again restores them; every
-selected release must contain its required payloads before links switch.
+links transactionally. Reactivating a release that predates `tbox` removes the
+`tbox` link in the same way. Selecting the newer release again restores them;
+every selected release must contain its required payloads before links switch.
 
 An update refuses to replace unrelated regular files in `~/.local/bin`.
 Choosing **Update Tariboy** authorizes the version switch and daemon restart;
@@ -310,7 +313,7 @@ To uninstall remotely after confirming no work is active:
 ```bash
 ssh build-box 'set -eu
 managed_cli=
-for managed in tariboy:tariboy tariboyd:tariboyd tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-shim:tariboy-shim tariboy-plugin-telegram:tariboy-plugin-telegram; do
+for managed in tariboy:tariboy tariboyd:tariboyd tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-mail:tariboy-mail tmail:tariboy-mail tariboy-scripts:tariboy-scripts tscripts:tariboy-scripts tariboy-shim:tariboy-shim tariboy-plugin-telegram:tariboy-plugin-telegram tariboy-store:tariboy-store tbox:tbox; do
   name=${managed%%:*}
   source=${managed#*:}
   link=$HOME/.local/bin/$name
@@ -329,7 +332,7 @@ for managed in tariboy:tariboy tariboyd:tariboyd tariboy-tasks:tariboy-tasks tta
 done
 test -n "$managed_cli"
 "$managed_cli" daemon stop || true
-for name in tariboy tariboyd tariboy-tasks ttasks tariboy-shim tariboy-plugin-telegram; do
+for name in tariboy tariboyd tariboy-tasks ttasks tariboy-mail tmail tariboy-scripts tscripts tariboy-shim tariboy-plugin-telegram tariboy-store tbox; do
   link=$HOME/.local/bin/$name
   test ! -L "$link" || rm -- "$link"
 done

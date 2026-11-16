@@ -189,10 +189,11 @@ The mode also controls the
 Local data defaults to `~/.tariboy`; runtime files default to
 `~/.tariboyd`. Remote binaries live in versioned directories under
 `~/.local/lib/tariboy`; managed symlinks live in `~/.local/bin`. The local
-Desktop installer preflights all six command paths before changing any of them
-and refuses regular files, directories, or symlinks not owned by the verified
-Tariboy app bundle. The bundle has five real payload files; `ttasks` is a
-managed alias whose source is `tariboy-tasks`.
+Desktop installer preflights all eleven command paths before changing any of
+them and refuses regular files, directories, or symlinks not owned by the
+verified Tariboy app bundle. The bundle has eight real payload files, `tbox`
+among them; `ttasks`, `tmail` and `tscripts` are managed aliases whose sources
+are `tariboy-tasks`, `tariboy-mail` and `tariboy-scripts`.
 
 The Desktop package carries no server binaries. An SSH server downloads the
 archive of the Desktop version from the GitHub release over HTTPS, with the
@@ -357,7 +358,7 @@ runs the routine.
 
 ## Alpha signing and Gatekeeper
 
-`0.115.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.116.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &

@@ -41,6 +41,7 @@
 - [Compose reference](https://alekzonder.github.io/tariboy/binaries/compose-reference): A complete Tariboycompose.yaml, every field by section, the phase order of compose up, and every compose verb.
 - [Compose decisions](https://alekzonder.github.io/tariboy/binaries/compose-cases): What tariboy compose does in special cases - a partial failure, an unavailable Store, a version conflict, an entity in use, a removed entity, a second up, secrets, dry-run, versions and migration.
 - [tariboy-store](https://alekzonder.github.io/tariboy/binaries/store): A standalone image registry server that stores agent-image blobs and serves a token-authenticated push/pull API.
+- [tbox](https://alekzonder.github.io/tariboy/binaries/tbox): Run Tariboy agent images in ordinary Claude Code, Codex and OpenCode sessions, with no daemon.
 
 ## Plugins
 
