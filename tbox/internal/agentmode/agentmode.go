@@ -81,12 +81,14 @@ func lookup(environ []string, key string) string {
 
 func listSkills(host Host, run rundir.Run) int {
 	for _, s := range run.Skills {
-		fmt.Fprintf(host.Stdout, "%s\t%s\n", s.Name, oneLine(s.Description))
+		fmt.Fprintf(host.Stdout, "%s\t%s\n", oneLine(s.Name), oneLine(s.Description))
 	}
 	return 0
 }
 
-func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
+// oneLine makes text from the image printable on one line: control
+// characters become spaces and whitespace runs collapse.
+func oneLine(s string) string { return textsafe.Line(s, 0) }
 
 func skillCommand(host Host, run rundir.Run, args []string) int {
 	if len(args) > 0 && args[0] == "exec" {
@@ -103,17 +105,17 @@ func skillCommand(host Host, run rundir.Run, args []string) int {
 	dir := filepath.Join(run.ImageDir, meta.ArchiveRoot)
 	doc, err := fsafe.ReadFileNoFollow(filepath.Join(dir, "SKILL.md"), maxSkillDoc)
 	if err != nil {
-		fmt.Fprintf(host.Stderr, "tbox: read SKILL.md of %s: %v\n", meta.Name, err)
+		fmt.Fprintf(host.Stderr, "tbox: read SKILL.md of %s: %v\n", oneLine(meta.Name), err)
 		return 1
 	}
 	files, err := listFiles(dir)
 	if err != nil {
-		fmt.Fprintf(host.Stderr, "tbox: list files of %s: %v\n", meta.Name, err)
+		fmt.Fprintf(host.Stderr, "tbox: list files of %s: %v\n", oneLine(meta.Name), err)
 		return 1
 	}
-	fmt.Fprintf(host.Stdout, "name: %s\ndescription: %s\nfiles:\n", meta.Name, oneLine(meta.Description))
+	fmt.Fprintf(host.Stdout, "name: %s\ndescription: %s\nfiles:\n", oneLine(meta.Name), oneLine(meta.Description))
 	for _, f := range files {
-		fmt.Fprintf(host.Stdout, "  %s\n", f)
+		fmt.Fprintf(host.Stdout, "  %s\n", oneLine(f))
 	}
 	fmt.Fprintf(host.Stdout, "\n%s", doc)
 	return 0
@@ -146,7 +148,7 @@ func find(host Host, run rundir.Run, name string) (*skill.Metadata, int) {
 	}
 	names := make([]string, 0, len(run.Skills))
 	for _, s := range run.Skills {
-		names = append(names, s.Name)
+		names = append(names, oneLine(s.Name))
 	}
 	fmt.Fprintf(host.Stderr, "tbox: unknown skill %q; available: %s\n", name, strings.Join(names, ", "))
 	return nil, 1

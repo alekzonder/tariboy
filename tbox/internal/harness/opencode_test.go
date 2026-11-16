@@ -135,3 +135,20 @@ func TestOpenCodeSimultaneousFirstLaunches(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestOpenCodeProbeMatchesJSONEscapedPath(t *testing.T) {
+	run := twoSkillRun(t, "p\n")
+	odd := filepath.Join(filepath.Dir(run.Dir), `we"ird\\dir`, "h")
+	if err := os.MkdirAll(filepath.Dir(odd), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(run.Dir, odd); err != nil {
+		t.Fatal(err)
+	}
+	run.Dir, run.ImageDir = odd, filepath.Join(odd, "image")
+	run.SkillsDir, run.PromptPath = filepath.Join(run.ImageDir, "skills"), filepath.Join(odd, "PROMPT.md")
+	f := openCodeHost(echoConfig)
+	if _, err := (openCode{}).Prepare(context.Background(), f.host(), run, nil); err != nil {
+		t.Fatal(err)
+	}
+}

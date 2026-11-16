@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/alekzonder/tariboy/tbox/internal/fsafe"
 	"github.com/alekzonder/tariboy/tbox/internal/paths"
@@ -240,8 +241,39 @@ func showSkill(env *Env, s stores.Skill, root string) int {
 	if more {
 		fmt.Fprintln(env.Stdout, "  ... more files not shown")
 	}
-	fmt.Fprintf(env.Stdout, "\n%s", doc)
+	fmt.Fprint(env.Stdout, "\n")
+	if _, err := env.Stdout.Write(bodyFor(env, doc)); err != nil {
+		return fail(env, err)
+	}
 	return 0
+}
+
+// bodyFor returns a file body to print. On a terminal, control characters
+// other than newline and tab are shown in caret notation (^[), and C1 controls
+// and invalid UTF-8 as U+FFFD, so the body cannot drive the terminal; a pipe or a file gets the
+// bytes unchanged.
+func bodyFor(env *Env, body []byte) []byte {
+	if env.StdoutIsTerminal == nil || !env.StdoutIsTerminal() {
+		return body
+	}
+	out := make([]byte, 0, len(body))
+	for len(body) > 0 {
+		r, n := utf8.DecodeRune(body)
+		switch {
+		case r == '\n' || r == '\t':
+			out = append(out, body[0])
+		case r < 0x20:
+			out = append(out, '^', byte(r)+'@')
+		case r == 0x7f:
+			out = append(out, '^', '?')
+		case r >= 0x80 && r <= 0x9f, r == utf8.RuneError && n == 1:
+			out = utf8.AppendRune(out, utf8.RuneError)
+		default:
+			out = append(out, body[:n]...)
+		}
+		body = body[n:]
+	}
+	return out
 }
 
 // listSkillFiles returns the regular files below dir as sorted relative
@@ -317,7 +349,7 @@ func runPrompt(env *Env, args []string) int {
 		if err != nil {
 			return fail(env, fmt.Errorf("read prompt %s/%s: %w", sel.Store, sel.Name, err))
 		}
-		_, err = env.Stdout.Write(body)
+		_, err = env.Stdout.Write(bodyFor(env, body))
 		if err != nil {
 			return fail(env, err)
 		}

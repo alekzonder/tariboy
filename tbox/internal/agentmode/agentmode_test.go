@@ -161,3 +161,36 @@ func TestOtherCommandsUnavailable(t *testing.T) {
 		t.Fatalf("no TBOX_IMAGE: %d %q", code, s.err.String())
 	}
 }
+
+func TestListingsSanitizeControlCharacters(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "skills", "evil")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "---\nname: evil\n---\nbody \x1b[31m kept\n"
+	for name, data := range map[string]string{"SKILL.md": body, "a\x1b[2Jb.txt": "x"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run := rundir.Run{ImageDir: dir, Skills: []skill.Metadata{{Name: "evil\x1b]0;x\x07", Description: "desc \x1b[31mred", ArchiveRoot: "skills/evil"}}}
+	var out, errb bytes.Buffer
+	host := Host{Stdout: &out, Stderr: &errb}
+	listSkills(host, run)
+	if strings.ContainsAny(out.String(), "\x1b\x07") {
+		t.Fatalf("skills: %q", out.String())
+	}
+	out.Reset()
+	run.Skills[0].Name = "evil"
+	if code := skillCommand(host, run, []string{"evil"}); code != 0 {
+		t.Fatalf("skill: %d %q", code, errb.String())
+	}
+	header, doc, _ := strings.Cut(out.String(), "\n\n")
+	if strings.Contains(header, "\x1b") {
+		t.Fatalf("header: %q", header)
+	}
+	if doc != body {
+		t.Fatalf("SKILL.md body changed: %q", doc)
+	}
+}

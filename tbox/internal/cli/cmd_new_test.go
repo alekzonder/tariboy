@@ -154,7 +154,6 @@ func TestImageNewRootSkills(t *testing.T) {
 	_ = repo
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "SKILL.md"), "---\nname: rooty\ndescription: Root skill\n---\nbody\n")
-	writeFile(t, filepath.Join(root, "images/i/Tariboyfile.yaml"), "schema_version: 3\n")
 	home := t.TempDir()
 	runIn(t, home, "/", "store", "add", "d", root)
 	code, out, errs := runIn(t, home, "/", "image", "new", "fromdir", "--skill", "d/rooty")
