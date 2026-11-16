@@ -52,7 +52,7 @@ func (openCode) Prepare(ctx context.Context, host Host, run rundir.Run, extra []
 		return Launch{}, err
 	}
 	dir := filepath.Join(run.Dir, "opencode")
-	if err := writeOpenCodeConfig(run, dir); err != nil {
+	if err := lockedOpenCodeConfig(run, dir); err != nil {
 		return Launch{}, err
 	}
 	if err := probeOpenCode(ctx, host, path, dir, run.SkillsDir); err != nil {
@@ -67,6 +67,17 @@ func (openCode) Prepare(ctx context.Context, host Host, run rundir.Run, extra []
 		launch.Notes = append(launch.Notes, fmt.Sprintf("tbox: %s=%s is replaced for this session; config from that directory is not loaded", openCodeConfigEnv, old))
 	}
 	return launch, nil
+}
+
+// lockedOpenCodeConfig writes the config under the run directory lock, so
+// simultaneous first launches do not race on the config directory.
+func lockedOpenCodeConfig(run rundir.Run, dir string) error {
+	unlock, err := rundir.LockDir(run.Dir)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return writeOpenCodeConfig(run, dir)
 }
 
 func writeOpenCodeConfig(run rundir.Run, dir string) error {
@@ -92,14 +103,9 @@ func writeOpenCodeConfig(run rundir.Run, dir string) error {
 }
 
 // probeOpenCode runs `opencode debug config` with the generated config
-// directory and requires the skills path in the resolved config. Host.Output
-// takes no environment, so the variable is set through env(1).
+// directory and requires the skills path in the resolved config.
 func probeOpenCode(ctx context.Context, host Host, path, dir, skills string) error {
-	envPath, err := host.LookPath("env")
-	if err != nil {
-		return fmt.Errorf("env is required to probe opencode: %w", err)
-	}
-	out, err := host.Output(ctx, envPath, openCodeConfigEnv+"="+dir, path, "debug", "config")
+	out, err := host.Output(ctx, []string{openCodeConfigEnv + "=" + dir}, path, "debug", "config")
 	if err != nil {
 		return fmt.Errorf("probe opencode config: %w", err)
 	}
@@ -107,7 +113,7 @@ func probeOpenCode(ctx context.Context, host Host, path, dir, skills string) err
 		return nil
 	}
 	found := "unknown"
-	if v, err := host.Output(ctx, path, "--version"); err == nil {
+	if v, err := host.Output(ctx, nil, path, "--version"); err == nil {
 		if _, text, ok := parseVersion(string(v)); ok {
 			found = text
 		}

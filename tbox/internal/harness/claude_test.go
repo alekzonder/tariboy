@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -15,7 +16,7 @@ import (
 func claudeHost(version string) *fakeHost {
 	return &fakeHost{
 		installed: map[string]bool{"claude": true},
-		output: func(name string, args []string) ([]byte, error) {
+		output: func(_ []string, name string, args []string) ([]byte, error) {
 			if name == "/fake/bin/claude" && slices.Equal(args, []string{"--version"}) {
 				return []byte(version + " (Claude Code)\n"), nil
 			}
@@ -116,5 +117,50 @@ func TestClaudeMissingBinary(t *testing.T) {
 	_, err := claude{}.Prepare(context.Background(), f.host(), twoSkillRun(t, ""), nil)
 	if err == nil || !strings.Contains(err.Error(), "claude") {
 		t.Fatalf("error %v", err)
+	}
+}
+
+func TestClaudeSimultaneousFirstLaunches(t *testing.T) {
+	run := twoSkillRun(t, "p\n")
+	f := claudeHost("2.1.325")
+	var wg sync.WaitGroup
+	errs := make([]error, 8)
+	for i := range errs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, errs[i] = claude{}.Prepare(context.Background(), f.host(), run, nil)
+		}()
+	}
+	wg.Wait()
+	if err := errors.Join(errs...); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(run.Dir, "plugin", "skills", "alpha", "SKILL.md")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestClaudeSweepsStaleStaging(t *testing.T) {
+	run := twoSkillRun(t, "p\n")
+	stale := filepath.Join(run.Dir, ".plugin-123")
+	writeFile(t, filepath.Join(stale, "x"), "x", 0o600)
+	if _, err := (claude{}).Prepare(context.Background(), claudeHost("2.1.325").host(), run, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("stale staging kept: %v", err)
+	}
+}
+
+func TestClaudePluginNameIsKebab(t *testing.T) {
+	run := twoSkillRun(t, "")
+	run.Name = "my.img_x"
+	if _, err := (claude{}).Prepare(context.Background(), claudeHost("2.1.325").host(), run, nil); err != nil {
+		t.Fatal(err)
+	}
+	manifest, _ := os.ReadFile(filepath.Join(run.Dir, "plugin", ".claude-plugin", "plugin.json"))
+	if !strings.Contains(string(manifest), `"name": "my-img-x"`) {
+		t.Fatalf("plugin.json %s", manifest)
 	}
 }

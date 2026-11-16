@@ -8,21 +8,25 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 )
 
-// openCodeHost answers `env OPENCODE_CONFIG_DIR=... opencode debug config`
-// with configOut and `opencode --version` with 1.19.5.
+// openCodeHost answers `opencode debug config` run with OPENCODE_CONFIG_DIR
+// in the extra environment with configOut, and `opencode --version` with
+// 1.19.5. It has no env(1): the probe passes the variable through Host.Output.
 func openCodeHost(configOut func(dir string) string) *fakeHost {
 	return &fakeHost{
-		installed: map[string]bool{"opencode": true, "env": true},
-		output: func(name string, args []string) ([]byte, error) {
-			if name == "/fake/bin/opencode" && slices.Equal(args, []string{"--version"}) {
+		installed: map[string]bool{"opencode": true},
+		output: func(env []string, name string, args []string) ([]byte, error) {
+			if name != "/fake/bin/opencode" {
+				return nil, errors.New("unexpected command")
+			}
+			if slices.Equal(args, []string{"--version"}) && len(env) == 0 {
 				return []byte("1.19.5\n"), nil
 			}
-			if name == "/fake/bin/env" && len(args) == 4 && args[1] == "/fake/bin/opencode" && slices.Equal(args[2:], []string{"debug", "config"}) {
-				dir, ok := strings.CutPrefix(args[0], "OPENCODE_CONFIG_DIR=")
-				if ok {
+			if slices.Equal(args, []string{"debug", "config"}) && len(env) == 1 {
+				if dir, ok := strings.CutPrefix(env[0], "OPENCODE_CONFIG_DIR="); ok {
 					return []byte(configOut(dir)), nil
 				}
 			}
@@ -112,5 +116,22 @@ func TestOpenCodeMissingBinary(t *testing.T) {
 	_, err := openCode{}.Prepare(context.Background(), (&fakeHost{}).host(), twoSkillRun(t, ""), nil)
 	if err == nil || !strings.Contains(err.Error(), "opencode") {
 		t.Fatalf("error %v", err)
+	}
+}
+
+func TestOpenCodeSimultaneousFirstLaunches(t *testing.T) {
+	run := twoSkillRun(t, "p\n")
+	var wg sync.WaitGroup
+	errs := make([]error, 8)
+	for i := range errs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, errs[i] = openCode{}.Prepare(context.Background(), openCodeHost(echoConfig).host(), run, nil)
+		}()
+	}
+	wg.Wait()
+	if err := errors.Join(errs...); err != nil {
+		t.Fatal(err)
 	}
 }

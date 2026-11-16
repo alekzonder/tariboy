@@ -14,15 +14,17 @@ import (
 	"strconv"
 
 	"github.com/alekzonder/tariboy/tbox/internal/agentmode"
+	"github.com/alekzonder/tariboy/tbox/internal/paths"
 	"github.com/alekzonder/tariboy/tbox/internal/rundir"
 )
 
 // Host carries the process dependencies, so tests can fake them. Output runs
-// a command with the current environment and returns its standard output.
+// a command with the current environment plus env, extra KEY=VALUE entries
+// that may be nil, and returns its standard output.
 type Host struct {
 	Getenv   func(string) string
 	LookPath func(string) (string, error)
-	Output   func(ctx context.Context, name string, args ...string) ([]byte, error)
+	Output   func(ctx context.Context, env []string, name string, args ...string) ([]byte, error)
 }
 
 // Launch is the prepared harness start. Env holds additions to the current
@@ -56,6 +58,7 @@ var names = []string{"claude", "codex", "opencode"}
 
 var adapters = map[string]Adapter{
 	"claude":   claude{},
+	"codex":    codex{},
 	"opencode": openCode{},
 }
 
@@ -66,11 +69,6 @@ func Names() []string { return append([]string(nil), names...) }
 func Get(name string) (Adapter, error) {
 	if a, ok := adapters[name]; ok {
 		return a, nil
-	}
-	for _, n := range names {
-		if n == name {
-			return nil, fmt.Errorf("harness %s is not supported yet", name)
-		}
 	}
 	return nil, fmt.Errorf("unknown harness %q (known: claude, codex, opencode)", name)
 }
@@ -84,6 +82,52 @@ func Installed(host Host) []string {
 		}
 	}
 	return out
+}
+
+// CleanAll removes what tbox prepared for harness sessions: every adapter's
+// files outside $TBOX_HOME and the run directories. With an image name it
+// limits both to that image; its run directories are found by the image name
+// in their unpacked manifest, so run directories of removed tags go too.
+func CleanAll(host Host, home paths.Home, image string) error {
+	var errs []error
+	for _, n := range names {
+		if a, ok := adapters[n]; ok {
+			if err := a.Clean(host, image); err != nil {
+				errs = append(errs, fmt.Errorf("clean %s: %w", n, err))
+			}
+		}
+	}
+	if image == "" {
+		errs = append(errs, os.RemoveAll(home.RunRoot()))
+		return errors.Join(errs...)
+	}
+	digests, err := os.ReadDir(home.RunRoot())
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		errs = append(errs, err)
+	}
+	for _, d := range digests {
+		dir := filepath.Join(home.RunRoot(), d.Name())
+		if d.IsDir() && runOfImage(dir, image) {
+			errs = append(errs, os.RemoveAll(dir))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// runOfImage reports whether any harness run under the digest directory dir
+// holds an unpacked image named image.
+func runOfImage(dir, image string) bool {
+	runs, _ := os.ReadDir(dir)
+	for _, r := range runs {
+		if !r.IsDir() {
+			continue
+		}
+		run, err := rundir.Open(filepath.Join(dir, r.Name(), "image"))
+		if err == nil && run.Name == image {
+			return true
+		}
+	}
+	return false
 }
 
 // lookPath resolves a harness binary with an error that names it.
@@ -102,6 +146,49 @@ func imageEnv(run rundir.Run) []string {
 		ref += ":" + run.Tag
 	}
 	return []string{agentmode.EnvImageDir + "=" + run.ImageDir, agentmode.EnvImage + "=" + ref}
+}
+
+var nonKebab = regexp.MustCompile(`[^a-z0-9-]`)
+
+// pluginName maps an image name to the kebab-case name of its harness
+// plugin: every character outside [a-z0-9-] becomes "-". Distinct image names
+// can map to the same plugin name (a.b and a-b).
+func pluginName(image string) string {
+	return nonKebab.ReplaceAllString(image, "-")
+}
+
+// stagePrefix names the staging and retired directories of a plugin swap.
+const stagePrefix = ".plugin-"
+
+// sweepStaging removes staging directories left in dir by crashed launches.
+// The caller holds the lock of dir, so none of them is in use.
+func sweepStaging(dir string) {
+	stages, _ := filepath.Glob(filepath.Join(dir, stagePrefix+"*"))
+	for _, s := range stages {
+		_ = os.RemoveAll(s)
+	}
+}
+
+// swapDir puts the staged directory stage at target, a sibling of stage. An
+// existing target is first renamed aside and removed after the swap, so
+// target never holds a partial tree. The caller holds the lock of the parent.
+func swapDir(stage, target string) error {
+	if _, err := os.Lstat(target); err == nil {
+		old, err := os.MkdirTemp(filepath.Dir(target), stagePrefix+"old-")
+		if err != nil {
+			return err
+		}
+		// os.Rename refuses an existing directory as the destination, so the
+		// old tree moves inside the retired directory.
+		if err := os.Rename(target, filepath.Join(old, "tree")); err != nil {
+			os.Remove(old)
+			return err
+		}
+		defer os.RemoveAll(old)
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return os.Rename(stage, target)
 }
 
 var semver = regexp.MustCompile(`(\d+)\.(\d+)\.(\d+)`)
@@ -145,6 +232,17 @@ func promptEmpty(run rundir.Run) (bool, error) {
 		return false, fmt.Errorf("read prompt: %w", err)
 	}
 	return len(bytes.TrimSpace(body)) == 0, nil
+}
+
+// sameFile reports whether path is a regular file, not a symlink, holding
+// exactly body.
+func sameFile(path string, body []byte) bool {
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	old, err := os.ReadFile(path)
+	return err == nil && bytes.Equal(old, body)
 }
 
 // writeIfChanged writes body to path through a temporary sibling and a rename,

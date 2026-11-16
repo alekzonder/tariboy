@@ -64,7 +64,7 @@ func (claude) Prepare(ctx context.Context, host Host, run rundir.Run, extra []st
 }
 
 func checkClaudeVersion(ctx context.Context, host Host, path string) error {
-	out, err := host.Output(ctx, path, "--version")
+	out, err := host.Output(ctx, nil, path, "--version")
 	if err != nil {
 		return fmt.Errorf("probe claude version: %w", err)
 	}
@@ -79,19 +79,30 @@ func checkClaudeVersion(ctx context.Context, host Host, path string) error {
 }
 
 // writeClaudePlugin builds <run.Dir>/plugin with .claude-plugin/plugin.json
-// and a copy of the image skills. The plugin is staged and renamed into
-// place, so a plugin directory with the expected manifest is complete and is
+// and a copy of the image skills. The plugin is staged and swapped into place
+// under the run directory lock, so two simultaneous first launches build it
+// once; a plugin directory with the expected manifest is complete and is
 // reused untouched.
 func writeClaudePlugin(run rundir.Run) (string, error) {
 	plugin := filepath.Join(run.Dir, "plugin")
+	manifestPath := filepath.Join(plugin, ".claude-plugin", "plugin.json")
 	manifest, err := claudeManifest(run)
 	if err != nil {
 		return "", err
 	}
-	if old, err := os.ReadFile(filepath.Join(plugin, ".claude-plugin", "plugin.json")); err == nil && string(old) == string(manifest) {
+	if sameFile(manifestPath, manifest) {
 		return plugin, nil
 	}
-	stage, err := os.MkdirTemp(run.Dir, ".plugin-")
+	unlock, err := rundir.LockDir(run.Dir)
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
+	if sameFile(manifestPath, manifest) {
+		return plugin, nil
+	}
+	sweepStaging(run.Dir)
+	stage, err := os.MkdirTemp(run.Dir, stagePrefix)
 	if err != nil {
 		return "", err
 	}
@@ -102,10 +113,7 @@ func writeClaudePlugin(run rundir.Run) (string, error) {
 	if err := writeIfChanged(filepath.Join(stage, ".claude-plugin", "plugin.json"), manifest); err != nil {
 		return "", err
 	}
-	if err := os.RemoveAll(plugin); err != nil {
-		return "", err
-	}
-	if err := os.Rename(stage, plugin); err != nil {
+	if err := swapDir(stage, plugin); err != nil {
 		return "", err
 	}
 	return plugin, nil
@@ -119,7 +127,7 @@ func claudeManifest(run rundir.Run) ([]byte, error) {
 	body, err := json.MarshalIndent(struct {
 		Name    string `json:"name"`
 		Version string `json:"version"`
-	}{run.Name, version}, "", "  ")
+	}{pluginName(run.Name), version}, "", "  ")
 	if err != nil {
 		return nil, err
 	}

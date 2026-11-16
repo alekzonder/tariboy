@@ -69,7 +69,7 @@ func Prepare(home paths.Home, img archive.Image, ref imgstore.Ref, harness strin
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return Run{}, err
 	}
-	unlock, err := lockDir(dir)
+	unlock, err := LockDir(dir)
 	if err != nil {
 		return Run{}, err
 	}
@@ -109,8 +109,10 @@ func Prepare(home paths.Home, img archive.Image, ref imgstore.Ref, harness strin
 	return run, nil
 }
 
-// lockDir takes an exclusive lock on <dir>/.lock and returns its release.
-func lockDir(dir string) (func(), error) {
+// LockDir takes an exclusive lock on <dir>/.lock and returns its release.
+// The directory must exist. Other packages use it to serialize their own
+// writes into a directory shared by simultaneous launches.
+func LockDir(dir string) (func(), error) {
 	f, err := os.OpenFile(filepath.Join(dir, ".lock"), os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
 		return nil, err

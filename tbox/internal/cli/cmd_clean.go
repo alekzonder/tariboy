@@ -1,0 +1,64 @@
+package cli
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+
+	"github.com/alekzonder/tariboy/tbox/internal/harness"
+	"github.com/alekzonder/tariboy/tbox/internal/imgstore"
+	"github.com/alekzonder/tariboy/tbox/internal/paths"
+)
+
+func init() { commands["clean"] = runClean }
+
+// harnessHost adapts the command environment to the harness package.
+func harnessHost(env *Env) harness.Host {
+	lookPath := env.LookPath
+	if lookPath == nil {
+		lookPath = exec.LookPath
+	}
+	return harness.Host{
+		Getenv:   env.Getenv,
+		LookPath: lookPath,
+		Output: func(ctx context.Context, extra []string, name string, args ...string) ([]byte, error) {
+			cmd := exec.CommandContext(ctx, name, args...)
+			base := os.Environ()
+			if env.Environ != nil {
+				base = env.Environ()
+			}
+			cmd.Env = append(base, extra...)
+			return cmd.Output()
+		},
+	}
+}
+
+// runClean removes the run directories and the harness files outside
+// $TBOX_HOME, of one image or of all.
+func runClean(env *Env, args []string) int {
+	if len(args) > 1 {
+		fmt.Fprintln(env.Stderr, "usage: tbox clean [IMAGE]")
+		return 2
+	}
+	image := ""
+	if len(args) == 1 {
+		image = args[0]
+		if err := imgstore.CheckName(image); err != nil {
+			return fail(env, err)
+		}
+	}
+	home, err := paths.Resolve(env.Getenv)
+	if err != nil {
+		return fail(env, err)
+	}
+	if err := harness.CleanAll(harnessHost(env), home, image); err != nil {
+		return fail(env, err)
+	}
+	if image == "" {
+		fmt.Fprintln(env.Stdout, "removed all run directories and harness files")
+	} else {
+		fmt.Fprintf(env.Stdout, "removed run directories and harness files of %s\n", image)
+	}
+	return 0
+}
