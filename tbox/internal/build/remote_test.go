@@ -4,7 +4,10 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
+	"flag"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alekzonder/tariboy/tbox/internal/archive"
 	"github.com/alekzonder/tariboy/tbox/internal/fetch"
 	"github.com/alekzonder/tariboy/tbox/internal/gitx"
 	"github.com/alekzonder/tariboy/tbox/internal/imgstore"
@@ -243,5 +247,199 @@ func TestRemoteLockPresentCacheMissingRemoteGone(t *testing.T) {
 	}
 	if time.Since(start) > 20*time.Second {
 		t.Fatalf("took %s", time.Since(start))
+	}
+}
+
+func tagDigests(t *testing.T, env remoteEnv) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	for _, tag := range []string{"1.0.0", "latest"} {
+		d, _, err := env.store.Resolve(imgstore.Ref{Name: "demo", Tag: tag})
+		if err != nil {
+			t.Fatal(err)
+		}
+		out[tag] = d
+	}
+	return out
+}
+
+func TestUpdateWithUnreachableRemoteChangesNothing(t *testing.T) {
+	env := newRemoteEnv(t, "")
+	if _, err := Build(env.opts); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.ReadFile(filepath.Join(env.dir, lock.Filename))
+	tags := tagDigests(t, env)
+	os.RemoveAll(env.repo)
+	env.opts.Update = true
+	env.opts.Resolver.Git.Timeout = 5 * time.Second
+	if _, err := Build(env.opts); err == nil || !strings.Contains(err.Error(), env.repo) {
+		t.Fatalf("want error naming the address, got %v", err)
+	}
+	after, _ := os.ReadFile(filepath.Join(env.dir, lock.Filename))
+	if !bytes.Equal(before, after) || !maps.Equal(tags, tagDigests(t, env)) {
+		t.Fatal("failed --update changed the lock or the tags")
+	}
+}
+
+func TestLockFollowsTariboyfileChanges(t *testing.T) {
+	env := newRemoteEnv(t, "")
+	if _, err := Build(env.opts); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf(`schema_version: 3
+image_version: 1.0.0
+skills:
+  - git: %s
+    path: skills/gamma
+    ref: main
+  - dir: ./skills/beta
+prompts:
+  - file: ./prompt.md
+`, env.repo)
+	write(t, filepath.Join(env.dir, "Tariboyfile.yaml"), body)
+	res, err := Build(env.opts)
+	if err != nil || !res.Built {
+		t.Fatalf("%+v %v", res, err)
+	}
+	lk := readLock(t, env.dir)
+	want := lock.Key("git", env.repo, "skills/gamma", "main")
+	if _, ok := lk.Entries[want]; !ok || len(lk.Entries) != 1 {
+		t.Fatalf("lock keys %v, want only %s", lk.Entries, want)
+	}
+}
+
+func TestReadOnlySourceKeepsLockInHome(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can write to a read-only directory")
+	}
+	env := newRemoteEnv(t, "")
+	before, _ := os.ReadDir(env.dir)
+	if err := os.Chmod(env.dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(env.dir, 0o755) })
+	if _, err := Build(env.opts); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.ReadDir(env.dir)
+	if len(after) != len(before) {
+		t.Fatalf("source directory changed: %v", after)
+	}
+	matches, _ := filepath.Glob(filepath.Join(string(env.opts.Resolver.Home), "locks", "*.json"))
+	if len(matches) != 1 {
+		t.Fatalf("locks %v", matches)
+	}
+}
+
+func TestCorruptedCacheIsRepairedOrFailsNamingEntry(t *testing.T) {
+	env := newRemoteEnv(t, "")
+	first, err := Build(env.opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	matches, _ := filepath.Glob(filepath.Join(string(env.opts.Resolver.Home), "cache", "sources", "*", "gamma", "SKILL.md"))
+	if len(matches) != 1 {
+		t.Fatalf("cache skill %v", matches)
+	}
+	if err := os.WriteFile(matches[0], []byte("tampered\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(env.dir, "prompt.md"), "changed prompt\n")
+	second, err := Build(env.opts)
+	if err != nil || !second.Built {
+		t.Fatalf("repair %+v %v", second, err)
+	}
+	img, err := env.store.Open(imgstore.Ref{Name: "demo", Tag: "latest"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, members, _ := img.Skill("gamma")
+	for _, m := range members {
+		if strings.Contains(string(m.Body), "tampered") {
+			t.Fatal("packaged tampered content")
+		}
+	}
+	_ = first
+	// Remote gone: a further tampering must fail naming the entry.
+	if err := os.WriteFile(matches[0], []byte("tampered\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	os.RemoveAll(env.repo)
+	write(t, filepath.Join(env.dir, "prompt.md"), "changed again\n")
+	env.opts.Resolver.Git.Timeout = 5 * time.Second
+	if _, err := Build(env.opts); err == nil || !strings.Contains(err.Error(), env.repo) {
+		t.Fatalf("want error naming %s, got %v", env.repo, err)
+	}
+}
+
+func TestAssembleRejectsHashMismatch(t *testing.T) {
+	env := newRemoteEnv(t, "")
+	if _, err := Build(env.opts); err != nil {
+		t.Fatal(err)
+	}
+	j, err := newJob(env.opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer j.close()
+	rs, err := resolve(context.Background(), env.opts.Resolver, j.f, j.lock, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for k, e := range rs.lock.Entries {
+		e.SHA256 = strings.Repeat("0", 64)
+		rs.lock.Entries[k] = e
+	}
+	if _, err := assemble(j.f, "demo", j.dir, time.Now(), rs); err == nil || !strings.Contains(err.Error(), env.repo) {
+		t.Fatalf("want mismatch error naming %s, got %v", env.repo, err)
+	}
+}
+
+var updateCompat = flag.Bool("update-compat", false, "regenerate testdata/compat/v3-remote.tar.gz")
+
+// TestRemoteArchiveCompat keeps the committed archive of a source with a git
+// skill and a git prompt equal to a fresh build; the root module validates
+// the committed file with tariboy's portable image contract.
+func TestRemoteArchiveCompat(t *testing.T) {
+	t.Setenv("GIT_AUTHOR_DATE", "2026-11-16T00:00:00Z")
+	t.Setenv("GIT_COMMITTER_DATE", "2026-11-16T00:00:00Z")
+	env := newRemoteEnv(t, "")
+	const logical = "https://github.com/acme/skills"
+	body := fmt.Sprintf("schema_version: 3\nimage_version: 1.0.0\nskills:\n  - git: %s\n    path: skills/gamma\nprompts:\n  - git: %s\n    path: docs/review.md\n", logical, logical)
+	write(t, filepath.Join(env.dir, "Tariboyfile.yaml"), body)
+	env.opts.Resolver.RewriteURL = func(u string) string {
+		if u == logical {
+			return env.repo
+		}
+		return u
+	}
+	if _, err := Build(env.opts); err != nil {
+		t.Fatal(err)
+	}
+	img, err := env.store.Open(imgstore.Ref{Name: "demo", Tag: "latest"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := img.Manifest.Skills[0].Category; got != "source" {
+		t.Fatalf("category %q", got)
+	}
+	var buf bytes.Buffer
+	if err := img.Write(&buf); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join("..", "..", "testdata", "compat", "v3-remote.tar.gz")
+	if *updateCompat {
+		if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	committed, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := archive.Read(bytes.NewReader(committed))
+	if err != nil || got.Manifest.ID != img.Manifest.ID {
+		t.Fatalf("committed archive differs from a fresh build (run go test ./internal/build -update-compat): %v", err)
 	}
 }

@@ -2,6 +2,8 @@ package build
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"reflect"
@@ -149,4 +151,49 @@ func lockChanged(old, now lock.File) bool {
 
 func noResolverError(f *tfile.File) error {
 	return fmt.Errorf("%s: remote entries need a source resolver", firstRemote(f))
+}
+
+func skillLabel(e tfile.SkillEntry) string {
+	switch {
+	case e.Git != "":
+		return "git:" + e.Git + "#" + e.Path
+	case e.URL != "":
+		return "url:" + e.URL
+	}
+	return e.Dir
+}
+
+func promptLabel(e tfile.PromptEntry) string {
+	switch {
+	case e.Git != "":
+		return "git:" + e.Git + "#" + e.Path
+	case e.URL != "":
+		return "url:" + e.URL
+	}
+	return e.File
+}
+
+// verifySkill compares the tree hash of a prepared remote skill to its lock
+// record. A local entry always passes.
+func (rs *resolution) verifySkill(e tfile.SkillEntry, tree string) error {
+	if !remoteSkill(e) {
+		return nil
+	}
+	if want := rs.lock.Entries[skillKey(e)].SHA256; tree != want {
+		return fmt.Errorf("content does not match the lock (tree %s, locked %s); run tbox build --update", tree, want)
+	}
+	return nil
+}
+
+// verifyPrompt compares the body hash of a remote prompt to its lock record.
+func (rs *resolution) verifyPrompt(e tfile.PromptEntry, body []byte) error {
+	if !remotePrompt(e) {
+		return nil
+	}
+	sum := sha256.Sum256(body)
+	got := hex.EncodeToString(sum[:])
+	if want := rs.lock.Entries[promptKey(e)].SHA256; got != want {
+		return fmt.Errorf("content does not match the lock (sha256 %s, locked %s); run tbox build --update", got, want)
+	}
+	return nil
 }

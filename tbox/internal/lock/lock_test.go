@@ -73,3 +73,12 @@ func TestPathFor(t *testing.T) {
 		t.Fatal("not stable")
 	}
 }
+
+func TestPathForDoesNotWrite(t *testing.T) {
+	home := paths.Home(t.TempDir())
+	dir := t.TempDir()
+	PathFor(dir, home)
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Fatalf("PathFor created %v", entries)
+	}
+}

@@ -59,3 +59,19 @@ func TestTboxArchiveImports(t *testing.T) {
 		t.Fatalf("skills = %+v, want hello-skill only", manifest.Skills)
 	}
 }
+
+// TestTboxRemoteArchiveImports validates the archive tbox builds from a git
+// skill and a git prompt the way an import does.
+func TestTboxRemoteArchiveImports(t *testing.T) {
+	body, err := os.ReadFile(filepath.Join(tboxCompatDir, "v3-remote.tar.gz"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := ValidatePortableArchiveContract(body, Ref{Name: "demo", Tag: "latest"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Skills) != 1 || manifest.Skills[0].Name != "gamma" || manifest.Skills[0].Category != "source" {
+		t.Fatalf("skills = %+v", manifest.Skills)
+	}
+}

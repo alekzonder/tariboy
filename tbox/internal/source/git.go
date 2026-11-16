@@ -41,9 +41,11 @@ func (r Resolver) gitSkill(ctx context.Context, e tfile.SkillEntry, pinned *lock
 		return "", lock.Entry{}, err
 	}
 	key := lock.Key("git", e.Git, e.Path, e.Ref)
+	base := lock.Entry{Kind: "git", URL: e.Git, Path: e.Path, Ref: e.Ref}
 	if pinned != nil {
-		if dir := filepath.Join(r.treeDir(key, pinned.Commit), name); exists(dir) {
-			return dir, *pinned, nil
+		final := r.treeDir(key, pinned.Commit)
+		if n, sha, ok := cachedTree(final); ok && n == name && sha == pinned.SHA256 {
+			return filepath.Join(final, name), withPin(base, pinned), nil
 		}
 	}
 	unlock, err := r.lockSource(e.Git)
@@ -55,40 +57,41 @@ func (r Resolver) gitSkill(ctx context.Context, e tfile.SkillEntry, pinned *lock
 	if err != nil {
 		return "", lock.Entry{}, err
 	}
-	got := lock.Entry{Kind: "git", URL: e.Git, Path: e.Path, Ref: e.Ref, Commit: commit}
-	pinnedSHA := ""
-	if pinned != nil {
-		pinnedSHA = pinned.SHA256
-	}
+	base.Commit = commit
 	final := r.treeDir(key, commit)
-	if !exists(filepath.Join(final, name)) {
-		if err := r.exportTree(ctx, e, commit, name, final, pinnedSHA); err != nil {
+	n, sha, ok := cachedTree(final)
+	if !ok || n != name || (pinned != nil && sha != pinned.SHA256) {
+		if sha, err = r.exportTree(ctx, e, commit, name, final, pinnedHash(pinned)); err != nil {
 			return "", lock.Entry{}, err
 		}
 	}
-	dir := filepath.Join(final, name)
-	if got.SHA256, err = treeSHA(dir, Describe(got), pinnedSHA); err != nil {
-		return "", lock.Entry{}, err
-	}
-	return dir, got, nil
+	base.SHA256 = sha
+	return filepath.Join(final, name), base, nil
 }
 
-// exportTree exports the skill subtree of commit into <final>/<name> through
-// a staging directory.
-func (r Resolver) exportTree(ctx context.Context, e tfile.SkillEntry, commit, name, final, pinnedSHA string) error {
+// exportTree replaces the cache entry final with the skill subtree of commit,
+// exported through a staging directory, and returns its tree hash.
+func (r Resolver) exportTree(ctx context.Context, e tfile.SkillEntry, commit, name, final, pinnedSHA string) (string, error) {
 	stage, err := r.newStage()
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer os.RemoveAll(stage)
 	dir := filepath.Join(stage, name)
 	if err := r.Git.Export(ctx, r.mirrorDir(e.Git), commit, e.Path, dir); err != nil {
-		return err
+		return "", err
 	}
-	if _, err := treeSHA(dir, "git:"+e.Git, pinnedSHA); err != nil {
-		return err
+	sha, err := treeSHA(dir, "git:"+e.Git, pinnedSHA)
+	if err != nil {
+		return "", err
 	}
-	return publish(stage, final)
+	if err := writeMeta(stage, name, sha); err != nil {
+		return "", err
+	}
+	if err := os.RemoveAll(final); err != nil {
+		return "", err
+	}
+	return sha, publish(stage, final)
 }
 
 func (r Resolver) gitPrompt(ctx context.Context, e tfile.PromptEntry, pinned *lock.Entry) (string, lock.Entry, error) {
@@ -97,9 +100,10 @@ func (r Resolver) gitPrompt(ctx context.Context, e tfile.PromptEntry, pinned *lo
 		return "", lock.Entry{}, err
 	}
 	key := lock.Key("git", e.Git, e.Path, e.Ref)
+	base := lock.Entry{Kind: "git", URL: e.Git, Path: e.Path, Ref: e.Ref}
 	if pinned != nil {
-		if file := filepath.Join(r.treeDir(key, pinned.Commit), name); exists(file) {
-			return file, *pinned, nil
+		if file := filepath.Join(r.treeDir(key, pinned.Commit), name); fileMatches(file, pinned.SHA256) {
+			return file, withPin(base, pinned), nil
 		}
 	}
 	unlock, err := r.lockSource(e.Git)
@@ -115,18 +119,19 @@ func (r Resolver) gitPrompt(ctx context.Context, e tfile.PromptEntry, pinned *lo
 	if err != nil {
 		return "", lock.Entry{}, err
 	}
-	got := lock.Entry{Kind: "git", URL: e.Git, Path: e.Path, Ref: e.Ref, Commit: commit, SHA256: hexSum(body)}
-	if pinned != nil && pinned.SHA256 != "" && pinned.SHA256 != got.SHA256 {
+	base.Commit, base.SHA256 = commit, hexSum(body)
+	if pinned != nil && pinned.SHA256 != base.SHA256 {
 		return "", lock.Entry{}, fmt.Errorf("remote content changed since it was locked; %s", updateHint)
 	}
 	file, err := r.storeFile(r.treeDir(key, commit), name, body)
-	return file, got, err
+	return file, base, err
 }
 
-// storeFile publishes body as <final>/<name> through a staging directory.
+// storeFile publishes body as <final>/<name> through a staging directory. An
+// existing entry with the same body is kept; any other is replaced.
 func (r Resolver) storeFile(final, name string, body []byte) (string, error) {
 	file := filepath.Join(final, name)
-	if exists(file) {
+	if fileMatches(file, hexSum(body)) {
 		return file, nil
 	}
 	stage, err := r.newStage()
@@ -135,6 +140,9 @@ func (r Resolver) storeFile(final, name string, body []byte) (string, error) {
 	}
 	defer os.RemoveAll(stage)
 	if err := os.WriteFile(filepath.Join(stage, name), body, 0o644); err != nil {
+		return "", err
+	}
+	if err := os.RemoveAll(final); err != nil {
 		return "", err
 	}
 	return file, publish(stage, final)

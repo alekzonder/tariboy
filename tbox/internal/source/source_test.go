@@ -291,3 +291,146 @@ func TestConcurrentResolversShareCache(t *testing.T) {
 		t.Fatalf("stage leftovers %v", left)
 	}
 }
+
+func corrupt(t *testing.T, path string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte("tampered\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPinnedCorruptedGitSkillIsRepaired(t *testing.T) {
+	repo := newRepo(t)
+	r := resolver(t)
+	e := tfile.SkillEntry{Git: repo, Path: "skills/alpha"}
+	dir, got, err := r.SkillDir(context.Background(), e, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	corrupt(t, filepath.Join(dir, "SKILL.md"))
+	dir2, got2, err := r.SkillDir(context.Background(), e, &got)
+	if err != nil || got2 != got {
+		t.Fatalf("%+v %v", got2, err)
+	}
+	if body, _ := os.ReadFile(filepath.Join(dir2, "SKILL.md")); strings.Contains(string(body), "tampered") {
+		t.Fatalf("tampered cache returned: %s", body)
+	}
+}
+
+func TestPinnedCorruptedGitSkillRemoteGoneFails(t *testing.T) {
+	repo := newRepo(t)
+	r := resolver(t)
+	e := tfile.SkillEntry{Git: repo, Path: "skills/alpha"}
+	dir, got, err := r.SkillDir(context.Background(), e, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	corrupt(t, filepath.Join(dir, "SKILL.md"))
+	os.RemoveAll(repo)
+	if _, _, err := r.SkillDir(context.Background(), e, &got); err == nil || !strings.Contains(err.Error(), repo) {
+		t.Fatalf("want error naming %s, got %v", repo, err)
+	}
+}
+
+func TestPinnedCorruptedGitPromptIsRepaired(t *testing.T) {
+	repo := newRepo(t)
+	r := resolver(t)
+	e := tfile.PromptEntry{Git: repo, Path: "docs/review.md"}
+	file, got, err := r.PromptFile(context.Background(), e, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	corrupt(t, file)
+	file2, _, err := r.PromptFile(context.Background(), e, &got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body, _ := os.ReadFile(file2); string(body) != "review one\n" {
+		t.Fatalf("%q", body)
+	}
+}
+
+func TestPinnedCorruptedURLEntriesAreRepaired(t *testing.T) {
+	isolate(t)
+	archive := tarGz(t, map[string]string{"wolf/SKILL.md": skillMD("wolf", "v1")})
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if strings.HasSuffix(req.URL.Path, ".md") {
+			w.Write([]byte("hello\n"))
+			return
+		}
+		w.Write(archive)
+	}))
+	t.Cleanup(srv.Close)
+	r := Resolver{Home: paths.Home(t.TempDir()), HTTP: fetch.Client{HTTP: srv.Client()}}
+	se := tfile.SkillEntry{URL: srv.URL + "/wolf.tar.gz"}
+	dir, sgot, err := r.SkillDir(context.Background(), se, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pe := tfile.PromptEntry{URL: srv.URL + "/notes.md"}
+	file, pgot, err := r.PromptFile(context.Background(), pe, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	corrupt(t, filepath.Join(dir, "SKILL.md"))
+	corrupt(t, file)
+	dir2, _, err := r.SkillDir(context.Background(), se, &sgot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body, _ := os.ReadFile(filepath.Join(dir2, "SKILL.md")); strings.Contains(string(body), "tampered") {
+		t.Fatalf("tampered skill: %s", body)
+	}
+	file2, _, err := r.PromptFile(context.Background(), pe, &pgot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body, _ := os.ReadFile(file2); string(body) != "hello\n" {
+		t.Fatalf("tampered prompt: %q", body)
+	}
+}
+
+func TestPinnedWithEmptySHAIsMalformed(t *testing.T) {
+	repo := newRepo(t)
+	r := resolver(t)
+	e := tfile.SkillEntry{Git: repo, Path: "skills/alpha"}
+	_, got, err := r.SkillDir(context.Background(), e, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got.SHA256 = ""
+	if _, _, err := r.SkillDir(context.Background(), e, &got); err == nil || !strings.Contains(err.Error(), "malformed") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestPinnedEntryMetadataComesFromTheEntry(t *testing.T) {
+	repo := newRepo(t)
+	r := resolver(t)
+	e := tfile.SkillEntry{Git: repo, Path: "skills/alpha"}
+	_, got, err := r.SkillDir(context.Background(), e, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited := got
+	edited.URL, edited.Path, edited.Ref = "https://evil.example/x", "elsewhere", "other"
+	_, again, err := r.SkillDir(context.Background(), e, &edited)
+	if err != nil || again != got {
+		t.Fatalf("%+v %v", again, err)
+	}
+}
+
+func TestStaleStagesAreSwept(t *testing.T) {
+	repo := newRepo(t)
+	r := resolver(t)
+	stale := filepath.Join(string(r.Home), "cache", "sources", ".stage-old")
+	os.MkdirAll(stale, 0o755)
+	old := time.Now().Add(-48 * time.Hour)
+	os.Chtimes(stale, old, old)
+	if _, _, err := r.SkillDir(context.Background(), tfile.SkillEntry{Git: repo, Path: "skills/alpha"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if exists(stale) {
+		t.Fatal("stale stage not swept")
+	}
+}

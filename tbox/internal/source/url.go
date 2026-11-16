@@ -2,7 +2,6 @@ package source
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -17,28 +16,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const metaName = "meta.json"
-
-// treeMeta sits next to the extracted skill so a pinned entry finds its
-// directory without the archive body hash.
-type treeMeta struct {
-	Name       string `json:"name"`
-	TreeSHA256 string `json:"tree_sha256"`
-}
-
 func (r Resolver) urlPrefix(u string) string { return filepath.Join(r.sourcesDir(), hexSum([]byte(u))) }
 
-// findURLTree returns the cached skill directory of u whose tree hash is sha.
+// findURLTree returns the cached skill directory of u whose verified tree
+// hash is sha.
 func (r Resolver) findURLTree(u, sha string) (string, bool) {
 	matches, _ := filepath.Glob(r.urlPrefix(u) + "-*")
 	for _, dir := range matches {
-		data, err := os.ReadFile(filepath.Join(dir, metaName))
-		if err != nil {
-			continue
-		}
-		var m treeMeta
-		if json.Unmarshal(data, &m) == nil && m.TreeSHA256 == sha && m.Name != "" && exists(filepath.Join(dir, m.Name)) {
-			return filepath.Join(dir, m.Name), true
+		if name, got, ok := cachedTree(dir); ok && got == sha {
+			return filepath.Join(dir, name), true
 		}
 	}
 	return "", false
@@ -47,7 +33,7 @@ func (r Resolver) findURLTree(u, sha string) (string, bool) {
 func (r Resolver) urlSkill(ctx context.Context, e tfile.SkillEntry, pinned *lock.Entry) (string, lock.Entry, error) {
 	if pinned != nil {
 		if dir, ok := r.findURLTree(e.URL, pinned.SHA256); ok {
-			return dir, *pinned, nil
+			return dir, withPin(lock.Entry{Kind: "url", URL: e.URL}, pinned), nil
 		}
 	}
 	unlock, err := r.lockSource(e.URL)
@@ -59,12 +45,8 @@ func (r Resolver) urlSkill(ctx context.Context, e tfile.SkillEntry, pinned *lock
 	if err != nil {
 		return "", lock.Entry{}, err
 	}
-	pinnedSHA := ""
-	if pinned != nil {
-		pinnedSHA = pinned.SHA256
-	}
 	got := lock.Entry{Kind: "url", URL: e.URL}
-	dir, sha, err := r.storeArchive(body, e.URL, pinnedSHA)
+	dir, sha, err := r.storeArchive(body, e.URL, pinnedHash(pinned))
 	if err != nil {
 		return "", lock.Entry{}, err
 	}
@@ -76,11 +58,11 @@ func (r Resolver) urlSkill(ctx context.Context, e tfile.SkillEntry, pinned *lock
 // skill directory and its tree hash.
 func (r Resolver) storeArchive(body []byte, u, pinnedSHA string) (string, string, error) {
 	final := r.urlPrefix(u) + "-" + hexSum(body)[:16]
-	if m, ok := readMeta(final); ok {
-		if pinnedSHA != "" && m.TreeSHA256 != pinnedSHA {
+	if name, sha, ok := cachedTree(final); ok {
+		if pinnedSHA != "" && sha != pinnedSHA {
 			return "", "", fmt.Errorf("remote content changed since it was locked; %s", updateHint)
 		}
-		return filepath.Join(final, m.Name), m.TreeSHA256, nil
+		return filepath.Join(final, name), sha, nil
 	}
 	stage, err := r.newStage()
 	if err != nil {
@@ -103,23 +85,16 @@ func (r Resolver) storeArchive(body []byte, u, pinnedSHA string) (string, string
 	if err != nil {
 		return "", "", err
 	}
-	meta, _ := json.Marshal(treeMeta{Name: name, TreeSHA256: sha})
-	if err := os.WriteFile(filepath.Join(stage, metaName), meta, 0o644); err != nil {
+	if err := writeMeta(stage, name, sha); err != nil {
+		return "", "", err
+	}
+	if err := os.RemoveAll(final); err != nil {
 		return "", "", err
 	}
 	if err := publish(stage, final); err != nil {
 		return "", "", err
 	}
 	return filepath.Join(final, name), sha, nil
-}
-
-func readMeta(dir string) (treeMeta, bool) {
-	var m treeMeta
-	data, err := os.ReadFile(filepath.Join(dir, metaName))
-	if err != nil || json.Unmarshal(data, &m) != nil || m.Name == "" {
-		return treeMeta{}, false
-	}
-	return m, true
 }
 
 // skillName reads the name from the SKILL.md front matter in dir. The skill
@@ -153,8 +128,8 @@ func skillName(dir string) (string, error) {
 func (r Resolver) urlPrompt(ctx context.Context, e tfile.PromptEntry, pinned *lock.Entry) (string, lock.Entry, error) {
 	name := urlFileName(e.URL)
 	if pinned != nil && len(pinned.SHA256) >= 16 {
-		if file := filepath.Join(r.urlPrefix(e.URL)+"-"+pinned.SHA256[:16], name); exists(file) {
-			return file, *pinned, nil
+		if file := filepath.Join(r.urlPrefix(e.URL)+"-"+pinned.SHA256[:16], name); fileMatches(file, pinned.SHA256) {
+			return file, withPin(lock.Entry{Kind: "url", URL: e.URL}, pinned), nil
 		}
 	}
 	unlock, err := r.lockSource(e.URL)
