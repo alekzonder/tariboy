@@ -123,6 +123,13 @@ func (p *planner) load(name string) (loaded, error) {
 	if err != nil {
 		return loaded{}, err
 	}
+	if s.Kind == stores.KindDir {
+		// A registry written before Add stored canonical paths may name
+		// the directory through a symlink, which the build rejects.
+		if canon, err := filepath.EvalSymlinks(s.Source); err == nil {
+			s.Source = canon
+		}
+	}
 	inv, err := p.reg.Inventory(s)
 	if err != nil {
 		return loaded{}, err

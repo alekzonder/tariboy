@@ -182,3 +182,26 @@ func checkPromptScope(e PromptEntry, abs string, skillDirs []string) error {
 	}
 	return nil
 }
+
+// LayerDirs returns the canonical directories of the extends chain of dir,
+// parents first and dir last.
+func LayerDirs(dir string) ([]string, error) {
+	files, err := layers(dir)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(files))
+	for _, f := range files {
+		out = append(out, f.Dir)
+	}
+	return out, nil
+}
+
+// EntryPath returns the absolute path a local skill dir or prompt file value
+// names as written, before any remap: an absolute value cleaned, a ./ or ../
+// value joined to the canonical base. A $PLUGINS value or another form is
+// an error.
+func EntryPath(base, value, kind string) (string, error) {
+	abs, _, err := locate(base, value, kind)
+	return abs, err
+}

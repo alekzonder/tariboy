@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/alekzonder/tariboy/tbox/internal/gitx"
 	"github.com/alekzonder/tariboy/tbox/internal/lock"
 	srcpkg "github.com/alekzonder/tariboy/tbox/internal/source"
 	"github.com/alekzonder/tariboy/tbox/internal/tfile"
@@ -47,12 +48,12 @@ func remotePrompt(e tfile.PromptEntry) bool { return e.Git != "" || e.URL != "" 
 func firstRemote(f *tfile.File) string {
 	for _, s := range f.Skills {
 		if remoteSkill(s) {
-			return "skill " + skillKey(s)
+			return "skill " + skillLabel(s)
 		}
 	}
 	for _, p := range f.Prompts {
 		if remotePrompt(p) {
-			return "prompt " + promptKey(p)
+			return "prompt " + promptLabel(p)
 		}
 	}
 	return ""
@@ -156,9 +157,9 @@ func noResolverError(f *tfile.File) error {
 func skillLabel(e tfile.SkillEntry) string {
 	switch {
 	case e.Git != "":
-		return "git:" + e.Git + "#" + e.Path
+		return "git:" + gitx.DisplayAddress(e.Git) + "#" + e.Path
 	case e.URL != "":
-		return "url:" + e.URL
+		return "url:" + gitx.DisplayAddress(e.URL)
 	}
 	return e.Dir
 }
@@ -166,9 +167,9 @@ func skillLabel(e tfile.SkillEntry) string {
 func promptLabel(e tfile.PromptEntry) string {
 	switch {
 	case e.Git != "":
-		return "git:" + e.Git + "#" + e.Path
+		return "git:" + gitx.DisplayAddress(e.Git) + "#" + e.Path
 	case e.URL != "":
-		return "url:" + e.URL
+		return "url:" + gitx.DisplayAddress(e.URL)
 	}
 	return e.File
 }

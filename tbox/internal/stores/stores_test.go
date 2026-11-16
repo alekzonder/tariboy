@@ -447,3 +447,21 @@ func TestRemoveKeepsTreeWhenSaveFails(t *testing.T) {
 		t.Fatalf("tree deleted although registration remains: %v", err)
 	}
 }
+
+func TestAddSymlinkedDirIsStoredCanonical(t *testing.T) {
+	isolate(t)
+	real := t.TempDir()
+	cwd := t.TempDir()
+	if err := os.Symlink(real, filepath.Join(cwd, "link")); err != nil {
+		t.Fatal(err)
+	}
+	reg := Registry{Home: paths.Home(t.TempDir()), Cwd: cwd}
+	s, err := reg.Add(context.Background(), "s", "./link", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _ := filepath.EvalSymlinks(real)
+	if s.Source != want || reg.Root(s) != want {
+		t.Fatalf("source %q root %q, want %q", s.Source, reg.Root(s), want)
+	}
+}

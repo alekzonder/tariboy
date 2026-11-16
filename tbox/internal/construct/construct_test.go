@@ -439,3 +439,33 @@ func TestCreateWarnsWhenOldDirectoryStays(t *testing.T) {
 		t.Fatalf("warnings %q", warned)
 	}
 }
+
+func TestCreateFromSymlinkedDirStoreBuildsPaths(t *testing.T) {
+	isolate(t)
+	home := paths.Home(t.TempDir())
+	real := t.TempDir()
+	write(t, filepath.Join(real, "skills/alpha/SKILL.md"), skillDoc("alpha"))
+	write(t, filepath.Join(real, "prompts/process.md"), "process\n")
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	// A registry written before Add made the path canonical.
+	write(t, filepath.Join(string(home), "stores.json"),
+		`{"version":1,"stores":[{"name":"s","kind":"dir","source":"`+link+`"}]}`)
+	reg := stores.Registry{Home: home, Cwd: t.TempDir()}
+	dir, err := Create(reg, home, Spec{Name: "demo", Skills: []stores.Selector{sel("s", "alpha")}, Prompts: []stores.Selector{sel("s", "process")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := tfile.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := tfile.ResolveSkillDir(file.Skills[0]); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := tfile.ResolvePromptFile(file.Prompts[0], file.SkillDirs()...); err != nil {
+		t.Fatal(err)
+	}
+}

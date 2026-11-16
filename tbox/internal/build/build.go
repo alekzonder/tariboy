@@ -148,6 +148,9 @@ func newJob(opts Options) (*job, error) {
 // load reads the source, restoring its skills-lock.json skills, and opens
 // the lock file when the source has remote or restored entries.
 func (j *job) load() error {
+	if err := j.confineLayers(); err != nil {
+		return err
+	}
 	if err := j.prepareRestore(); err != nil {
 		return err
 	}
@@ -159,6 +162,9 @@ func (j *job) load() error {
 		return err
 	}
 	j.f = loaded.ForTbox()
+	if err := j.confineEntries(); err != nil {
+		return err
+	}
 	if err := j.restore.prime(j.f); err != nil {
 		return err
 	}

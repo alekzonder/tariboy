@@ -254,7 +254,12 @@ func (r Registry) localDir(source string) (string, bool) {
 		}
 		p = filepath.Join(r.Cwd, p)
 	}
-	p = filepath.Clean(p)
+	// The canonical path is stored, so paths built from Root never pass
+	// through a symlink, which the build rejects.
+	p, err := filepath.EvalSymlinks(filepath.Clean(p))
+	if err != nil {
+		return "", false
+	}
 	if fi, err := os.Stat(p); err != nil || !fi.IsDir() {
 		return "", false
 	}
@@ -279,7 +284,7 @@ func (r Registry) download(ctx context.Context, url, dest string) error {
 	}
 	if err := fetch.ExtractArchive(data, dest); err != nil {
 		_ = os.RemoveAll(dest)
-		return fmt.Errorf("extract %s: %w", url, err)
+		return fmt.Errorf("extract %s: %w", gitx.DisplayAddress(url), err)
 	}
 	return nil
 }

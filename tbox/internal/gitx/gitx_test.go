@@ -428,3 +428,19 @@ func TestGitErrorKeepsOneMaskedLine(t *testing.T) {
 		t.Errorf("error = %q", msg)
 	}
 }
+
+func TestDisplayAddressHidesCredentials(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://alice:s3cr3t-token@host/x/y.git":   "https://host/x/y.git",
+		"https://s3cr3t-token@host/x/y.git?a=b#c":   "https://host/x/y.git",
+		"https://host/x.tar.gz?token=s3cr3t-token":  "https://host/x.tar.gz",
+		"git@github.com:o/r.git":                    "git@github.com:o/r.git",
+		"alice:s3cr3t-token@host:o/r.git":           "host:o/r.git",
+		"owner/repo":                                "owner/repo",
+		"https://alice:s3cr3t-token@host/%zz?x=1#f": "https://host/%zz",
+	} {
+		if got := DisplayAddress(in); got != want {
+			t.Errorf("DisplayAddress(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

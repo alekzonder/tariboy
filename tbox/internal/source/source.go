@@ -95,11 +95,13 @@ func (r Resolver) PromptFile(ctx context.Context, e tfile.PromptEntry, pinned *l
 	return file, got, nil
 }
 
+// address is the entry address for messages, with credentials, query and
+// fragment of the URL removed.
 func address(git, url, p string) string {
 	if git != "" {
-		return git + "#" + p
+		return gitx.DisplayAddress(git) + "#" + p
 	}
-	return url
+	return gitx.DisplayAddress(url)
 }
 
 func hexSum(b []byte) string {

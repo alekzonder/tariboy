@@ -155,3 +155,28 @@ func isHex(s string, minLen, maxLen int) bool {
 func maskCredentials(s string) string {
 	return userInfoMask.ReplaceAllString(s, "://***@")
 }
+
+var (
+	userInfoStrip = regexp.MustCompile(`://[^/@\s]*@`)
+	scpPassword   = regexp.MustCompile(`^[^@/\s]*:[^@/\s]*@`)
+)
+
+// DisplayAddress returns a git or https address for messages: user-info
+// with a password or token, the query and the fragment are removed. A plain
+// scp-style user (git@host:path) is kept. Every error and label that shows
+// an address from a Tariboyfile, a lock or a Store goes through it.
+func DisplayAddress(s string) string {
+	if strings.Contains(s, "://") {
+		if u, err := url.Parse(s); err == nil {
+			u.User, u.RawQuery, u.Fragment, u.RawFragment, u.ForceQuery = nil, "", "", "", false
+			return u.String()
+		}
+		s = userInfoStrip.ReplaceAllString(s, "://")
+	} else {
+		s = scpPassword.ReplaceAllString(s, "")
+	}
+	if i := strings.IndexAny(s, "?#"); i >= 0 {
+		s = s[:i]
+	}
+	return s
+}
