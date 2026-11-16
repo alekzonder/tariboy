@@ -69,9 +69,12 @@ binary cannot block `tbox run`.
 `tbox help` prints the commands to stdout and exits with code 0; an unknown
 command prints the same list to stderr and exits with code 2. `-h` or
 `--help` after a command, for example `tbox run --help`, prints the usage of
-that command to stdout. Flags may come before or after the positional
-arguments, and `--` ends the flags of `tbox`: everything after it is
-positional, and in `tbox run` it goes to the harness unchanged.
+that command to stdout. In `tbox build`, `tbox run`, `tbox store add`,
+`tbox image show`, `rm`, `export`, `import` and `new`, and `tbox clean`, flags
+may come before or after the positional arguments, and `--` ends the flags of
+`tbox`: everything after it is positional, and in `tbox run` it goes to the
+harness unchanged. The other commands take no flags and read their arguments
+as given.
 
 ## The `$TBOX_HOME` layout
 
@@ -91,7 +94,9 @@ The root is `$TBOX_HOME`, by default `~/.tbox`.
 
 `images/` follows the layout of the Tariboy image store, so the tag rules and
 `latest` are the same. Besides the archives, `images/<name>/` keeps the source
-fingerprint of the last build and the source directory it came from. A run directory holds the unpacked image
+fingerprint of the last build, the source directory it came from, and a
+`.lock` file: publishing, importing, removing and pruning an image of one name
+wait for each other. A run directory holds the unpacked image
 (`image/`), the joined prompt (`PROMPT.md`) and the files generated for that
 harness. `tbox` never writes into your working directory, with two
 exceptions: `tbox image export` without `-o` writes the archive there, and a
@@ -204,7 +209,7 @@ renamed. Each entry is addressed by where the Store keeps the item:
 A skill at the root of a directory Store is copied into the source too. A
 root-level skill is the whole Store root except dot-directories and a root
 `evals/` directory, so `tbox image new` refuses it when the root also holds
-`images/` or other skills.
+an `images/` directory or a `skills/<name>/SKILL.md`.
 Copied files are checked with the same limits as a build. To change an image,
 edit the files in `sources/<name>/` and run `tbox build --path
 $TBOX_HOME/sources/<name>` (the default `~/.tbox/sources/<name>`). An entry
@@ -262,12 +267,24 @@ tbox build --path ./my-image
 The source is a directory with a `Tariboyfile.yaml` of `schema_version` 2 or 3.
 `tbox build` without arguments builds the current directory. `tbox build
 STORE/IMAGE` uses `images/<image>` of the Store; `--path` and a selector
-exclude each other. A Store image is confined to its Store: an absolute path,
-or a path that leads outside the Store root, in a Store image is a build
-error. The name defaults to the directory name, so to the
+exclude each other. A Store image is confined to its Store: an `extends`
+layer, a local skill directory or a local prompt file whose path, absolute or
+relative, leads outside the Store root is a build error; an absolute path
+inside the Store is accepted. Remote entries are not confined. The name
+defaults to the directory name, so to the
 image name for a Store image, not `store/image`. Without `--tag` the image is published
 under its `image_version` and under `latest`. The archive uses the Tariboy
 schema v2 format byte for byte, so Tariboy imports it.
+
+An image name is lower-case letters, digits, `.`, `_` and `-`, and its first
+character is a letter or a digit. A tag uses the same characters, or is a
+SemVer version, and does not start with `.`. This is stricter than Tariboy,
+which also accepts a name that starts with `.`, `_` or `-`; a Tariboy export
+with such a name cannot be imported into `tbox`. An image with such a name
+that an earlier `tbox` built is still listed by `tbox images`, and
+`tbox image show`, `tbox image rm` and `tbox clean IMAGE` accept its name. A
+name that starts with `-` goes after `--`, for example
+`tbox image rm -- -x:latest`.
 
 `tbox` builds only when the source changed. Before each build it computes a
 fingerprint over the Tariboyfile, the `extends` layers and every local skill
@@ -277,8 +294,9 @@ built and `tbox` prints `up to date`. The `image_version` number does not matter
 When the content changed under an unchanged `image_version`, the version tag and
 `latest` move to the new build, and `tbox` prints one line saying so. This is
 different from Tariboy, which refuses to rebuild the same version with other
-content. The previous archive stays in `refs/` until `tbox image rm` or
-`tbox clean` removes it.
+content. The previous archive no longer has a tag and stays in `refs/` until
+`tbox clean` removes it. `tbox image rm` removes the archive of the tag it
+deletes when no other tag of the image points at it.
 
 A source that uses `extends` builds to a different digest in `tbox` and in
 Tariboy: Tariboy copies the layers into one directory, while `tbox` resolves
@@ -314,6 +332,17 @@ branch is used. A skill `url` is an `https://` archive with the skill at its
 root; a prompt `url` is one Markdown file. Remote content is cached in
 `cache/sources/`.
 
+`tbox` keeps a local mirror of each git repository with its branches and tags
+only, so a commit reachable only from other refs (for example a pull-request
+ref) cannot be pinned. A pinned commit that the mirror already holds needs no
+network. A skill is exported with `git archive`, so the `.gitattributes`
+in the repository (`export-ignore`, `export-subst`) apply to it, while your
+`core.autocrlf`, `core.eol` and global attributes file (`core.attributesFile`)
+are ignored; a prompt is read as the stored file. A skill at the repository root
+(`path: .`) is the whole root except its dot-directories and `evals/`; a lock
+record for such a skill made by an older `tbox` build may no longer match and
+then needs `tbox build --update` once.
+
 The first build pins every remote entry in `tbox-lock.json`: the address, the
 commit (git) and the content hash. Later builds take the commit from the file.
 The lock file is written next to the Tariboyfile when that directory is
@@ -332,8 +361,9 @@ needs an uncached remote entry fails with the entry named.
 
 A schema v2 image can come from the `npx skills` tooling, with
 `skills-lock.json` next to the Tariboyfile or at the Store root and no
-`.agents/skills/` in the checkout. `tbox` restores those skills itself into
-its cache (`cache/`) and does not change the Store. For a `--path` build, an
+`.agents/skills/` in the checkout. `tbox` restores the `github` entries itself
+into its cache (`cache/`) and reads the `local` entries in place, inside the
+Store for a Store build; it does not change the Store. For a `--path` build, an
 `.agents/skills/<name>` directory that is present on disk is used as it is;
 for a Store build the skills are always restored from the lock. An `extends`
 layer outside the image directory gets no `.agents/skills` remapping. It
@@ -474,7 +504,7 @@ tbox clean my-image   # one image
 and a note names it. It removes nothing else: `config.toml` and the rest of
 `$CODEX_HOME` stay byte for byte as they were. It also removes the archives in
 `images/<name>/refs/` that no tag points at any more, such as the previous
-build of a moved tag, and prints how many it removed. Tagged images stay;
+build of a moved tag, and, when it removed any, prints how many. Tagged images stay;
 remove those with `tbox image rm`.
 
 `tbox clean IMAGE` finds the run directories of the image by the manifest of
