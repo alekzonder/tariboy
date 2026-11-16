@@ -7,11 +7,15 @@ package construct
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
+	"time"
 
+	"github.com/alekzonder/tariboy/tbox/internal/flock"
 	"github.com/alekzonder/tariboy/tbox/internal/fsafe"
 	"github.com/alekzonder/tariboy/tbox/internal/imgstore"
 	"github.com/alekzonder/tariboy/tbox/internal/paths"
@@ -19,6 +23,8 @@ import (
 	"github.com/alekzonder/tariboy/tbox/internal/stores"
 	"github.com/alekzonder/tariboy/tbox/internal/tfile"
 )
+
+const staleAge = time.Hour
 
 const (
 	// DefaultVersion is the image_version of a source with no --version.
@@ -39,6 +45,9 @@ type Spec struct {
 	NewPrompt bool
 	// Force replaces an existing source directory as a whole.
 	Force bool
+	// Warn receives non-fatal problems, such as an old directory that could
+	// not be removed after a successful replace. Nil discards them.
+	Warn func(msg string)
 }
 
 type skillPlan struct {
@@ -47,6 +56,9 @@ type skillPlan struct {
 	entry    tfile.SkillEntry
 	prepared skill.Prepared
 	copy     bool
+	// remoteRoot marks a skill at the root of a git Store; it is validated
+	// when the image is built.
+	remoteRoot bool
 }
 
 type promptPlan struct {
@@ -69,6 +81,12 @@ func Create(reg stores.Registry, home paths.Home, spec Spec) (string, error) {
 		return "", fmt.Errorf("image version: %w", err)
 	}
 	dir := filepath.Join(home.SourcesDir(), spec.Name)
+	unlock, err := flock.Lock(filepath.Join(home.SourcesDir(), ".create-"+spec.Name+".lock"))
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
+	sweepStale(home.SourcesDir(), time.Now().Add(-staleAge))
 	if _, err := os.Lstat(dir); err == nil && !spec.Force {
 		return "", fmt.Errorf("source %s exists; use --force to replace it", dir)
 	}
@@ -159,8 +177,10 @@ func (p *planner) skill(sel stores.Selector) (skillPlan, error) {
 	if err := p.address(&sp, l.store, row); err != nil {
 		return skillPlan{}, fmt.Errorf("skill %s: %w", label(sel), err)
 	}
-	sp.prepared, err = skill.Prepare(row.Dir, "constructor", "source")
-	if err != nil {
+	if sp.remoteRoot {
+		return sp, nil
+	}
+	if sp.prepared, err = p.prepare(row, sp.copy && row.Dir == p.reg.Root(l.store)); err != nil {
 		return skillPlan{}, fmt.Errorf("skill %s is not usable: %w", label(sel), err)
 	}
 	return sp, nil
@@ -174,11 +194,14 @@ func (p *planner) address(sp *skillPlan, s stores.Store, row *stores.Skill) erro
 		if err != nil {
 			return err
 		}
-		if rel == "." {
-			return errors.New("skill at the root of a Store cannot be added yet")
-		}
+		sp.remoteRoot = rel == "."
 		sp.entry = tfile.SkillEntry{Git: s.Source, Path: rel, Ref: s.Commit}
 	case stores.KindDir:
+		if row.Dir == p.reg.Root(s) {
+			sp.copy = true
+			sp.entry = tfile.SkillEntry{Dir: "./skills/" + row.Name}
+			return nil
+		}
 		sp.entry = tfile.SkillEntry{Dir: row.Dir}
 	default:
 		sp.copy = true
@@ -308,12 +331,12 @@ func writeSource(dir string, spec Spec, skills []skillPlan, prompts []promptPlan
 	if _, err := tfile.Parse(stage); err != nil {
 		return fmt.Errorf("constructed source is invalid: %w", err)
 	}
-	return replace(stage, dir, spec.Force)
+	return replace(stage, dir, spec.Force, spec.Warn)
 }
 
 // replace renames stage to dir. With force an existing dir is moved aside and
 // removed only after the rename succeeds.
-func replace(stage, dir string, force bool) error {
+func replace(stage, dir string, force bool, warn func(string)) error {
 	if _, err := os.Lstat(dir); err == nil {
 		if !force {
 			return fmt.Errorf("source %s exists; use --force to replace it", dir)
@@ -332,9 +355,18 @@ func replace(stage, dir string, force bool) error {
 			_ = os.Remove(old)
 			return err
 		}
-		return os.RemoveAll(old)
+		if err := os.RemoveAll(old); err != nil && warn != nil {
+			warn(fmt.Sprintf("could not remove the replaced source at %s: %v", old, err))
+		}
+		return nil
 	}
-	return os.Rename(stage, dir)
+	if err := os.Rename(stage, dir); err != nil {
+		if errors.Is(err, syscall.ENOTEMPTY) || errors.Is(err, syscall.EEXIST) {
+			return fmt.Errorf("source %s exists; use --force to replace it", dir)
+		}
+		return err
+	}
+	return nil
 }
 
 func copySkill(dest string, p skill.Prepared) error {
@@ -363,4 +395,78 @@ func copyPrompt(dest, from string) error {
 		return err
 	}
 	return os.WriteFile(dest, body, 0o644)
+}
+
+// rootSkipDirs are the top-level directories of a Store that are not part of
+// a skill that sits at the Store root.
+var rootSkipDirs = map[string]bool{"images": true, "skills": true, "prompts": true, "workflows": true}
+
+// prepare validates the skill of row. A skill at a Store root is first copied
+// without the Store's own directories into a directory named after the skill.
+func (p *planner) prepare(row *stores.Skill, atRoot bool) (skill.Prepared, error) {
+	if !atRoot {
+		return skill.Prepare(row.Dir, "constructor", "source")
+	}
+	tmp, err := os.MkdirTemp("", "tbox-rootskill-")
+	if err != nil {
+		return skill.Prepared{}, err
+	}
+	defer os.RemoveAll(tmp)
+	dest := filepath.Join(tmp, row.Name)
+	if err := copyRootSkill(row.Dir, dest); err != nil {
+		return skill.Prepared{}, err
+	}
+	return skill.Prepare(dest, "constructor", "source")
+}
+
+// copyRootSkill copies the skill's own files of the Store root src to dest.
+// Only regular files and directories are copied; anything else is an error.
+func copyRootSkill(src, dest string) error {
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		return err
+	}
+	entries := 0
+	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(src, path)
+		if rel == "." {
+			return nil
+		}
+		if entries++; entries > 4*skill.MaxFilesPerSkill {
+			return errors.New("skill has too many entries")
+		}
+		if d.IsDir() {
+			top := strings.SplitN(filepath.ToSlash(rel), "/", 2)[0]
+			if strings.HasPrefix(d.Name(), ".") || (top == rel && rootSkipDirs[top]) {
+				return filepath.SkipDir
+			}
+			return os.MkdirAll(filepath.Join(dest, rel), 0o755)
+		}
+		if !d.Type().IsRegular() {
+			return fmt.Errorf("%s is not a regular file", rel)
+		}
+		body, err := fsafe.ReadFileNoFollow(path, skill.MaxFileBytes)
+		if err != nil {
+			return err
+		}
+		mode := os.FileMode(0o644)
+		if info, ierr := d.Info(); ierr == nil && info.Mode()&0o100 != 0 {
+			mode = 0o755
+		}
+		return os.WriteFile(filepath.Join(dest, rel), body, mode)
+	})
+}
+
+// sweepStale removes staging and moved-aside directories older than cutoff.
+func sweepStale(parent string, cutoff time.Time) {
+	for _, pat := range []string{".new-*", ".old-*"} {
+		matches, _ := filepath.Glob(filepath.Join(parent, pat))
+		for _, m := range matches {
+			if fi, err := os.Lstat(m); err == nil && fi.IsDir() && fi.ModTime().Before(cutoff) {
+				_ = os.RemoveAll(m)
+			}
+		}
+	}
 }

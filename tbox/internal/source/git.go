@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/alekzonder/tariboy/tbox/internal/fsafe"
 	"github.com/alekzonder/tariboy/tbox/internal/lock"
+	"github.com/alekzonder/tariboy/tbox/internal/skill"
 	"github.com/alekzonder/tariboy/tbox/internal/tfile"
 )
 
@@ -37,6 +39,11 @@ func (r Resolver) gitCommit(ctx context.Context, url, ref string, pinned *lock.E
 }
 
 func (r Resolver) gitSkill(ctx context.Context, e tfile.SkillEntry, pinned *lock.Entry) (string, lock.Entry, error) {
+	if e.Path == "." {
+		// The skill is the repository root; its cache directory is named
+		// after the frontmatter name of the exported SKILL.md.
+		return r.gitSkillNamed(ctx, e, "", pinned)
+	}
 	name, err := leafName(e.Path)
 	if err != nil {
 		return "", lock.Entry{}, err
@@ -72,8 +79,8 @@ func (r Resolver) gitSkillNamed(ctx context.Context, e tfile.SkillEntry, name st
 	base := lock.Entry{Kind: "git", URL: e.Git, Path: e.Path, Ref: e.Ref}
 	if pinned != nil {
 		final := r.treeDir(key, pinned.Commit)
-		if n, sha, ok := cachedTree(final); ok && n == name && sha == pinned.SHA256 {
-			return filepath.Join(final, name), withPin(base, pinned), nil
+		if n, sha, ok := cachedTree(final); ok && (name == "" || n == name) && sha == pinned.SHA256 {
+			return filepath.Join(final, n), withPin(base, pinned), nil
 		}
 	}
 	unlock, err := r.lockSource(e.Git)
@@ -88,8 +95,11 @@ func (r Resolver) gitSkillNamed(ctx context.Context, e tfile.SkillEntry, name st
 	base.Commit = commit
 	final := r.treeDir(key, commit)
 	n, sha, ok := cachedTree(final)
+	if name == "" && ok {
+		name = n
+	}
 	if !ok || n != name || (pinned != nil && sha != pinned.SHA256) {
-		if sha, err = r.exportTree(ctx, e, commit, name, final, pinnedHash(pinned)); err != nil {
+		if name, sha, err = r.exportTree(ctx, e, commit, name, final, pinnedHash(pinned)); err != nil {
 			return "", lock.Entry{}, err
 		}
 	}
@@ -99,27 +109,55 @@ func (r Resolver) gitSkillNamed(ctx context.Context, e tfile.SkillEntry, name st
 
 // exportTree replaces the cache entry final with the skill subtree of commit,
 // exported through a staging directory, and returns its tree hash.
-func (r Resolver) exportTree(ctx context.Context, e tfile.SkillEntry, commit, name, final, pinnedSHA string) (string, error) {
+func (r Resolver) exportTree(ctx context.Context, e tfile.SkillEntry, commit, name, final, pinnedSHA string) (string, string, error) {
 	stage, err := r.newStage()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer os.RemoveAll(stage)
 	dir := filepath.Join(stage, name)
+	if name == "" {
+		dir = filepath.Join(stage, "root")
+	}
 	if err := r.Git.Export(ctx, r.mirrorDir(e.Git), commit, e.Path, dir); err != nil {
-		return "", err
+		return "", "", err
+	}
+	if name == "" {
+		if name, err = rootSkillName(dir); err != nil {
+			return "", "", err
+		}
+		if err := os.Rename(dir, filepath.Join(stage, name)); err != nil {
+			return "", "", err
+		}
+		dir = filepath.Join(stage, name)
 	}
 	sha, err := treeSHA(dir, "git:"+e.Git, pinnedSHA)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if err := writeMeta(stage, name, sha); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if err := os.RemoveAll(final); err != nil {
+		return "", "", err
+	}
+	return name, sha, publish(stage, final)
+}
+
+// rootSkillName reads the skill name from the SKILL.md at the root of dir.
+func rootSkillName(dir string) (string, error) {
+	body, err := fsafe.ReadFileNoFollow(filepath.Join(dir, "SKILL.md"), 256<<10)
+	if err != nil {
+		return "", fmt.Errorf("repository root skill: %w", err)
+	}
+	name, _, err := skill.ReadMeta(body)
+	if err != nil {
 		return "", err
 	}
-	return sha, publish(stage, final)
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\\x00") {
+		return "", fmt.Errorf("invalid skill name %q", name)
+	}
+	return name, nil
 }
 
 func (r Resolver) gitPrompt(ctx context.Context, e tfile.PromptEntry, pinned *lock.Entry) (string, lock.Entry, error) {

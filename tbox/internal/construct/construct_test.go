@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alekzonder/tariboy/tbox/internal/fetch"
 	"github.com/alekzonder/tariboy/tbox/internal/gitx"
@@ -150,10 +151,18 @@ func TestCreateAddressesEachStoreKind(t *testing.T) {
 		t.Fatalf("header %+v", file)
 	}
 	text, _ := os.ReadFile(filepath.Join(dir, "Tariboyfile.yaml"))
-	for _, name := range []string{"g", "d", "a"} {
-		if strings.Contains(string(text), "stores/"+name) && name != "d" {
-			// store directories must not leak
-			t.Fatalf("store dir in source:\n%s", text)
+	if strings.Contains(string(text), string(f.home)+"/stores") || strings.Contains(string(text), "/stores/") {
+		t.Fatalf("store directory in source:\n%s", text)
+	}
+	storeList, _ := f.reg.List()
+	for _, st := range storeList {
+		if st.Kind == stores.KindDir {
+			continue // a dir Store is addressed by its absolute path on purpose
+		}
+		for _, part := range strings.Split(string(text), "/") {
+			if part == st.Name {
+				t.Fatalf("store name %q is a path component in\n%s", st.Name, text)
+			}
 		}
 	}
 	wantSkills := []tfile.SkillEntry{
@@ -242,6 +251,9 @@ func TestCreateErrors(t *testing.T) {
 	}
 	entries, _ := os.ReadDir(filepath.Join(string(f.home), "sources"))
 	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".lock") {
+			continue
+		}
 		t.Errorf("leftover %s", e.Name())
 	}
 }
@@ -284,20 +296,146 @@ func TestCreateExistingAndForce(t *testing.T) {
 	}
 }
 
-func TestCreateRootSkillOfGitStoreIsRefused(t *testing.T) {
+func repoWithRootSkill(t *testing.T, name string) string {
+	t.Helper()
+	repo := t.TempDir()
+	write(t, filepath.Join(repo, "SKILL.md"), skillDoc(name))
+	write(t, filepath.Join(repo, "scripts/run.sh"), "echo\n")
+	write(t, filepath.Join(repo, "images/x/Tariboyfile.yaml"), "schema_version: 3\n")
+	write(t, filepath.Join(repo, "prompts/pp.md"), "pp\n")
+	write(t, filepath.Join(repo, ".hidden/file"), "h\n")
+	return repo
+}
+
+func TestCreateRootSkillOfGitStore(t *testing.T) {
 	isolate(t)
 	home := paths.Home(t.TempDir())
-	repo := t.TempDir()
-	write(t, filepath.Join(repo, "SKILL.md"), skillDoc("rootskill"))
+	repo := repoWithRootSkill(t, "rootskill")
 	git(t, repo, "init", "-q", "-b", "main")
 	git(t, repo, "add", ".")
 	git(t, repo, "commit", "-q", "-m", "one")
 	reg := stores.Registry{Home: home, Git: gitx.Git{AllowLocal: true}, Cwd: t.TempDir()}
-	if _, err := reg.Add(context.Background(), "r", "file://"+repo, ""); err != nil {
+	st, err := reg.Add(context.Background(), "r", "file://"+repo, "")
+	if err != nil {
 		t.Fatal(err)
 	}
-	_, err := Create(reg, home, Spec{Name: "x", Skills: []stores.Selector{sel("r", "rootskill")}})
-	if err == nil || !strings.Contains(err.Error(), "root of a Store") {
-		t.Fatalf("%v", err)
+	dir, err := Create(reg, home, Spec{Name: "x", Skills: []stores.Selector{sel("r", "rootskill")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := tfile.Parse(dir)
+	if err != nil || file.Skills[0].Git != st.Source || file.Skills[0].Path != "." || file.Skills[0].Ref != st.Commit {
+		t.Fatalf("%v %+v", err, file.Skills)
+	}
+}
+
+func TestCreateRootSkillOfDirStoreIsCopied(t *testing.T) {
+	isolate(t)
+	home := paths.Home(t.TempDir())
+	repo := repoWithRootSkill(t, "rootskill") // directory name differs from the skill name
+	reg := stores.Registry{Home: home, Cwd: t.TempDir()}
+	if _, err := reg.Add(context.Background(), "r", repo, ""); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := Create(reg, home, Spec{Name: "x", Skills: []stores.Selector{sel("r", "rootskill")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := tfile.Parse(dir)
+	if err != nil || file.Skills[0].Dir != "./skills/rootskill" {
+		t.Fatalf("%v %+v", err, file.Skills)
+	}
+	for _, rel := range []string{"SKILL.md", "scripts/run.sh"} {
+		if _, err := os.Stat(filepath.Join(dir, "skills/rootskill", rel)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, rel := range []string{"images", "prompts", ".hidden"} {
+		if _, err := os.Stat(filepath.Join(dir, "skills/rootskill", rel)); err == nil {
+			t.Fatalf("%s was copied", rel)
+		}
+	}
+}
+
+func TestCreateConcurrentSameName(t *testing.T) {
+	f := newFixture(t)
+	const n = 8
+	errs := make(chan error, n)
+	for i := 0; i < n; i++ {
+		go func() {
+			_, err := Create(f.reg, f.home, Spec{Name: "same", Skills: []stores.Selector{sel("d", "ds")}})
+			errs <- err
+		}()
+	}
+	ok := 0
+	for i := 0; i < n; i++ {
+		err := <-errs
+		switch {
+		case err == nil:
+			ok++
+		case strings.Contains(err.Error(), "exists") && strings.Contains(err.Error(), filepath.Join(string(f.home), "sources", "same")) && !strings.Contains(err.Error(), "not empty"):
+		default:
+			t.Errorf("unexpected error: %v", err)
+		}
+	}
+	if ok != 1 {
+		t.Fatalf("%d creations succeeded", ok)
+	}
+	if _, err := tfile.Parse(filepath.Join(string(f.home), "sources", "same")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCreateSweepsStaleStaging(t *testing.T) {
+	f := newFixture(t)
+	src := filepath.Join(string(f.home), "sources")
+	oldNew, freshOld := filepath.Join(src, ".new-a-1"), filepath.Join(src, ".old-b-1")
+	for _, d := range []string{oldNew, freshOld} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	past := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(oldNew, past, past); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Create(f.reg, f.home, Spec{Name: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(oldNew); err == nil {
+		t.Error("stale staging directory kept")
+	}
+	if _, err := os.Stat(freshOld); err != nil {
+		t.Error("recent directory removed")
+	}
+}
+
+func TestCreateWarnsWhenOldDirectoryStays(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can remove anything")
+	}
+	f := newFixture(t)
+	dir, err := Create(f.reg, f.home, Spec{Name: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	locked := filepath.Join(dir, "locked")
+	write(t, filepath.Join(locked, "f"), "x")
+	if err := os.Chmod(locked, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chmod(locked, 0o755)
+		matches, _ := filepath.Glob(filepath.Join(filepath.Dir(dir), ".old-*", "src", "locked"))
+		for _, m := range matches {
+			_ = os.Chmod(m, 0o755)
+		}
+	})
+	var warned []string
+	if _, err := Create(f.reg, f.home, Spec{Name: "x", Force: true, Warn: func(m string) { warned = append(warned, m) }}); err != nil {
+		t.Fatalf("replace failed: %v", err)
+	}
+	if len(warned) != 1 || !strings.Contains(warned[0], "could not remove") {
+		t.Fatalf("warnings %q", warned)
 	}
 }

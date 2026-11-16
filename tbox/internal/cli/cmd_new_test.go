@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -106,5 +107,79 @@ func TestImageNewUsage(t *testing.T) {
 	}
 	if code, _, errs := runIn(t, home, "/", "image", "new", "demo", "--skill", "s/zzz"); code != 1 || !strings.Contains(errs, "store not found") {
 		t.Errorf("unknown store: %d %q", code, errs)
+	}
+}
+
+func TestImageNewRebuildsAfterStoreRemovalAndEdit(t *testing.T) {
+	localRegistry(t)
+	localResolver(t)
+	repo := storeRepo(t)
+	home := t.TempDir()
+	runIn(t, home, "/", "store", "add", "g", "file://"+repo)
+	if code, out, errs := runIn(t, home, "/", "image", "new", "demo", "--skill", "g/hello", "--prompt", "g/p"); code != 0 {
+		t.Fatalf("new: %q %q", out, errs)
+	}
+	runIn(t, home, "/", "store", "remove", "g")
+	src := filepath.Join(home, "sources", "demo")
+	writeFile(t, filepath.Join(src, "instructions.md"), "# demo\nedited\n")
+	// instructions.md is not in the Tariboyfile: add it as a local prompt.
+	body, _ := os.ReadFile(filepath.Join(src, "Tariboyfile.yaml"))
+	writeFile(t, filepath.Join(src, "Tariboyfile.yaml"), string(body)+"  - file: ./instructions.md\n")
+	code, out, errs := runIn(t, home, "/", "build", "--path", src)
+	if code != 0 || !strings.Contains(out, "built demo:0.1.0") {
+		t.Fatalf("rebuild: %d %q %q", code, out, errs)
+	}
+}
+
+func TestImageNewNoBuildThenFirstBuildWithoutStore(t *testing.T) {
+	localRegistry(t)
+	localResolver(t)
+	repo := storeRepo(t)
+	home := t.TempDir()
+	runIn(t, home, "/", "store", "add", "g", "file://"+repo)
+	if code, _, errs := runIn(t, home, "/", "image", "new", "demo", "--skill", "g/hello", "--no-build"); code != 0 {
+		t.Fatal(errs)
+	}
+	runIn(t, home, "/", "store", "remove", "g")
+	code, out, errs := runIn(t, home, "/", "build", "--path", filepath.Join(home, "sources", "demo"))
+	if code != 0 || !strings.Contains(out, "built demo:0.1.0") {
+		t.Fatalf("%d %q %q", code, out, errs)
+	}
+}
+
+func TestImageNewRootSkills(t *testing.T) {
+	localRegistry(t)
+	localResolver(t)
+	repo := storeRepo(t) // has skills/, so make a separate root-skill repository
+	_ = repo
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "SKILL.md"), "---\nname: rooty\ndescription: Root skill\n---\nbody\n")
+	writeFile(t, filepath.Join(root, "images/i/Tariboyfile.yaml"), "schema_version: 3\n")
+	home := t.TempDir()
+	runIn(t, home, "/", "store", "add", "d", root)
+	code, out, errs := runIn(t, home, "/", "image", "new", "fromdir", "--skill", "d/rooty")
+	if code != 0 || !strings.Contains(out, "built fromdir:0.1.0") {
+		t.Fatalf("dir store: %d %q %q", code, out, errs)
+	}
+	if _, out, _ := runIn(t, home, "/", "image", "show", "fromdir"); !strings.Contains(out, "rooty: Root skill") {
+		t.Fatalf("show %q", out)
+	}
+
+	grepo := t.TempDir()
+	writeFile(t, filepath.Join(grepo, "SKILL.md"), "---\nname: gitroot\ndescription: Git root skill\n---\nbody\n")
+	for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"add", "."}, {"commit", "-q", "-m", "one"}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = grepo
+		if o, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%v %s", err, o)
+		}
+	}
+	runIn(t, home, "/", "store", "add", "g", "file://"+grepo)
+	code, out, errs = runIn(t, home, "/", "image", "new", "fromgit", "--skill", "g/gitroot")
+	if code != 0 || !strings.Contains(out, "built fromgit:0.1.0") {
+		t.Fatalf("git store: %d %q %q", code, out, errs)
+	}
+	if _, out, _ := runIn(t, home, "/", "image", "show", "fromgit"); !strings.Contains(out, "gitroot: Git root skill") {
+		t.Fatalf("show %q", out)
 	}
 }

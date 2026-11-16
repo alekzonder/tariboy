@@ -443,3 +443,24 @@ func TestRemoteArchiveCompat(t *testing.T) {
 		t.Fatalf("committed archive differs from a fresh build (run go test ./internal/build -update-compat): %v", err)
 	}
 }
+
+func TestRemoteBuildGitRootSkill(t *testing.T) {
+	repo := newRemote(t)
+	rootRepo := filepath.Join(t.TempDir(), "rootskill")
+	write(t, filepath.Join(rootRepo, "SKILL.md"), skillBody("rootish", "one"))
+	gitIn(t, rootRepo, "init", "-q", "-b", "main")
+	gitIn(t, rootRepo, "add", ".")
+	gitIn(t, rootRepo, "commit", "-q", "-m", "first")
+	_ = repo
+	dir := source(t, fmt.Sprintf("schema_version: 3\nimage_version: 1.0.0\nskills:\n  - git: %s\n    path: .\n    ref: main\n", rootRepo))
+	o := opts(dir, imgstore.Store{Dir: t.TempDir()})
+	o.Resolver = &srcpkg.Resolver{Home: paths.Home(t.TempDir()), Git: gitx.Git{AllowLocal: true, Timeout: 30 * time.Second}}
+	res, err := Build(o)
+	if err != nil || !res.Built {
+		t.Fatalf("%+v %v", res, err)
+	}
+	img, err := o.Store.Open(imgstore.Ref{Name: res.Name, Tag: "latest"})
+	if err != nil || len(img.Manifest.Skills) != 1 || img.Manifest.Skills[0].Name != "rootish" {
+		t.Fatalf("%v %+v", err, img.Manifest.Skills)
+	}
+}
