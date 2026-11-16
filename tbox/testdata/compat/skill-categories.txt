@@ -1,0 +1,5 @@
+absolute
+current-store
+plugin
+source
+store

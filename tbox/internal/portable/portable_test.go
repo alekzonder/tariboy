@@ -262,4 +262,24 @@ func TestCompatPortableArchive(t *testing.T) {
 	if got.Manifest.Digest != img.Manifest.Digest || ref.String() != "compat-marked:latest" {
 		t.Fatalf("digest %s ref %s; run go test ./internal/portable -run TestCompatPortableArchive -update-compat", got.Manifest.Digest, ref)
 	}
+	// A fresh export must write the same envelope manifest (which carries
+	// the inner archive's hash and size) and the same inner archive, so
+	// drift in the export writer fails here and not first in tariboy.
+	committed := unpack(t, mustRead(t, path))
+	fresh := unpack(t, export(t, img, imgstore.Ref{Name: "compat-marked", Tag: "latest"}))
+	if !bytes.Equal(committed[manifestFile], fresh[manifestFile]) {
+		t.Fatalf("envelope manifest drifted:\ncommitted %s\nfresh     %s", committed[manifestFile], fresh[manifestFile])
+	}
+	if sha256.Sum256(committed[imageFile]) != sha256.Sum256(fresh[imageFile]) {
+		t.Fatal("inner archive drifted from the committed envelope")
+	}
+}
+
+func mustRead(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }

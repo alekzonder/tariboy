@@ -32,3 +32,23 @@ These fixtures pin the image archive format tbox shares with tariboy
   `tbox/internal/skillslock` requires `skillslock.Hash` to give the same value;
   it adds the skipped `.git` and `node_modules` directories to a copy, since
   neither can be committed.
+- `v2-tariboy/`: a schema-v2 source with the built-in plugin `whoami`, a
+  minimal fixture skill `whoami` that satisfies its contract, and the runtime
+  entries `identity` and `user-prompt` around one file prompt (image name
+  `compat-tariboy`).
+- `v2-tariboy.tariboy-image.tar.gz`: the envelope tariboy's own
+  `imageportable.Service.Export` writes for `v2-tariboy` built by `BuildV2`.
+  `TestTboxTariboyEnvelope` (`internal/imageportable`) requires a fresh
+  tariboy build to have the digest it records; `TestImportTariboyExport` in
+  `tbox/internal/portable` imports it, reads the inner archive and checks the
+  run directory prompt leaves the runtime entries out. Regenerate it with
+  `go test ./internal/imageportable -run TestTboxTariboyEnvelope -update-tbox-compat`
+  from the repository root.
+- `runtimes.txt`, `skill-categories.txt`, `plugin-name.txt`: the format lists
+  tbox copies from tariboy. tariboy's `TestTboxRuntimeList`
+  (`internal/imagecontract`), `TestTboxSkillCategories` and
+  `TestTboxPluginNamePattern` (`internal/image`) check them against its code;
+  `TestRuntimeNamesMatchCompatList` (`tbox/internal/tfile`) and
+  `TestFormatListsMatchCompatFiles` (`tbox/internal/archive`) check them
+  against tbox. When tariboy changes a list, update the file and the tbox copy
+  together.

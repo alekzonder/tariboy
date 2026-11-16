@@ -1,8 +1,13 @@
 package image
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -73,5 +78,62 @@ func TestTboxRemoteArchiveImports(t *testing.T) {
 	}
 	if len(manifest.Skills) != 1 || manifest.Skills[0].Name != "gamma" || manifest.Skills[0].Category != "source" {
 		t.Fatalf("skills = %+v", manifest.Skills)
+	}
+}
+
+// readTboxList returns the lines of a list file in the tbox compat fixtures.
+func readTboxList(t *testing.T, name string) []string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(tboxCompatDir, name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Fields(string(data))
+}
+
+// TestTboxSkillCategories keeps tbox/testdata/compat/skill-categories.txt
+// equal to the case labels of validSkillCategory, read from the source so a
+// new category cannot slip past. When this fails, update the file and
+// tbox's skillCategories together.
+func TestTboxSkillCategories(t *testing.T) {
+	file, err := parser.ParseFile(token.NewFileSet(), "portable_validate.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	ast.Inspect(file, func(n ast.Node) bool {
+		fn, ok := n.(*ast.FuncDecl)
+		if !ok || fn.Name.Name != "validSkillCategory" {
+			return true
+		}
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			if lit, ok := n.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+				s, err := strconv.Unquote(lit.Value)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got = append(got, s)
+			}
+			return true
+		})
+		return false
+	})
+	slices.Sort(got)
+	want := readTboxList(t, "skill-categories.txt")
+	if !slices.Equal(got, want) {
+		t.Fatalf("validSkillCategory cases = %v, skill-categories.txt = %v", got, want)
+	}
+	for _, c := range want {
+		if !validSkillCategory(c) {
+			t.Fatalf("%q is not a valid category", c)
+		}
+	}
+}
+
+// TestTboxPluginNamePattern keeps tbox/testdata/compat/plugin-name.txt equal
+// to the portable plugin name pattern.
+func TestTboxPluginNamePattern(t *testing.T) {
+	if want := readTboxList(t, "plugin-name.txt"); len(want) != 1 || portablePluginName.String() != want[0] {
+		t.Fatalf("pattern %s, plugin-name.txt %v", portablePluginName, want)
 	}
 }
