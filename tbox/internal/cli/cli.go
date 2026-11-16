@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/alekzonder/tariboy/tbox/internal/agentmode"
 	"github.com/alekzonder/tariboy/tbox/internal/version"
 )
 
@@ -14,6 +15,7 @@ import (
 type Env struct {
 	Args     []string
 	Getenv   func(string) string
+	Environ  func() []string
 	Stdin    io.Reader
 	Stdout   io.Writer
 	Stderr   io.Writer
@@ -31,6 +33,8 @@ var commands = map[string]Command{
 	"version": runVersion,
 }
 
+func init() { commands["help"] = runHelp }
+
 // Main dispatches on the first argument and returns the exit code.
 func Main(env Env) int {
 	if len(env.Args) == 0 {
@@ -39,6 +43,9 @@ func Main(env Env) int {
 	name := env.Args[0]
 	if name == "--version" {
 		name = "version"
+	}
+	if dir := imageDir(&env); dir != "" && name != "version" && name != "help" {
+		return agentmode.Run(agentHost(&env), dir, env.Args)
 	}
 	cmd, ok := commands[name]
 	if !ok {
@@ -63,4 +70,26 @@ func usage(env *Env, unknown string) int {
 	sort.Strings(names)
 	fmt.Fprintf(env.Stderr, "usage: tbox <command> [args]\ncommands: %v\n", names)
 	return 2
+}
+
+// imageDir is the session image directory. A non-empty value switches every
+// command to agent mode.
+func imageDir(env *Env) string {
+	if env.Getenv == nil {
+		return ""
+	}
+	return env.Getenv(agentmode.EnvImageDir)
+}
+
+func agentHost(env *Env) agentmode.Host {
+	var environ []string
+	if env.Environ != nil {
+		environ = env.Environ()
+	}
+	return agentmode.Host{Stdout: env.Stdout, Stderr: env.Stderr, Environ: environ, Exec: env.Exec}
+}
+
+func runHelp(env *Env, _ []string) int {
+	usage(env, "")
+	return 0
 }

@@ -15,6 +15,7 @@ func main() {
 	os.Exit(cli.Main(cli.Env{
 		Args:     os.Args[1:],
 		Getenv:   os.Getenv,
+		Environ:  os.Environ,
 		Stdin:    os.Stdin,
 		Stdout:   os.Stdout,
 		Stderr:   os.Stderr,

@@ -34,3 +34,29 @@ func TestNoArgsPrintsUsage(t *testing.T) {
 		t.Fatalf("code %d stderr %q", code, errs)
 	}
 }
+
+func TestAgentModeGate(t *testing.T) {
+	var out, errb bytes.Buffer
+	env := Env{
+		Args:    []string{"build"},
+		Getenv:  func(k string) string { return map[string]string{"TBOX_IMAGE_DIR": t.TempDir() + "/gone"}[k] },
+		Environ: func() []string { return nil },
+		Stdout:  &out,
+		Stderr:  &errb,
+	}
+	if code := Main(env); code != 2 || !strings.Contains(errb.String(), "not available inside an image session") {
+		t.Fatalf("build: %d %q", code, errb.String())
+	}
+	env.Args = []string{"skills"}
+	if code := Main(env); code != 1 {
+		t.Fatalf("skills with a broken directory: %d", code)
+	}
+	env.Args = []string{"version"}
+	if code := Main(env); code != 0 || out.String() != "0.1.0\n" {
+		t.Fatalf("version: %d %q", code, out.String())
+	}
+	env.Args = []string{"help"}
+	if code := Main(env); code != 0 {
+		t.Fatalf("help: %d", code)
+	}
+}
