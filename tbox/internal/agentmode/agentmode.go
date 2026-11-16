@@ -154,6 +154,8 @@ func skillExec(host Host, run rundir.Run, args []string) int {
 		return 1
 	}
 	env := withSkillDir(host.Environ, dir)
+	// The image directory belongs to the session user, so the gap between the
+	// path check and exec is not a privilege boundary.
 	if err := host.Exec(argv0, argv, env); err != nil {
 		fmt.Fprintf(host.Stderr, "tbox: run %s: %v\n", args[1], err)
 		return 126

@@ -59,7 +59,23 @@ func runVersion(env *Env, _ []string) int {
 	return 0
 }
 
+const sessionUsage = `usage: tbox <command> [args]
+commands:
+  skills                                   list the skills of the image
+  skill NAME                               show a skill
+  skill exec NAME SCRIPT [ARGS...]         run a script of a skill
+  version
+  help
+`
+
 func usage(env *Env, unknown string) int {
+	if imageDir(env) != "" {
+		if unknown != "" {
+			fmt.Fprintf(env.Stderr, "tbox: unknown command %q\n", unknown)
+		}
+		fmt.Fprint(env.Stderr, sessionUsage)
+		return 2
+	}
 	if unknown != "" {
 		fmt.Fprintf(env.Stderr, "tbox: unknown command %q\n", unknown)
 	}

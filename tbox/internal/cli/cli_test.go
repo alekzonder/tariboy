@@ -60,3 +60,25 @@ func TestAgentModeGate(t *testing.T) {
 		t.Fatalf("help: %d", code)
 	}
 }
+
+func TestUsageInsideSession(t *testing.T) {
+	var out, errb bytes.Buffer
+	env := Env{
+		Args:   []string{"help"},
+		Getenv: func(k string) string { return map[string]string{"TBOX_IMAGE_DIR": "/x"}[k] },
+		Stdout: &out,
+		Stderr: &errb,
+	}
+	if code := Main(env); code != 0 {
+		t.Fatalf("help: %d", code)
+	}
+	got := errb.String()
+	for _, want := range []string{"skills", "skill NAME", "skill exec NAME SCRIPT", "version", "help"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("usage lacks %q: %s", want, got)
+		}
+	}
+	if strings.Contains(got, "build") {
+		t.Errorf("usage lists build: %s", got)
+	}
+}
