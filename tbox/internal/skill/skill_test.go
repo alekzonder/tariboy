@@ -225,3 +225,13 @@ func TestValidatePrepared(t *testing.T) {
 		})
 	}
 }
+
+func TestReadMeta(t *testing.T) {
+	name, desc, err := ReadMeta([]byte("---\nname: hello\ndescription: Says hello\n---\nbody\n"))
+	if err != nil || name != "hello" || desc != "Says hello" {
+		t.Fatalf("%q %q %v", name, desc, err)
+	}
+	if _, _, err := ReadMeta([]byte("plain\n")); err == nil {
+		t.Fatal("missing frontmatter accepted")
+	}
+}

@@ -26,7 +26,7 @@ func (t *tagList) Set(v string) error { *t = append(*t, v); return nil }
 // newResolver builds the production source resolver of a tbox home. Tests of
 // this package replace it to reach local repositories.
 var newResolver = func(home paths.Home) *source.Resolver {
-	return &source.Resolver{Home: home}
+	return &source.Resolver{Home: home, Git: productionGit(), HTTP: productionHTTP()}
 }
 
 // openStore returns the image store of the environment's tbox home.
