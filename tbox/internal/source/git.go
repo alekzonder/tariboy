@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/alekzonder/tariboy/tbox/internal/lock"
 	"github.com/alekzonder/tariboy/tbox/internal/tfile"
@@ -40,6 +41,33 @@ func (r Resolver) gitSkill(ctx context.Context, e tfile.SkillEntry, pinned *lock
 	if err != nil {
 		return "", lock.Entry{}, err
 	}
+	return r.gitSkillNamed(ctx, e, name, pinned)
+}
+
+// GitSkillAs resolves the git skill entry e like SkillDir, but the cached
+// directory is named name instead of the last element of e.Path, and e.Path
+// may be "." for the repository root. skills-lock.json restores use it: the
+// installer names a skill by its lock key, wherever its SKILL.md lies.
+func (r Resolver) GitSkillAs(ctx context.Context, e tfile.SkillEntry, name string, pinned *lock.Entry) (string, lock.Entry, error) {
+	err := checkPinned(pinned)
+	if err == nil {
+		err = checkRepoPath(e.Path)
+	}
+	if err == nil && (e.Git == "" || name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\\x00")) {
+		err = fmt.Errorf("invalid git skill %q named %q", e.Path, name)
+	}
+	var dir string
+	var got lock.Entry
+	if err == nil {
+		dir, got, err = r.gitSkillNamed(ctx, e, name, pinned)
+	}
+	if err != nil {
+		return "", lock.Entry{}, fmt.Errorf("skill %s: %w", address(e.Git, "", e.Path), err)
+	}
+	return dir, got, nil
+}
+
+func (r Resolver) gitSkillNamed(ctx context.Context, e tfile.SkillEntry, name string, pinned *lock.Entry) (string, lock.Entry, error) {
 	key := lock.Key("git", e.Git, e.Path, e.Ref)
 	base := lock.Entry{Kind: "git", URL: e.Git, Path: e.Path, Ref: e.Ref}
 	if pinned != nil {
