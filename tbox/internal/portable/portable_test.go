@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"os"
@@ -105,7 +107,7 @@ func export(t *testing.T, img archive.Image, ref imgstore.Ref) []byte {
 }
 
 // mutate re-packs an export with the manifest changed by edit.
-func mutate(t *testing.T, data []byte, edit func(m map[string]any)) []byte {
+func mutate(t *testing.T, data []byte, edit func(m map[string]any), inner ...[]byte) []byte {
 	t.Helper()
 	parts := unpack(t, data)
 	var m map[string]any
@@ -114,7 +116,11 @@ func mutate(t *testing.T, data []byte, edit func(m map[string]any)) []byte {
 	}
 	edit(m)
 	manifest, _ := json.Marshal(m)
-	return envelopeBytes(t, []member{{name: manifestFile, body: manifest}, {name: imageFile, body: parts[imageFile]}})
+	image := parts[imageFile]
+	if len(inner) > 0 {
+		image = inner[0]
+	}
+	return envelopeBytes(t, []member{{name: manifestFile, body: manifest}, {name: imageFile, body: image}})
 }
 
 func TestExportImportRoundTrip(t *testing.T) {
@@ -158,7 +164,7 @@ func TestExportEnvelopeShape(t *testing.T) {
 
 func TestImportRejects(t *testing.T) {
 	img := markedImage(t)
-	data := export(t, img, imgstore.Ref{Name: "demo", Tag: "latest"})
+	data := export(t, img, imgstore.Ref{Name: "compat-marked", Tag: "latest"})
 	parts := unpack(t, data)
 	setMeta := func(key string, v any) func(map[string]any) {
 		return func(m map[string]any) { m["metadata"].(map[string]any)[key] = v }
@@ -173,6 +179,8 @@ func TestImportRejects(t *testing.T) {
 		{"digest differs", mutate(t, data, setMeta("digest", strings.Repeat("0", 64))), "digest mismatch"},
 		{"plugins differ", mutate(t, data, setMeta("plugins", []string{"x"})), "plugin metadata mismatch"},
 		{"plugins missing", mutate(t, data, setMeta("plugins", nil)), "incomplete metadata"},
+		{"ref name differs from archive name", mutate(t, data, setMeta("ref", "victim:latest")), "name mismatch"},
+		{"inner archive invalid", garbageInner(t, data), "invalid runnable artifact"},
 		{"bad ref", mutate(t, data, setMeta("ref", "Bad Ref")), "invalid image ref"},
 		{"reserved ref", mutate(t, data, setMeta("ref", "bare:latest")), "invalid image ref"},
 		{"file hash differs", mutate(t, data, func(m map[string]any) {
@@ -196,6 +204,19 @@ func TestImportRejects(t *testing.T) {
 			}
 		})
 	}
+}
+
+// garbageInner re-packs an export with a valid envelope whose image.tar.gz is
+// not an image archive, with the file list describing it correctly.
+func garbageInner(t *testing.T, data []byte) []byte {
+	t.Helper()
+	body := []byte("not an image archive")
+	sum := sha256.Sum256(body)
+	return mutate(t, data, func(m map[string]any) {
+		f := m["files"].([]any)[0].(map[string]any)
+		f["sha256"] = hex.EncodeToString(sum[:])
+		f["size"] = len(body)
+	}, body)
 }
 
 func TestImportRejectsTooManyMembers(t *testing.T) {
