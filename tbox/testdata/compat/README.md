@@ -25,3 +25,10 @@ These fixtures pin the image archive format tbox shares with tariboy
   `TestTboxPortableImports` (`internal/imageportable`) previews and applies it;
   `TestCompatPortableArchive` in `tbox/internal/portable` reads it. Regenerate it
   with `cd tbox && go test ./internal/portable -run TestCompatPortableArchive -update-compat`.
+- `skills-lock/skill` and `skills-lock/computedHash`: the `computedHash` that
+  tariboy's `stores.SkillHash` (`internal/stores/skillslock.go`) gives the
+  skill directory, as the skills installer writes it into `skills-lock.json`.
+  The file names exercise the localeCompare order. `TestHashMatchesTariboy` in
+  `tbox/internal/skillslock` requires `skillslock.Hash` to give the same value;
+  it adds the skipped `.git` and `node_modules` directories to a copy, since
+  neither can be committed.

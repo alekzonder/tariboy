@@ -94,6 +94,7 @@ func resolveRunRef(env *Env, home paths.Home, store imgstore.Store, path string,
 		if err != nil {
 			return imgstore.Ref{}, fail(env, err)
 		}
+		printWarnings(env, res)
 		if res.Built {
 			fmt.Fprintf(env.Stderr, "built %s:latest %s\n", res.Name, res.Digest)
 		} else {

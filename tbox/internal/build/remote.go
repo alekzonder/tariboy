@@ -128,18 +128,18 @@ func resolve(ctx context.Context, r *srcpkg.Resolver, f *tfile.File, old lock.Fi
 }
 
 // skillDir resolves a skill entry to its directory, source text and category.
-func (rs *resolution) skillDir(e tfile.SkillEntry) (string, string, string, error) {
+func (rs *resolution) skillDir(e tfile.SkillEntry, remap tfile.Remap) (string, string, string, error) {
 	if !remoteSkill(e) {
-		return tfile.ResolveSkillDir(e)
+		return tfile.ResolveSkillDirWith(e, remap)
 	}
 	key := skillKey(e)
 	return rs.skills[key], srcpkg.Describe(rs.lock.Entries[key]), "source", nil
 }
 
 // promptFile resolves a prompt entry to its file, source text and category.
-func (rs *resolution) promptFile(e tfile.PromptEntry, skillDirs []string) (string, string, string, error) {
+func (rs *resolution) promptFile(e tfile.PromptEntry, remap tfile.Remap, skillDirs []string) (string, string, string, error) {
 	if !remotePrompt(e) {
-		return tfile.ResolvePromptFile(e, skillDirs...)
+		return tfile.ResolvePromptFileWith(e, remap, skillDirs...)
 	}
 	key := promptKey(e)
 	return rs.prompts[key], srcpkg.Describe(rs.lock.Entries[key]), "source", nil

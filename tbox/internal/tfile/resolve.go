@@ -67,9 +67,28 @@ func locate(base, value, kind string) (string, string, error) {
 	return filepath.Join(root, filepath.FromSlash(value)), "source", nil
 }
 
+// Remap maps the absolute path of a local entry, after its scope is checked,
+// to the path that is read instead. It returns abs for a path it does not
+// remap. tbox uses it to read ./.agents/skills from skills restored out of
+// skills-lock.json instead of the source directory.
+type Remap func(abs string) string
+
+func (m Remap) apply(abs string) string {
+	if m == nil {
+		return abs
+	}
+	return m(abs)
+}
+
 // ResolveSkillDir resolves a local dir entry. It returns the absolute path,
 // the source as written and the category.
 func ResolveSkillDir(e SkillEntry) (string, string, string, error) {
+	return ResolveSkillDirWith(e, nil)
+}
+
+// ResolveSkillDirWith is ResolveSkillDir reading through remap. The source
+// and category are those of the entry as written.
+func ResolveSkillDirWith(e SkillEntry, remap Remap) (string, string, string, error) {
 	if e.Git != "" || e.URL != "" {
 		return "", "", "", ErrRemoteUnsupported
 	}
@@ -77,6 +96,7 @@ func ResolveSkillDir(e SkillEntry) (string, string, string, error) {
 	if err != nil {
 		return "", "", "", err
 	}
+	abs = remap.apply(abs)
 	if err := checkPlain("skill", e.Dir, abs); err != nil {
 		return "", "", "", err
 	}
@@ -99,6 +119,13 @@ func below(root, path string) bool {
 // below one of skillDirs (absolute skill directories, see File.SkillDirs); a
 // ./ path must stay inside the entry's BaseDir.
 func ResolvePromptFile(e PromptEntry, skillDirs ...string) (string, string, string, error) {
+	return ResolvePromptFileWith(e, nil, skillDirs...)
+}
+
+// ResolvePromptFileWith is ResolvePromptFile reading through remap. The
+// scope check uses the path as written; the file is read at its remapped
+// path.
+func ResolvePromptFileWith(e PromptEntry, remap Remap, skillDirs ...string) (string, string, string, error) {
 	if e.Git != "" || e.URL != "" {
 		return "", "", "", ErrRemoteUnsupported
 	}
@@ -112,6 +139,7 @@ func ResolvePromptFile(e PromptEntry, skillDirs ...string) (string, string, stri
 	if err := checkPromptScope(e, abs, skillDirs); err != nil {
 		return "", "", "", err
 	}
+	abs = remap.apply(abs)
 	if err := checkPlain("prompt", e.File, abs); err != nil {
 		return "", "", "", err
 	}
