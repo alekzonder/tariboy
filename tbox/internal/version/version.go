@@ -6,4 +6,4 @@ package version
 // together with internal/version.Version; the root test
 // TestTboxVersionMatchesCanonicalVersion fails when the two differ. The tbox
 // module cannot import the tariboy package, so the value is repeated here.
-const Version = "0.115.0"
+const Version = "0.116.0"

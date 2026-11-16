@@ -1,3 +1,12 @@
+## [0.116.0] - 2026-11-16
+
+### Added
+
+- New binary `tbox`. It builds a Tariboy agent image from a directory or a Store and starts an ordinary Claude Code, Codex or OpenCode session with the prompt and skills of the image. It needs no daemon and no Node.js. `tbox run` without arguments lets you pick the image and the harness from lists, and `tbox image new` assembles a source from the skills and prompts of your Stores. A schema version 3 Tariboyfile can take skills and prompts from `git` and `url` sources, which `tbox` pins in `tbox-lock.json`. Tariboy itself still accepts only schema version 2, and the archive that `tbox` writes is a schema version 2 image that Tariboy imports.
+- Each release ships `tbox` at the release version. The Desktop package, the server archives, `tariboy update`, the remote host install and `make install` install it, and Install/Update CLI links `~/.local/bin/tbox`. If you activate a release older than `tbox`, the `tbox` link is removed.
+
+[0.116.0]: https://github.com/alekzonder/tariboy/compare/v0.115.0...v0.116.0
+
 ## [0.115.0] - 2026-11-12
 
 ### Added
