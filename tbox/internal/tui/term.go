@@ -3,7 +3,9 @@ package tui
 import (
 	"errors"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -11,30 +13,91 @@ import (
 	"golang.org/x/term"
 )
 
-// ErrNoTerminal is returned by Open when the input is not a terminal.
-var ErrNoTerminal = errors.New("input is not a terminal")
+// ErrNoTerminal is returned by Open when the input or the output is not a
+// terminal.
+var ErrNoTerminal = errors.New("input or output is not a terminal")
 
 // escWait is how long a lone ESC waits for the rest of an escape sequence.
 const escWait = 50 * time.Millisecond
 
+// caughtSignals end the process while a list is shown. The terminal is
+// restored before the signal takes its default effect. In raw mode Ctrl-C and
+// Ctrl-\ arrive as bytes, so SIGINT and SIGQUIT come only from kill.
+var caughtSignals = []os.Signal{syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGINT}
+
+// sysDeps are the process and terminal calls of Open, replaced in tests.
+type sysDeps struct {
+	isTerminal func(fd int) bool
+	makeRaw    func(fd int) (*term.State, error)
+	restore    func(fd int, st *term.State) error
+	notify     func(c chan<- os.Signal, sig ...os.Signal)
+	stop       func(c chan<- os.Signal)
+	raise      func(sig os.Signal)
+}
+
+var realSys = sysDeps{
+	isTerminal: term.IsTerminal,
+	makeRaw:    term.MakeRaw,
+	restore:    term.Restore,
+	notify:     signal.Notify,
+	stop:       signal.Stop,
+	raise:      raiseDefault,
+}
+
+// raiseDefault delivers sig again with its default disposition, so the
+// process ends the way it would have without tbox's handler. SIGQUIT would
+// make the Go runtime print a goroutine dump, so it exits with 128+3 instead.
+func raiseDefault(sig os.Signal) {
+	s, ok := sig.(syscall.Signal)
+	if !ok || s == syscall.SIGQUIT {
+		os.Exit(128 + int(syscall.SIGQUIT))
+	}
+	signal.Reset(s)
+	_ = syscall.Kill(os.Getpid(), s)
+	time.Sleep(time.Second)
+	os.Exit(128 + int(s))
+}
+
 type realTerm struct {
 	in, out *os.File
 	state   *term.State
+	sys     sysDeps
+	sigs    chan os.Signal
+	done    chan struct{}
 	once    sync.Once
 	buf     []byte
 }
 
 // Open puts in into raw mode and returns a Terminal that reads keys from in
-// and writes to out. Close restores the saved state.
+// and writes to out. Both must be terminals: frames written to a file or a
+// pipe would be invisible while the list waits for keys. Close restores the
+// saved state; a terminating signal restores it too before the process ends.
 func Open(in, out *os.File) (Terminal, error) {
-	if !term.IsTerminal(int(in.Fd())) {
+	return openWith(in, out, realSys)
+}
+
+func openWith(in, out *os.File, sys sysDeps) (Terminal, error) {
+	if !sys.isTerminal(int(in.Fd())) || !sys.isTerminal(int(out.Fd())) {
 		return nil, ErrNoTerminal
 	}
-	st, err := term.MakeRaw(int(in.Fd()))
+	st, err := sys.makeRaw(int(in.Fd()))
 	if err != nil {
 		return nil, err
 	}
-	return &realTerm{in: in, out: out, state: st}, nil
+	r := &realTerm{in: in, out: out, state: st, sys: sys, sigs: make(chan os.Signal, 1), done: make(chan struct{})}
+	sys.notify(r.sigs, caughtSignals...)
+	go r.watch()
+	return r, nil
+}
+
+// watch restores the terminal on a terminating signal and re-raises it.
+func (r *realTerm) watch() {
+	select {
+	case sig := <-r.sigs:
+		_ = r.Close()
+		r.sys.raise(sig)
+	case <-r.done:
+	}
 }
 
 func (r *realTerm) Write(p []byte) (int, error) { return r.out.Write(p) }
@@ -50,8 +113,10 @@ func (r *realTerm) Size() (int, int) {
 func (r *realTerm) Close() error {
 	var err error
 	r.once.Do(func() {
+		r.sys.stop(r.sigs)
+		close(r.done)
 		_, _ = r.out.Write([]byte(showCursor))
-		err = term.Restore(int(r.in.Fd()), r.state)
+		err = r.sys.restore(int(r.in.Fd()), r.state)
 	})
 	return err
 }

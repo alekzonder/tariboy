@@ -69,7 +69,7 @@ func newStoreHarness(t *testing.T) storeHarness {
 			t.Fatal(err)
 		}
 	}
-	env := append(os.Environ(), "TBOX_HOME="+t.TempDir(), "PATH="+bin+":"+os.Getenv("PATH"), "TBOX_E2E_CHILD=1", "TBOX_E2E_LOCAL=1")
+	env := append(childEnviron(), "TBOX_HOME="+t.TempDir(), "PATH="+bin+":"+os.Getenv("PATH"), "TBOX_E2E_CHILD=1", "TBOX_E2E_LOCAL=1")
 	return storeHarness{t: t, self: self, env: env}
 }
 
