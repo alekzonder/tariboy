@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Queue, Task } from "@/types";
@@ -11,6 +11,7 @@ import {
   setTaskColumnWidth,
 } from "./taskColumnLayout";
 import { TASK_COLUMNS, type TaskRowMode } from "./taskColumns";
+import { RunningAgentsContext } from "./runningAgents";
 import TaskRow from "./TaskRow";
 import TaskTableHeader from "./TaskTableHeader";
 import { formatTaskDuration } from "./taskTime";
@@ -153,6 +154,42 @@ describe("task table columns", () => {
       within(screen.getByTestId(`task-row-${task.key}`)).getByText("builder"),
     ).toBeInTheDocument();
     expect(screen.queryByText("IMPROVE", { exact: true })).toBeNull();
+  });
+});
+
+describe("task row agent badge", () => {
+  function renderAgentRow(assignee: string, running: Map<string, Set<string>>) {
+    render(
+      <RunningAgentsContext.Provider value={running}>
+        <TaskRow
+          row={{ task: { ...task, assignee }, depth: 0, hasChildren: false, orphaned: false }}
+          mode="all"
+          hasActiveQuestion={false}
+          expanded={false}
+          selected={false}
+          onToggle={vi.fn()}
+          onSelect={vi.fn()}
+          onAddChild={vi.fn()}
+        />
+      </RunningAgentsContext.Provider>,
+    );
+    return screen.getByTitle(/running$/);
+  }
+  const running = new Map([["", new Set(["builder"])]]);
+
+  it("is green while the agent runs", () => {
+    const badge = renderAgentRow("agent:builder", running);
+    expect(badge).toHaveAttribute("data-tone", "live");
+    expect(badge).toHaveAttribute("title", "builder: running");
+    expect(badge.className).toContain("text-status-running");
+  });
+
+  it("is grey for a stopped agent and for a person", () => {
+    expect(renderAgentRow("agent:reviewer", running)).toHaveAttribute("data-tone", "quiet");
+    cleanup();
+    const person = renderAgentRow("user:owner", running);
+    expect(person).toHaveAttribute("data-tone", "quiet");
+    expect(person).toHaveTextContent("user:owner");
   });
 });
 

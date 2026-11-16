@@ -9,6 +9,7 @@ import { hasLocalDaemon } from "@/lib/desktop";
 import { LazyBoundary } from "@/components/LazyBoundary";
 import { MessagesLiveRefresh } from "./MessagesLiveRefresh";
 import { NeedsYouContext, type NeedsYouValue } from "./needsYouContext";
+import { RunningAgentsContext, runningAgentsByHost } from "@/pages/tasks/runningAgents";
 import { TitlebarSlotContext } from "./titlebarSlotContext";
 import { GlobalSearch } from "./GlobalSearch";
 import type { WorkspaceHost } from "./HostWorkspaces";
@@ -171,6 +172,7 @@ function ConsolePage({
     [orderedSidebarHosts],
   );
   const needs = useNeedsYou(needsHosts, polling.agentStatesLive ? 15000 : 3000);
+  const runningAgents = useMemo(() => runningAgentsByHost(sidebarHosts), [sidebarHosts]);
 
   const manageWorkspaces = (focusNew: boolean) =>
     setWorkspaceManager({ id: workspaces.active, focusNew });
@@ -179,86 +181,88 @@ function ConsolePage({
     // Terminal body: the chrome shows through as an 8px gutter around the
     // content island, so neither the sidebar nor the island needs a border.
     <NeedsYouContext.Provider value={needs.value}>
-      <div className="flex h-full px-2 pb-2">
-        {/* Chat order and agent state are live: a published message or a state
+      <RunningAgentsContext.Provider value={runningAgents}>
+        <div className="flex h-full px-2 pb-2">
+          {/* Chat order and agent state are live: a published message or a state
             change refreshes the authoritative snapshot at once rather than
             waiting for the next poll. */}
-        <MessagesLiveRefresh
-          hostIds={hosts.map((entry) => entry.host.id)}
-          onChange={refresh}
-          onLive={polling.setAgentStatesLive}
-        />
-        {needs.live}
-        <TerminalsSidebar
-          hosts={orderedSidebarHosts}
-          labelHosts={sidebarHosts}
-          hostId={allHosts ? undefined : hostId}
-          pageHostId={pageHostId}
-          counts={needs.counts}
-          query={query}
-          onQuery={setQuery}
-          server={server}
-          onReorder={(kind, id, ids) => void reorderSidebar(kind, id, ids)}
-          onCreate={setCreateFor}
-        />
-        {/* The content island: --card on the --background chrome, one radius and
+          <MessagesLiveRefresh
+            hostIds={hosts.map((entry) => entry.host.id)}
+            onChange={refresh}
+            onLive={polling.setAgentStatesLive}
+          />
+          {needs.live}
+          <TerminalsSidebar
+            hosts={orderedSidebarHosts}
+            labelHosts={sidebarHosts}
+            hostId={allHosts ? undefined : hostId}
+            pageHostId={pageHostId}
+            counts={needs.counts}
+            query={query}
+            onQuery={setQuery}
+            server={server}
+            onReorder={(kind, id, ids) => void reorderSidebar(kind, id, ids)}
+            onCreate={setCreateFor}
+          />
+          {/* The content island: --card on the --background chrome, one radius and
             one of the two allowed shadows. Everything the operator works with
             lives inside it. */}
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--panel-radius)] bg-card shadow-[var(--lift)]">
-          <div className={`flex min-h-0 flex-1 flex-col${serverView ? "" : " p-3"}`}>
-            {hostError && (
-              <p role="alert" className="mb-2 text-sm text-destructive">
-                {hostError}
-              </p>
-            )}
-            <section className="min-h-0 flex-1">
-              <LazyBoundary resetKey={location.pathname}>
-                <TerminalsRoutes
-                  serverView={serverView}
-                  workspaceHosts={orderedSidebarHosts}
-                  allHosts={allHosts}
-                  hostId={hostId}
-                  selectedHost={selectedHost}
-                  routeUnavailable={Boolean(liveSelectedHost?.error)}
-                  refresh={refresh}
-                  hostsContext={{ onManageWorkspaces: manageWorkspaces }}
-                  onCreate={setCreateFor}
-                  fallback={
-                    <TerminalsEmptyState
-                      hosts={orderedSidebarHosts}
-                      pageHostId={pageHostId}
-                      firstHostId={createHosts[0]?.id}
-                      createHosts={createHosts}
-                      onCreated={openCreatedAgent(navigate, refresh)}
-                      onManage={() => manageWorkspaces(false)}
-                      onAddServer={() => setServerDialog({ mode: "add" })}
-                      onNewAgent={(id) => setCreateFor({ hostId: id })}
-                    />
-                  }
-                />
-              </LazyBoundary>
-            </section>
-          </div>
-        </main>
-        <TitlebarControls
-          workspaceHosts={workspaceHosts}
-          onSelectWorkspace={followWorkspace}
-          onManageWorkspaces={manageWorkspaces}
-          search={<GlobalSearch hosts={orderedSidebarHosts} query={query} onQuery={setQuery} />}
-        />
-        <TerminalsDialogs
-          createFor={createFor}
-          setCreateFor={setCreateFor}
-          createHosts={createHosts}
-          serverDialog={serverDialog}
-          setServerDialog={setServerDialog}
-          workspaceManager={workspaceManager}
-          setWorkspaceManager={setWorkspaceManager}
-          workspaceHosts={workspaceHosts}
-          onRegistryChanged={server.registryChanged}
-          refresh={refresh}
-        />
-      </div>
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--panel-radius)] bg-card shadow-[var(--lift)]">
+            <div className={`flex min-h-0 flex-1 flex-col${serverView ? "" : " p-3"}`}>
+              {hostError && (
+                <p role="alert" className="mb-2 text-sm text-destructive">
+                  {hostError}
+                </p>
+              )}
+              <section className="min-h-0 flex-1">
+                <LazyBoundary resetKey={location.pathname}>
+                  <TerminalsRoutes
+                    serverView={serverView}
+                    workspaceHosts={orderedSidebarHosts}
+                    allHosts={allHosts}
+                    hostId={hostId}
+                    selectedHost={selectedHost}
+                    routeUnavailable={Boolean(liveSelectedHost?.error)}
+                    refresh={refresh}
+                    hostsContext={{ onManageWorkspaces: manageWorkspaces }}
+                    onCreate={setCreateFor}
+                    fallback={
+                      <TerminalsEmptyState
+                        hosts={orderedSidebarHosts}
+                        pageHostId={pageHostId}
+                        firstHostId={createHosts[0]?.id}
+                        createHosts={createHosts}
+                        onCreated={openCreatedAgent(navigate, refresh)}
+                        onManage={() => manageWorkspaces(false)}
+                        onAddServer={() => setServerDialog({ mode: "add" })}
+                        onNewAgent={(id) => setCreateFor({ hostId: id })}
+                      />
+                    }
+                  />
+                </LazyBoundary>
+              </section>
+            </div>
+          </main>
+          <TitlebarControls
+            workspaceHosts={workspaceHosts}
+            onSelectWorkspace={followWorkspace}
+            onManageWorkspaces={manageWorkspaces}
+            search={<GlobalSearch hosts={orderedSidebarHosts} query={query} onQuery={setQuery} />}
+          />
+          <TerminalsDialogs
+            createFor={createFor}
+            setCreateFor={setCreateFor}
+            createHosts={createHosts}
+            serverDialog={serverDialog}
+            setServerDialog={setServerDialog}
+            workspaceManager={workspaceManager}
+            setWorkspaceManager={setWorkspaceManager}
+            workspaceHosts={workspaceHosts}
+            onRegistryChanged={server.registryChanged}
+            refresh={refresh}
+          />
+        </div>
+      </RunningAgentsContext.Provider>
     </NeedsYouContext.Provider>
   );
 }

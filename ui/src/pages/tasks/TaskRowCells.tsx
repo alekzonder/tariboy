@@ -9,7 +9,7 @@ import {
 import { PriorityTag, StatusPill } from "@/components/ui/status";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
-import { TONE_TEXT, priorityTitleClass, taskTone } from "@/lib/statusTone";
+import { TONE_FILL, TONE_TEXT, priorityTitleClass, taskTone } from "@/lib/statusTone";
 import {
   taskPriority,
   type Queue,
@@ -25,6 +25,7 @@ import {
 } from "@/lib/tasks";
 import { queueMarkerLabel, type TaskParentLink, type VisibleTaskRow } from "@/lib/taskTree";
 import QueueMarker from "./QueueMarker";
+import { useAgentRunning } from "./runningAgents";
 import { PHONE_TASK_QUERY, type TaskColumnId } from "./taskColumnLayout";
 import { keyIndentPx } from "./taskColumns";
 import { formatTaskDuration, formatTaskTime } from "./taskTime";
@@ -216,12 +217,23 @@ function TitleCell({ row, hasActiveQuestion, onSelect, onOpenTask }: TaskRowCell
   );
 }
 
+/** The assignee as a badge: green while its agent runs, grey otherwise. */
 function AgentCell({ row, style }: TaskRowCellProps) {
+  const running = useAgentRunning(row.task.assignee);
+  const tone = running ? "live" : "quiet";
+  const name = row.task.assignee.replace(/^agent:/, "");
   return (
     <span data-column="agent" style={style} className="shrink-0">
       {row.task.assignee && (
-        <span className="inline-flex h-4.75 max-w-full items-center truncate rounded-sm bg-muted px-1.75 text-meta">
-          {row.task.assignee.replace(/^agent:/, "")}
+        <span
+          data-tone={tone}
+          title={`${name}: ${running ? "running" : "not running"}`}
+          className={cn(
+            "inline-flex h-4.75 max-w-full items-center truncate rounded-sm px-1.75 text-meta",
+            TONE_FILL[tone],
+          )}
+        >
+          {name}
         </span>
       )}
     </span>
