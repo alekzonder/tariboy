@@ -2,12 +2,15 @@ package build
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"path/filepath"
 	"time"
 
 	"github.com/alekzonder/tariboy/tbox/internal/archive"
+	"github.com/alekzonder/tariboy/tbox/internal/flock"
 	"github.com/alekzonder/tariboy/tbox/internal/fsafe"
 	"github.com/alekzonder/tariboy/tbox/internal/imgstore"
 	"github.com/alekzonder/tariboy/tbox/internal/lock"
@@ -57,6 +60,7 @@ func Build(opts Options) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	defer j.close()
 	res := Result{Name: j.name, ImageVersion: j.f.ImageVersion, Tags: j.tags}
 	if !(opts.Update && j.remote) {
 		if done, err := j.upToDate(j.lock, &res); done || err != nil {
@@ -90,6 +94,14 @@ type job struct {
 	remote   bool
 	lock     lock.File
 	lockPath string
+	unlock   func()
+}
+
+// close releases the lock-file lock.
+func (j *job) close() {
+	if j.unlock != nil {
+		j.unlock()
+	}
 }
 
 func newJob(opts Options) (*job, error) {
@@ -120,7 +132,15 @@ func newJob(opts Options) (*job, error) {
 			return nil, noResolverError(f)
 		}
 		j.lockPath = lock.PathFor(dir, opts.Resolver.Home)
+		// Hold the lock-file lock from the read to the write so two builds of
+		// one source cannot overwrite each other's records.
+		sum := sha256.Sum256([]byte(j.lockPath))
+		lockFile := filepath.Join(opts.Resolver.Home.CacheDir(), "locks", "lockfile-"+hex.EncodeToString(sum[:])+".lock")
+		if j.unlock, err = flock.Lock(lockFile); err != nil {
+			return nil, err
+		}
 		if j.lock, err = lock.Read(j.lockPath); err != nil {
+			j.close()
 			return nil, err
 		}
 	}
@@ -231,8 +251,11 @@ func assemble(f *tfile.File, name, dir string, builtAt time.Time, rs *resolution
 			return archive.Image{}, err
 		}
 		prepared, err := skill.Prepare(abs, source, category)
+		if err == nil {
+			err = rs.verifySkill(entry, prepared.Metadata.TreeSHA256)
+		}
 		if err != nil {
-			return archive.Image{}, fmt.Errorf("skill %s: %w", abs, err)
+			return archive.Image{}, fmt.Errorf("skill %s: %w", skillLabel(entry), err)
 		}
 		skills = append(skills, prepared)
 	}
@@ -257,7 +280,10 @@ func promptLayers(f *tfile.File, rs *resolution) ([]archive.PromptLayer, error) 
 		}
 		body, err := fsafe.ReadFileNoFollow(abs, maxPromptFile)
 		if err != nil {
-			return nil, fmt.Errorf("prompt %s: %w", abs, err)
+			return nil, fmt.Errorf("prompt %s: %w", promptLabel(entry), err)
+		}
+		if err := rs.verifyPrompt(entry, body); err != nil {
+			return nil, fmt.Errorf("prompt %s: %w", promptLabel(entry), err)
 		}
 		layers = append(layers, archive.PromptLayer{Source: source, Category: category, Base: filepath.Base(abs), Body: body})
 	}

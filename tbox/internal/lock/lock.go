@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/alekzonder/tariboy/tbox/internal/paths"
 )
@@ -124,12 +125,8 @@ func underStores(abs string, home paths.Home) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
+// writable reports whether the process may create files in dir. It asks the
+// kernel without writing anything.
 func writable(dir string) bool {
-	f, err := os.CreateTemp(dir, ".tbox-probe-*")
-	if err != nil {
-		return false
-	}
-	f.Close()
-	os.Remove(f.Name())
-	return true
+	return syscall.Access(dir, 2) == nil // W_OK
 }

@@ -7,15 +7,18 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/alekzonder/tariboy/tbox/internal/fetch"
 	"github.com/alekzonder/tariboy/tbox/internal/flock"
+	"github.com/alekzonder/tariboy/tbox/internal/fsafe"
 	"github.com/alekzonder/tariboy/tbox/internal/gitx"
 	"github.com/alekzonder/tariboy/tbox/internal/lock"
 	"github.com/alekzonder/tariboy/tbox/internal/paths"
@@ -55,8 +58,9 @@ func Describe(e lock.Entry) string {
 func (r Resolver) SkillDir(ctx context.Context, e tfile.SkillEntry, pinned *lock.Entry) (string, lock.Entry, error) {
 	var dir string
 	var got lock.Entry
-	var err error
+	err := checkPinned(pinned)
 	switch {
+	case err != nil:
 	case e.Git != "":
 		dir, got, err = r.gitSkill(ctx, e, pinned)
 	case e.URL != "":
@@ -75,8 +79,9 @@ func (r Resolver) SkillDir(ctx context.Context, e tfile.SkillEntry, pinned *lock
 func (r Resolver) PromptFile(ctx context.Context, e tfile.PromptEntry, pinned *lock.Entry) (string, lock.Entry, error) {
 	var file string
 	var got lock.Entry
-	var err error
+	err := checkPinned(pinned)
 	switch {
+	case err != nil:
 	case e.Git != "":
 		file, got, err = r.gitPrompt(ctx, e, pinned)
 	case e.URL != "":
@@ -126,12 +131,82 @@ func publish(stage, final string) error {
 	return nil
 }
 
-// newStage makes a staging directory beside the cache entries.
+// staleStage is the age after which a staging directory is a leftover of a
+// crashed process.
+const staleStage = time.Hour
+
+// newStage makes a staging directory beside the cache entries and removes
+// stale ones. Callers hold the lock of their source.
 func (r Resolver) newStage() (string, error) {
 	if err := os.MkdirAll(r.sourcesDir(), 0o755); err != nil {
 		return "", err
 	}
+	old, _ := filepath.Glob(filepath.Join(r.sourcesDir(), ".stage-*"))
+	for _, dir := range old {
+		if info, err := os.Lstat(dir); err == nil && time.Since(info.ModTime()) > staleStage {
+			_ = os.RemoveAll(dir)
+		}
+	}
 	return os.MkdirTemp(r.sourcesDir(), ".stage-")
+}
+
+// checkPinned rejects a lock record that cannot verify the cache.
+func checkPinned(pinned *lock.Entry) error {
+	if pinned == nil {
+		return nil
+	}
+	if pinned.SHA256 == "" || (pinned.Kind == "git" && pinned.Commit == "") {
+		return errors.New("lock entry is malformed: it has no commit or sha256; " + updateHint)
+	}
+	return nil
+}
+
+// withPin returns base with the commit and hash of the lock record. Only
+// those two fields are taken from the lock file.
+func withPin(base lock.Entry, pinned *lock.Entry) lock.Entry {
+	base.Commit, base.SHA256 = pinned.Commit, pinned.SHA256
+	return base
+}
+
+func pinnedHash(pinned *lock.Entry) string {
+	if pinned == nil {
+		return ""
+	}
+	return pinned.SHA256
+}
+
+// fileMatches reports whether the file at path has the body hash sha.
+func fileMatches(path, sha string) bool {
+	body, err := fsafe.ReadFileNoFollow(path, maxPromptBytes)
+	return err == nil && hexSum(body) == sha
+}
+
+// treeMeta sits next to a cached skill so its directory is found offline.
+type treeMeta struct {
+	Name       string `json:"name"`
+	TreeSHA256 string `json:"tree_sha256"`
+}
+
+const metaName = "meta.json"
+
+func writeMeta(stage, name, sha string) error {
+	meta, _ := json.Marshal(treeMeta{Name: name, TreeSHA256: sha})
+	return os.WriteFile(filepath.Join(stage, metaName), meta, 0o644)
+}
+
+// cachedTree verifies the cache entry dir offline: its meta.json must name a
+// skill directory whose recomputed tree hash equals the recorded one.
+func cachedTree(dir string) (name, sha string, ok bool) {
+	data, err := os.ReadFile(filepath.Join(dir, metaName))
+	var m treeMeta
+	if err != nil || json.Unmarshal(data, &m) != nil || m.Name == "" || !filepath.IsLocal(m.Name) {
+		return "", "", false
+	}
+	prepared, err := skill.Prepare(filepath.Join(dir, m.Name), "cache", "source")
+	if err != nil || prepared.Metadata.TreeSHA256 != m.TreeSHA256 {
+		return "", "", false
+	}
+	return m.Name, m.TreeSHA256, true
 }
 
 // leafName validates a path inside a repository and returns its last element.
