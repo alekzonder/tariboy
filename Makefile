@@ -134,6 +134,7 @@ smoke-image-skills-contract: build
 
 fmt:
 	$(GO) fmt ./...
+	cd tbox && $(GO) fmt ./...
 
 # Report gofmt drift without rewriting anything. `fmt` above rewrites, which
 # makes it unsafe to run mid-task: it silently reformats files unrelated to the
@@ -241,7 +242,16 @@ tbox-complexity:
 tbox-test:
 	cd tbox && $(GO) test ./...
 
-tbox-check: tbox-fmt-check tbox-vet tbox-staticcheck tbox-complexity tbox-test
+# tbox-check runs every sub-step and fails at the end, like the other
+# aggregate targets, through STEP_RUNNER (defined below).
+tbox-check:
+	@$(STEP_RUNNER); \
+	run_step "tbox-fmt-check"   '$(SUBMAKE) tbox-fmt-check'; \
+	run_step "tbox-vet"         '$(SUBMAKE) tbox-vet'; \
+	run_step "tbox-staticcheck" '$(SUBMAKE) tbox-staticcheck'; \
+	run_step "tbox-complexity"  '$(SUBMAKE) tbox-complexity'; \
+	run_step "tbox-test"        '$(SUBMAKE) tbox-test'; \
+	summarize tbox-check
 
 e2e: build
 	./scripts/e2e.sh
@@ -754,6 +764,7 @@ endef
 backend-check:
 	$(GO) mod download
 	$(GO) mod download -modfile=tools.mod
+	cd tbox && $(GO) mod download
 	@$(STEP_RUNNER); \
 	run_step "fmt-check"    '$(SUBMAKE) fmt-check'; \
 	run_step "vet"          '$(SUBMAKE) vet'; \

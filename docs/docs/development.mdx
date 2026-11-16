@@ -181,7 +181,7 @@ typecheck, lint with the complexity and size thresholds, the unused-code check, 
 which fail when Vitest finishes fewer test files than it found, the Storybook build (`ui-storybook`), branding, the bundle budget, and the documentation checks. The documentation
 step restores the last build from a host cache when no input of the site
 changed; see [Documentation build cache](#documentation-build-cache). Before checking, `backend-check` runs `go mod download`
-for the module and for `tools.mod`. `frontend-check` uses
+for the module, for `tools.mod` and for the `tbox/` module. `frontend-check` uses
 `scripts/npm-ci-locked.sh` for locked installs under `ui/`, `ui/tools/api-types/`
 and `docs/`.
 They do not write into
@@ -390,8 +390,9 @@ lower the limit in the same change. Test files, `node_modules` and hidden
 directories such as `.worktrees` are not measured. `make gocognit-report`
 prints the 30 most complex functions and the average, and it never fails.
 
-`make fmt` is not a check: it rewrites files. Only `fmt-check` is part of
-`backend-check`; run `make fmt` yourself when it reports drift.
+`make fmt` is not a check: it rewrites files, in the root module and in
+`tbox/`. Only `fmt-check` and `tbox-fmt-check` are part of `backend-check`;
+run `make fmt` yourself when either reports drift.
 
 `make build` produces the core binaries. It is not part of `check`, which
 writes nothing into `bin/`, and it is the first build step of `full-check`.
@@ -536,8 +537,10 @@ descend into it, and no file under `tbox/` may import a tariboy package
 outside `tbox/`; `TestNoTariboyImports` enforces this. `make tbox-check`
 runs `tbox-fmt-check`, `tbox-vet`, `tbox-staticcheck`, `tbox-complexity` (the
 same `gocyclo` and `gocognit` limits as the root) and `tbox-test` inside
-`tbox/`, using the linters pinned in the root `tools.mod`. `backend-check`
-runs it as the `tbox-check` step.
+`tbox/`, using the linters pinned in the root `tools.mod`. Like the other
+aggregate targets it runs every sub-step, prints a summary table and fails at
+the end if any sub-step failed. `backend-check` runs it as the `tbox-check`
+step.
 
 ### Image skill bridge development
 
