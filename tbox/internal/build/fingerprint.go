@@ -1,0 +1,196 @@
+// Package build turns a Tariboyfile source directory into a stored image and
+// skips the work when the source did not change.
+package build
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/alekzonder/tariboy/tbox/internal/fsafe"
+	"github.com/alekzonder/tariboy/tbox/internal/skill"
+	"github.com/alekzonder/tariboy/tbox/internal/tfile"
+)
+
+const (
+	fingerprintHeader = "tbox-source/1\n"
+	// racyWindow is how close to the moment of hashing a file's mtime may be
+	// before the cached hash is not trusted: a write in the same clock tick
+	// would leave size and mtime unchanged.
+	racyWindow = 2 * time.Second
+)
+
+// hashHook, when set, is called with the path of every file body the
+// fingerprint reads. Tests count calls to prove a rebuild check does not
+// reread unchanged files.
+var hashHook func(path string)
+
+type cacheEntry struct {
+	Size     int64  `json:"size"`
+	MtimeNS  int64  `json:"mtime_ns"`
+	SHA256   string `json:"sha256"`
+	HashedAt int64  `json:"hashed_at_ns"`
+}
+
+// statCache remembers the content hash of a file by absolute path, size and
+// mtime. A nil cache hashes every file.
+type statCache struct {
+	old  map[string]cacheEntry
+	used map[string]cacheEntry
+}
+
+func loadCache(path string) *statCache {
+	c := &statCache{old: map[string]cacheEntry{}, used: map[string]cacheEntry{}}
+	if data, err := os.ReadFile(path); err == nil {
+		if json.Unmarshal(data, &c.old) != nil {
+			c.old = map[string]cacheEntry{}
+		}
+	}
+	return c
+}
+
+// hash returns the SHA-256 of the file body at abs described by info.
+func (c *statCache) hash(abs string, info fs.FileInfo) (string, error) {
+	mtime := info.ModTime().UnixNano()
+	if c != nil {
+		if e, ok := c.old[abs]; ok && e.Size == info.Size() && e.MtimeNS == mtime &&
+			e.HashedAt-mtime >= int64(racyWindow) {
+			c.used[abs] = e
+			return e.SHA256, nil
+		}
+	}
+	if hashHook != nil {
+		hashHook(abs)
+	}
+	body, err := fsafe.ReadFileNoFollow(abs, skill.MaxFileBytes)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(body)
+	hexSum := hex.EncodeToString(sum[:])
+	if c != nil {
+		c.used[abs] = cacheEntry{Size: info.Size(), MtimeNS: mtime, SHA256: hexSum, HashedAt: time.Now().UnixNano()}
+	}
+	return hexSum, nil
+}
+
+// save writes the entries used by the last fingerprint.
+func (c *statCache) save(path string) error {
+	if c == nil {
+		return nil
+	}
+	data, err := json.Marshal(c.used)
+	if err != nil {
+		return err
+	}
+	return writeAtomic(path, data)
+}
+
+// Fingerprint is the SHA-256 of the canonical text of a source: the
+// resolved, tbox-visible Tariboyfile (schema, image_version, and the skill
+// and prompt entries of the whole extends chain, which Load has flattened),
+// then for every packaged local skill file and prompt file its entry value,
+// relative path, mode bit and content hash, then ROLE.md. Paths of the
+// source directory do not enter it, and neither do plugins, runtime prompts
+// and only: tariboy entries, which f.ForTbox() has dropped.
+func Fingerprint(f *tfile.File) (string, error) {
+	return fingerprint(f, nil)
+}
+
+func fingerprint(f *tfile.File, cache *statCache) (string, error) {
+	var text strings.Builder
+	text.WriteString(fingerprintHeader)
+	fmt.Fprintf(&text, "schema %d\nimage_version %s\n", f.SchemaVersion, f.ImageVersion)
+	for _, s := range f.Skills {
+		if err := skillText(&text, s, cache); err != nil {
+			return "", err
+		}
+	}
+	skillDirs := f.SkillDirs()
+	for _, p := range f.Prompts {
+		if err := promptText(&text, p, skillDirs, cache); err != nil {
+			return "", err
+		}
+	}
+	role, err := tfile.RoleRead(f.Dir)
+	if err != nil {
+		return "", err
+	}
+	if role == nil {
+		text.WriteString("role none\n")
+	} else {
+		sum := sha256.Sum256([]byte(role.Text))
+		fmt.Fprintf(&text, "role %s\n", hex.EncodeToString(sum[:]))
+	}
+	sum := sha256.Sum256([]byte(text.String()))
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func modeText(info fs.FileInfo) string {
+	if info.Mode().Perm()&0o100 != 0 {
+		return "0700"
+	}
+	return "0600"
+}
+
+func skillText(text *strings.Builder, s tfile.SkillEntry, cache *statCache) error {
+	abs, source, category, err := tfile.ResolveSkillDir(s)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(text, "skill %q %s\n", source, category)
+	return filepath.WalkDir(abs, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(abs, path)
+		if err != nil || rel == "." {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if rel == "evals" && d.IsDir() {
+			return filepath.SkipDir
+		}
+		if d.IsDir() {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			// skill.Prepare rejects it with a precise error during the build.
+			fmt.Fprintf(text, "  special %q\n", rel)
+			return nil
+		}
+		sum, err := cache.hash(path, info)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(text, "  file %q %s %s\n", rel, modeText(info), sum)
+		return nil
+	})
+}
+
+func promptText(text *strings.Builder, p tfile.PromptEntry, skillDirs []string, cache *statCache) error {
+	abs, source, category, err := tfile.ResolvePromptFile(p, skillDirs...)
+	if err != nil {
+		return err
+	}
+	info, err := os.Lstat(abs)
+	if err != nil {
+		return err
+	}
+	sum, err := cache.hash(abs, info)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(text, "prompt %q %s %s %s\n", source, category, modeText(info), sum)
+	return nil
+}
