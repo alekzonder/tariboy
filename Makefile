@@ -2,8 +2,8 @@ GO      ?= go
 BINDIR  := bin
 PREFIX  ?= $(HOME)/.local
 INSTALLDIR := $(PREFIX)/bin
-BINARIES := tariboyd tariboy tariboy-tasks tariboy-mail tariboy-scripts tariboy-shim tariboy-store tariboy-plugin-telegram
-MANAGED_LINKS := tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-mail:tariboy-mail tmail:tariboy-mail tariboy-scripts:tariboy-scripts tscripts:tariboy-scripts tariboy-shim:tariboy-shim tariboy-store:tariboy-store tariboy-plugin-telegram:tariboy-plugin-telegram
+BINARIES := tariboyd tariboy tariboy-tasks tariboy-mail tariboy-scripts tariboy-shim tariboy-store tariboy-plugin-telegram tbox
+MANAGED_LINKS := tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-mail:tariboy-mail tmail:tariboy-mail tariboy-scripts:tariboy-scripts tscripts:tariboy-scripts tariboy-shim:tariboy-shim tariboy-store:tariboy-store tariboy-plugin-telegram:tariboy-plugin-telegram tbox:tbox
 SA := $(BINDIR)/tariboy
 LONG_SOCKET_TESTS := TestHostInstallDrainTimeoutRestartsRolledBackActiveVersion|TestStartupRefreshReadsCurrentWatchesAtDeliveryBoundary
 # Desktop E2E specs receive separate owner-only state from their fixture, so
@@ -65,8 +65,6 @@ install:
 		echo "install $(BINDIR)/$$b -> $(INSTALLDIR)/$$b"; \
 		install -m 0755 $(BINDIR)/$$b $(INSTALLDIR)/$$b; \
 	done
-	@echo "install $(BINDIR)/tbox -> $(INSTALLDIR)/tbox"
-	@install -m 0755 $(BINDIR)/tbox $(INSTALLDIR)/tbox
 	@for link in $(MANAGED_LINKS); do \
 		name=$${link%%:*}; source=$${link#*:}; \
 		test "$$name" != "$$source" || continue; \
@@ -101,8 +99,6 @@ uninstall:
 		echo "rm -f $(INSTALLDIR)/$$name"; \
 		rm -f $(INSTALLDIR)/$$name; \
 	done
-	@echo "rm -f $(INSTALLDIR)/tbox"
-	@rm -f $(INSTALLDIR)/tbox
 
 # make test adds -tags tmux when tmux is installed, so the shim tests that
 # drive a real tmux run there and stay out of a plain go test. The plugin
@@ -350,7 +346,11 @@ RELEASE_VERSION := $(shell cat scripts/release-version.txt 2>/dev/null)
 # macOS bundle metadata uses x.y.z. Keep the full canonical string available to
 # Rust as TARIBOY_VERSION while SEMVER owns the Cargo/Tauri comparison.
 SEMVER      := $(firstword $(subst -, ,$(VERSION)))
-DESKTOP_BINARIES := tariboyd tariboy tariboy-tasks tariboy-mail tariboy-scripts tariboy-shim tariboy-plugin-telegram
+DESKTOP_BINARIES := tariboyd tariboy tariboy-tasks tariboy-mail tariboy-scripts tariboy-shim tariboy-plugin-telegram tbox
+# tbox is a separate Go module (tbox/go.mod), so the cross-compiling recipes
+# build it from inside tbox/ and every other binary from the repository root.
+# The build may run in another directory, so its output path is absolute.
+GO_BINARY_SOURCE = src=.; test "$$b" != tbox || src=tbox
 # Resolved once so every desktop gate below agrees on what host it is running on.
 HOST_OS     := $(shell uname -s)
 HOST_ARCH   := $(shell uname -m)
@@ -483,7 +483,8 @@ desktop-binaries: desktop-version-check
 	mkdir -p $(DESKTOP_NATIVE_BIN)
 	@for b in $(DESKTOP_BINARIES); do \
 		echo "build $(DESKTOP_NATIVE_GOOS)/$(DESKTOP_NATIVE_GOARCH) $$b"; \
-		CGO_ENABLED=0 GOOS=$(DESKTOP_NATIVE_GOOS) GOARCH=$(DESKTOP_NATIVE_GOARCH) $(GO) build -trimpath -o $(DESKTOP_NATIVE_BIN)/$$b ./cmd/$$b || exit 1; \
+		$(GO_BINARY_SOURCE); \
+		(cd "$$src" && CGO_ENABLED=0 GOOS=$(DESKTOP_NATIVE_GOOS) GOARCH=$(DESKTOP_NATIVE_GOARCH) $(GO) build -trimpath -o $(abspath $(DESKTOP_NATIVE_BIN))/$$b ./cmd/$$b) || exit 1; \
 	done
 	printf '%s\n' "$(VERSION)" > $(DESKTOP_NATIVE_BIN)/VERSION
 	@for b in $(DESKTOP_BINARIES); do \
@@ -509,6 +510,7 @@ server-archives: desktop-version-check
 	mkdir -p $(SERVER_ARCHIVE_DIR)
 	@work=$$(mktemp -d "$${TMPDIR:-/tmp}/tariboy-server-archives.XXXXXX") || exit 1; \
 	trap 'rm -rf -- "$$work"' EXIT; \
+	work=$$(cd "$$work" && pwd -P) || exit 1; \
 	for entry in $(SERVER_PLATFORMS); do \
 		platform=$${entry%%:*}; target=$${entry#*:}; goos=$${target%%:*}; goarch=$${target#*:}; \
 		case "$$platform" in \
@@ -520,7 +522,8 @@ server-archives: desktop-version-check
 		mkdir "$$dir" || exit 1; \
 		for b in $(DESKTOP_BINARIES); do \
 			echo "build $$goos/$$goarch $$b"; \
-			CGO_ENABLED=0 GOOS=$$goos GOARCH=$$goarch $(GO) build -trimpath -o "$$dir/$$b" ./cmd/$$b || exit 1; \
+			$(GO_BINARY_SOURCE); \
+			(cd "$$src" && CGO_ENABLED=0 GOOS=$$goos GOARCH=$$goarch $(GO) build -trimpath -o "$$dir/$$b" ./cmd/$$b) || exit 1; \
 			file "$$dir/$$b" | grep "$$expected_format" >/dev/null || { \
 				echo "$$platform/$$b has the wrong architecture" >&2; exit 1; \
 			}; \

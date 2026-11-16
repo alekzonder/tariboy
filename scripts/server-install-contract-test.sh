@@ -52,7 +52,7 @@ fi
 
 export PATH="$tools:$PATH"
 
-binaries=(tariboyd tariboy tariboy-shim tariboy-store tariboy-plugin-telegram tariboy-tasks tariboy-mail tariboy-scripts)
+binaries=(tariboyd tariboy tariboy-shim tariboy-store tariboy-plugin-telegram tariboy-tasks tariboy-mail tariboy-scripts tbox)
 links=(
   tariboyd:tariboyd
   tariboy:tariboy
@@ -62,6 +62,7 @@ links=(
   tmail:tariboy-mail
   tariboy-scripts:tariboy-scripts
   tscripts:tariboy-scripts
+  tbox:tbox
   tariboy-shim:tariboy-shim
   tariboy-plugin-telegram:tariboy-plugin-telegram
   tariboy-store:tariboy-store
@@ -112,6 +113,9 @@ mkdir -p "$prefix/bin" "$tmp/foreign-ttasks"
 ln -s "$tmp/foreign-ttasks" "$prefix/bin/ttasks"
 install_ordinary
 test "$(readlink "$prefix/bin/ttasks")" = tariboy-tasks
+# tbox is a regular payload with no alias: installed as a file, never a link.
+test -f "$prefix/bin/tbox" && test ! -L "$prefix/bin/tbox"
+test "$("$prefix/bin/tbox" --version)" = "$version"
 test ! -e "$tmp/foreign-ttasks/tariboy-tasks"
 
 seed_old
@@ -131,12 +135,14 @@ test -f "$home/.local/lib/tariboy/$version/tariboy-mail"
 test ! -e "$home/.local/lib/tariboy/$version/tmail"
 test -f "$home/.local/lib/tariboy/$version/tariboy-scripts"
 test ! -e "$home/.local/lib/tariboy/$version/tscripts"
+test -f "$home/.local/lib/tariboy/$version/tbox"
+grep -q ' tbox$' "$home/.local/lib/tariboy/$version/SHA256SUMS"
 
-# A pre-Tasks release has neither the Tasks, the mail nor the scripts payload
-# nor their aliases. Reactivation removes the newer managed names, and selecting the new
-# release again restores them.
+# A pre-Tasks release has neither the Tasks, the mail, the scripts nor the tbox
+# payload nor their aliases. Reactivation removes the newer managed names, and
+# selecting the new release again restores them.
 old_release="$home/.local/lib/tariboy/old"
-rm "$old_release/tariboy-tasks" "$old_release/tariboy-mail" "$old_release/tariboy-scripts"
+rm "$old_release/tariboy-tasks" "$old_release/tariboy-mail" "$old_release/tariboy-scripts" "$old_release/tbox"
 printf 'old\n' >"$old_release/VERSION"
 (cd "$old_release" && sha256sum tariboyd tariboy tariboy-shim tariboy-store tariboy-plugin-telegram >SHA256SUMS)
 if HOME="$home" PATH="$tools:$PATH" TARIBOY_TEST_FAIL_MV_TO="$home/.local/bin/tariboy-shim" \
@@ -148,7 +154,7 @@ for pair in "${links[@]}"; do
   test "$(readlink "$home/.local/bin/${pair%%:*}")" = "$home/.local/lib/tariboy/$version/${pair#*:}"
 done
 HOME="$home" sh "$ROOT/desktop/src-tauri/src/remote-install.sh" old .stage-rollback activate "$version"
-for name in tariboy-tasks ttasks tariboy-mail tmail tariboy-scripts tscripts; do
+for name in tariboy-tasks ttasks tariboy-mail tmail tariboy-scripts tscripts tbox; do
   if test -e "$home/.local/bin/$name" || test -L "$home/.local/bin/$name"; then
     echo "pre-Tasks activation left a Tasks link: $name" >&2
     exit 1
@@ -161,6 +167,7 @@ HOME="$home" sh "$ROOT/desktop/src-tauri/src/remote-install.sh" "$version" .stag
 test "$("$home/.local/bin/ttasks" --version)" = "$version"
 test "$("$home/.local/bin/tmail" --version)" = "$version"
 test "$("$home/.local/bin/tscripts" --version)" = "$version"
+test "$("$home/.local/bin/tbox" --version)" = "$version"
 
 # An incomplete checksum list must not allow absent mandatory payloads.
 rm "$old_release/tariboy-shim"
