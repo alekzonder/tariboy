@@ -19,3 +19,9 @@ These fixtures pin the image archive format tbox shares with tariboy
 - `v3-marked.tar.gz`: the archive tbox builds from `v3-marked`. tariboy's
   `TestTboxArchiveImports` validates it as an import does. Regenerate it with
   `cd tbox && go test ./internal/archive -run TestCompatMarkedArchive -update-compat`.
+- `v3-marked.tariboy-image.tar.gz`: the `v3-marked.tar.gz` image in the
+  tariboy portable envelope (`kind: image-artifact`, ref `compat-marked:latest`,
+  producer `tbox-0.0.0`) that `tbox image export` writes. tariboy's
+  `TestTboxPortableImports` (`internal/imageportable`) previews and applies it;
+  `TestCompatPortableArchive` in `tbox/internal/portable` reads it. Regenerate it
+  with `cd tbox && go test ./internal/portable -run TestCompatPortableArchive -update-compat`.
